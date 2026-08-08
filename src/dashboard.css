@@ -1,0 +1,1050 @@
+@import "./app.css";
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(88% 36% at 100% 0%, var(--bg-glow) 0%, transparent 62%),
+    var(--bg);
+}
+
+.page {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 28px 24px 64px;
+}
+
+.settings-page {
+  max-width: 980px;
+}
+
+.settings-stack {
+  display: grid;
+  gap: 16px;
+}
+
+/*
+ * Nothing laid out by the page grid may be sized by its own contents.
+ *
+ * A grid item's automatic minimum size is its min-content size, and min-content
+ * propagates up through ancestors: the six-column limits table gave
+ * `#limits-panel` a min-content width of 760px, so at a 390px phone viewport the
+ * whole Settings document was 772px wide and scrolled sideways, with the row
+ * actions off screen. The `.table-scroll` wrapper never got a chance to scroll,
+ * because the overflow had already been pushed onto the page. Measured, not
+ * assumed: see the narrow-viewport checks in `scripts/smoke.mjs`.
+ */
+.page > *,
+.settings-stack > * {
+  min-width: 0;
+}
+
+section[id],
+#preferences-panel {
+  scroll-margin-top: 76px;
+}
+
+/* Header and navigation */
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-mark {
+  width: 40px;
+  height: 40px;
+}
+
+.brand-eyebrow,
+.panel-kicker {
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.brand-title {
+  font-size: 25px;
+  font-weight: 680;
+  letter-spacing: -0.025em;
+}
+
+.brand-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.section-nav {
+  position: sticky;
+  top: 10px;
+  z-index: 5;
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(12px);
+}
+
+.section-nav a {
+  padding: 6px 11px;
+  border-radius: var(--radius-sm);
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.section-nav a:hover,
+.section-nav a:focus-visible,
+.section-nav a[aria-current="page"] {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.section-nav a[aria-current="page"] {
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/* Overview */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+
+.stat {
+  min-width: 0;
+  padding: 14px 15px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  overflow: hidden;
+  margin-top: 5px;
+  font-size: 22px;
+  font-weight: 680;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value .unit {
+  margin-left: 3px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-soft);
+}
+
+.stat-hint {
+  overflow: hidden;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat[data-tone="estimate"] .stat-value {
+  color: var(--estimate);
+}
+
+.stat[data-tone="saved"] .stat-value {
+  color: var(--saved);
+}
+
+/* Shared dashboard layout */
+
+.panel {
+  padding: 16px;
+}
+
+.panel-head {
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.panel-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel-link {
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 650;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.panel-link:hover,
+.panel-link:focus-visible {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+.search-input,
+.select {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 12px;
+}
+
+.search-input {
+  width: 190px;
+}
+
+.search-input:hover,
+.select:hover {
+  border-color: var(--border-strong);
+}
+
+.columns,
+.bottom-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.bottom-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+
+.dashboard-chart .chart {
+  height: 132px;
+}
+
+/* Progressive disclosure */
+
+.method-details,
+.inline-details {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.method-details {
+  justify-self: start;
+  max-width: 78ch;
+  padding: 0 2px;
+}
+
+.method-details summary,
+.inline-details summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--text-soft);
+  font-weight: 650;
+}
+
+.method-details summary:hover,
+.inline-details summary:hover {
+  color: var(--text);
+}
+
+.method-details p {
+  margin-top: 7px;
+}
+
+.inline-details {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.inline-details > p {
+  max-width: 78ch;
+  margin-top: 8px;
+}
+
+.summary-note {
+  margin-left: 5px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Site details */
+
+.detail-headline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-headline .site-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+
+.detail-site {
+  font-size: 17px;
+  font-weight: 680;
+}
+
+.detail-sub {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+  padding-top: 15px;
+}
+
+.detail-heading {
+  margin-bottom: 8px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Tables */
+
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.table th,
+.table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.table th {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.table .numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.host-name {
+  display: inline-block;
+  overflow: hidden;
+  max-width: 240px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.host-tag {
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Feature panels */
+
+.feature-panel {
+  padding: 18px;
+}
+
+.feature-title {
+  margin-top: 2px;
+  font-size: 19px;
+  font-weight: 680;
+  letter-spacing: -0.015em;
+}
+
+.section-intro {
+  max-width: 72ch;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-soft);
+}
+
+.friendly-empty {
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+/* Limits */
+
+.limit-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.limit-field,
+.field {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+
+.limit-field .search-input {
+  width: 180px;
+}
+
+.limit-form .primary-button {
+  min-height: 34px;
+}
+
+.field-label {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-soft);
+}
+
+.field-hint,
+.defaults-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.form-status {
+  min-height: 17px;
+  margin-top: 7px;
+}
+
+.limit-meter {
+  display: grid;
+  gap: 4px;
+  min-width: 130px;
+}
+
+.limit-meter-track {
+  overflow: hidden;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--bar-track);
+}
+
+.limit-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.limit-meter-fill[data-over="true"] {
+  background: var(--danger);
+}
+
+.state-chip {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.state-chip[data-tone="enforcing"] {
+  background: var(--estimate-soft);
+  color: var(--estimate);
+}
+
+.state-chip[data-tone="paused"] {
+  color: var(--text-muted);
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 180px;
+}
+
+.row-actions .ghost-button {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+/* Data Saver */
+
+.saver-panel {
+  border-color: color-mix(in srgb, var(--saved) 26%, var(--border));
+}
+
+.setting-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.feature-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--saved-soft);
+  color: var(--saved);
+}
+
+.feature-icon svg {
+  width: 23px;
+  height: 23px;
+}
+
+.setting-hero-copy {
+  min-width: 0;
+}
+
+.setting-hero-copy .section-intro {
+  margin-top: 4px;
+}
+
+.switch-control {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.switch-control input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.switch-track {
+  display: flex;
+  width: 44px;
+  height: 25px;
+  align-items: center;
+  padding: 3px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-3);
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.switch-track span {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  transition: transform 140ms ease;
+}
+
+.switch-control input:checked + .switch-track {
+  border-color: var(--saved);
+  background: var(--saved);
+}
+
+.switch-control input:checked + .switch-track span {
+  transform: translateX(19px);
+}
+
+.switch-control input:focus-visible + .switch-track {
+  box-shadow: var(--focus);
+}
+
+.switch-control input:disabled + .switch-track {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.switch-label {
+  font-size: 10px;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.preference-switch {
+  grid-template-columns: auto minmax(0, 1fr);
+  justify-items: start;
+  justify-self: start;
+  align-items: center;
+  gap: 8px;
+}
+
+.preference-switch .switch-label {
+  font-size: 12px;
+  color: var(--text-soft);
+}
+
+.optimize-body {
+  margin-top: 14px;
+  padding-top: 13px;
+  border-top: 1px solid var(--border);
+}
+
+.optimize-body .inline-details {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.advanced-settings > summary {
+  font-size: 12px;
+}
+
+.advanced-intro {
+  margin-top: 9px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.advanced-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.advanced-option {
+  display: grid;
+  grid-template-columns: auto 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.advanced-option:hover {
+  border-color: var(--border-strong);
+}
+
+.advanced-option input {
+  margin: 0;
+  accent-color: var(--saved);
+}
+
+.advanced-symbol {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--saved-soft);
+  color: var(--saved);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.advanced-symbol-text {
+  font-weight: 750;
+  letter-spacing: -0.04em;
+}
+
+.advanced-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.advanced-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.advanced-title {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.advanced-hint {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.impact-meter {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.impact-bars {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 9px);
+  gap: 2px;
+}
+
+.impact-segment {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--bar-track);
+}
+
+.impact-segment[data-filled="true"] {
+  background: var(--saved);
+}
+
+.impact-label {
+  min-width: 41px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.exception-settings {
+  margin-top: 15px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.exception-head {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.exception-settings > p {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.exclusion-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 5px 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12px;
+  /*
+   * A domain has no spaces, so a long one is a single unbreakable word: 57
+   * characters of hostname was still enough to push the whole page 17px wider
+   * than a 390px viewport after the layout fixes below. `anywhere` rather than
+   * `break-word` because only `anywhere` also reduces the chip's min-content
+   * width, which is what the page grid is measured against. It changes nothing
+   * where the chip already fits.
+   */
+  overflow-wrap: anywhere;
+}
+
+.chip button {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.chip button:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.save-status {
+  min-height: 15px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+#optimize-note {
+  margin-top: 10px;
+  color: var(--saved);
+  font-weight: 650;
+}
+
+#optimize-note[data-active="false"] {
+  color: var(--text-muted);
+}
+
+#savings-panel .stats {
+  grid-template-columns: minmax(220px, 340px);
+}
+
+.savings-details .table-scroll {
+  margin-top: 10px;
+}
+
+/* Settings and privacy */
+
+.simple-settings {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.field .segmented {
+  justify-self: start;
+}
+
+.defaults-note {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 13px;
+}
+
+/* Responsive */
+
+@media (max-width: 860px) {
+  .columns,
+  .bottom-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #savings-panel .stats {
+    grid-template-columns: minmax(220px, 340px);
+  }
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 18px 12px 48px;
+  }
+
+  .page-head {
+    align-items: flex-start;
+  }
+
+  .page-head > .segmented {
+    width: 100%;
+  }
+
+  .page-head > .segmented button {
+    flex: 1 1 0;
+    padding-inline: 4px;
+  }
+
+  .section-nav {
+    top: 6px;
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .section-nav a {
+    flex: 1 0 auto;
+    text-align: center;
+  }
+
+  .panel-tools {
+    width: 100%;
+  }
+
+  .panel-head {
+    flex-wrap: wrap;
+  }
+
+  .panel-tools .search-input {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .setting-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .switch-control {
+    grid-column: 1 / -1;
+    grid-template-columns: auto auto;
+    justify-self: start;
+    align-items: center;
+  }
+
+  .simple-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .limit-field,
+  .limit-field .search-input,
+  .limit-form .primary-button {
+    width: 100%;
+  }
+
+  /*
+   * The limits table becomes one card per limit.
+   *
+   * Six columns cannot be made to fit a phone, and the alternative — letting
+   * `.table-scroll` scroll horizontally — puts Pause and Remove off screen with
+   * nothing on screen to suggest they are there. Each cell carries its column
+   * name in `data-label` (set in `settings.ts`) so the figures still say what
+   * they are once the header row is gone. Scoped to `#limits-table` so the
+   * dashboard's own breakdown tables keep scrolling instead.
+   */
+  #limits-table thead {
+    display: none;
+  }
+
+  #limits-table,
+  #limits-table tbody,
+  #limits-table tr,
+  #limits-table td {
+    display: block;
+  }
+
+  #limits-table tr {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+  }
+
+  #limits-table tr + tr {
+    margin-top: 8px;
+  }
+
+  #limits-table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 3px 0;
+    border: 0;
+    text-align: left;
+  }
+
+  #limits-table td[data-label]::before {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  #limits-table td.numeric {
+    text-align: left;
+  }
+
+  #limits-table .limit-meter {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  #limits-table .row-actions {
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  /* No column to hold open, so the name wraps instead of ending in an ellipsis
+     whose `title` a touch device cannot show. */
+  #limits-table .host-name {
+    max-width: 100%;
+    font-weight: 650;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

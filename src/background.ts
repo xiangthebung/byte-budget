@@ -1,0 +1,522 @@
+/**
+ * The service worker: the only writer, and the only thing that talks to Chrome's
+ * network events.
+ *
+ * Everything here is registered at the top level, synchronously. An MV3 worker is
+ * started *by* an event, and a listener added inside a promise callback is a
+ * listener that is not there yet when the event that woke the worker is
+ * dispatched — which shows up as "the first request after every idle gap is
+ * missing" and nothing else.
+ */
+
+import { bucketRange, clearAllUsage, getAll, STORES } from "./core/db";
+import { formatBytesBadge } from "./core/format";
+import { dayKey, retentionCutoff } from "./core/period";
+import { runtimeFile } from "./core/runtime";
+import { getSettings, onSettingsChanged, saveSettings } from "./core/settings";
+import type { Envelope, ExtensionRequest } from "./core/messages";
+import { emptyTotals, type Settings, type UsageRow } from "./core/types";
+import {
+  grantBytes,
+  putBudget,
+  removeBudget,
+  resumeBudget,
+  snoozeBudget,
+  type BudgetPeriod,
+  type BudgetShape,
+} from "./limit/budgets";
+import {
+  enforcementSnapshot,
+  ensureEnforcementReady,
+  refreshEnforcementTabs,
+  setEnforcement,
+} from "./limit/enforce";
+import {
+  budgetStatuses,
+  budgetsChanged,
+  currentPeriodKey,
+  noteUsage,
+  noticeForTab,
+  refreshWindows,
+  resetCounters,
+  startGovernor,
+  syncEnforcement,
+} from "./limit/governor";
+import { isTier } from "./limit/tiers";
+import { applyOptimize, optimizeSettings as applied, pageFeatures } from "./optimize/apply";
+import { getOptimizeSettings, optimizes, saveOptimizeSettings } from "./optimize/features";
+import {
+  decideHoldout,
+  ensureHoldoutReady,
+  isHoldoutTab,
+  noteVisitOutcome,
+  refreshHoldoutStats,
+  setTabHoldout,
+} from "./optimize/holdout";
+import { savingsReport } from "./optimize/report";
+import { pruneBaselines } from "./optimize/savings";
+import { ruleCounts } from "./rules/session";
+import { sizeModel } from "./track/estimate";
+import { ledger, pruneOldRows } from "./track/ledger";
+import { drainPending, expirePending, forgetTab, settleTiming } from "./track/reconcile";
+import { registerRequestListeners } from "./track/requests";
+import { siteKeyFromUrl } from "./core/sites";
+import {
+  closeTab,
+  ensureTabsReady,
+  noteNavigation,
+  resetOpenVisits,
+  setOptimizedResolver,
+  setVisitObserver,
+  tabIdsForSite,
+  tabRecord,
+} from "./track/tabs";
+import { dailySeries, exportData, overview, siteDetail, storageReport } from "./track/stats";
+
+const MAINTENANCE_ALARM = "maintenance";
+const PRUNE_ALARM = "prune";
+
+/* ------------------------------------------------------------------ *
+ * Network observation
+ * ------------------------------------------------------------------ */
+
+ledger.setPreFlush(() => expirePending(Date.now()));
+ledger.setUsageObserver(noteUsage);
+setOptimizedResolver((site, tabId) => {
+  const settings = optimizeSettingsSnapshot();
+  return Boolean(settings) && optimizes(settings!, site) && !isHoldoutTab(tabId);
+});
+setVisitObserver(noteVisitOutcome);
+registerRequestListeners();
+startGovernor();
+
+/**
+ * The optimizer settings as last applied.
+ *
+ * Read synchronously in `onBeforeNavigate` and when a visit starts, both of which have
+ * to decide immediately. `null` until `applyOptimize` has run once, and `null` means
+ * "do nothing", which is the safe answer for both callers.
+ */
+function optimizeSettingsSnapshot() {
+  return applied();
+}
+
+const optimizeReady = applyOptimize();
+void ensureHoldoutReady();
+
+/**
+ * The holdout decision, taken before the document request goes out.
+ *
+ * `onBeforeNavigate` rather than `onCommitted` because a control load has to be
+ * genuinely unoptimized from its first subresource. Deciding after the commit would
+ * leave the first requests already rewritten, which would not fail — it would quietly
+ * make the control group slightly optimized and the comparison meaningless.
+ *
+ * Synchronous apart from the rule install, which happens while the document is still in
+ * flight. And almost always a no-op: `setTabHoldout` reports whether the set actually
+ * changed, and for the vast majority of loads it does not.
+ */
+chrome.webNavigation.onBeforeNavigate.addListener((details) => {
+  if (details.frameId !== 0 || details.tabId < 0) return;
+  const settings = optimizeSettingsSnapshot();
+  if (!settings) return;
+  const site = siteKeyFromUrl(details.url);
+  const decision = site ? decideHoldout(site, settings) : { hold: false as const };
+  if (setTabHoldout(details.tabId, decision.hold)) void applyOptimize(settings);
+});
+
+chrome.webNavigation.onCommitted.addListener((details) => {
+  // Top-level only. A subframe navigating does not change which site the tab is
+  // showing, and treating it as a new page load would end the visit that the
+  // subframe belongs to.
+  if (details.frameId !== 0) return;
+  void noteNavigation(details.tabId, details.url).then(syncEnforcementTabs);
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  // Order matters: the parked requests are charged first, while the tab record
+  // still exists to attribute them to.
+  forgetTab(tabId);
+  if (setTabHoldout(tabId, false)) void applyOptimize();
+  void closeTab(tabId).then(syncEnforcementTabs);
+});
+
+/**
+ * Keeps the tab-scoped half of the enforcement rules pointing at the right tabs.
+ *
+ * Rules are scoped by tab id because that is how bytes are attributed, so a tab
+ * navigating away from a limited site has to stop being limited, and a second tab
+ * opening the same site has to start. Cheap: it returns immediately when nothing
+ * is being enforced, which is the normal case.
+ */
+function syncEnforcementTabs(): void {
+  // Two steps, and the order matters. The rules are re-scoped first so a tab that
+  // just navigated onto a limited site is covered immediately; the governor then
+  // re-evaluates, which is what shows the banner in that tab.
+  void refreshEnforcementTabs(tabIdsForSite).then(() => syncEnforcement());
+}
+
+chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+  forgetTab(removedTabId);
+  void closeTab(removedTabId);
+  void ensureTabsReady().then(() => refreshTab(addedTabId));
+});
+
+async function refreshTab(tabId: number): Promise<void> {
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (tab.url) await noteNavigation(tabId, tab.url);
+  } catch {
+    // The tab went away between the event and this call.
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Lifecycle
+ * ------------------------------------------------------------------ */
+
+chrome.runtime.onInstalled.addListener((details) => {
+  void setUpAlarms();
+  void ensureTabsReady();
+  // A newly installed or updated extension has no content script in any page that
+  // is already open, so until each is reloaded every streamed response there would
+  // fall back to an estimate. Injecting once closes that gap immediately.
+  if (details.reason === "install" || details.reason === "update") {
+    void injectIntoOpenTabs();
+  }
+});
+
+chrome.runtime.onStartup.addListener(() => {
+  void setUpAlarms();
+  void ensureTabsReady();
+});
+
+chrome.runtime.onSuspend.addListener(() => {
+  // Not guaranteed to run, which is why the flush debounce is two seconds rather
+  // than something that would rely on this.
+  //
+  // Parked requests are drained rather than left to expire on their own schedule:
+  // there is no next worker for them to expire in, since the queue is module state.
+  // `reconcile`'s own sweep timer normally gets there first; this is the case where
+  // the browser is closing.
+  drainPending();
+  void ledger.flush();
+});
+
+async function setUpAlarms(): Promise<void> {
+  await chrome.alarms.create(MAINTENANCE_ALARM, { periodInMinutes: 1 });
+  await chrome.alarms.create(PRUNE_ALARM, { periodInMinutes: 360 });
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === MAINTENANCE_ALARM) void maintenance();
+  if (alarm.name === PRUNE_ALARM) void prune();
+});
+
+/**
+ * The backstop.
+ *
+ * Requests keep the worker alive, so the debounced flush normally does all the
+ * work. This covers the case where traffic stops right after a request is parked:
+ * the flush timer may be cut short by the worker being torn down, and the parked
+ * request would then sit in `chrome.storage.session`-less memory. Waking once a
+ * minute to expire and write costs nothing measurable and removes that hole.
+ */
+async function maintenance(): Promise<void> {
+  await ensureTabsReady();
+  expirePending(Date.now());
+  await ledger.flush();
+  // Also what makes a budget window roll over at midnight, a snooze expire, and a
+  // granted allowance evaporate — none of which needs a timer of its own.
+  await refreshWindows();
+  // And what keeps the holdout counts honest: they are read synchronously when a
+  // navigation starts, so they cannot be fetched on demand.
+  await refreshHoldoutStats();
+  await updateBadge();
+}
+
+async function prune(): Promise<void> {
+  const settings = await getSettings();
+  await pruneOldRows(retentionCutoff(settings.retentionDays), dayKey());
+  await sizeModel.prune();
+  await sizeModel.flush();
+  await pruneBaselines();
+}
+
+async function injectIntoOpenTabs(): Promise<void> {
+  let tabs: chrome.tabs.Tab[] = [];
+  try {
+    tabs = await chrome.tabs.query({ url: ["http://*/*", "https://*/*"] });
+  } catch {
+    return;
+  }
+  await Promise.all(
+    tabs.map(async (tab) => {
+      if (tab.id === undefined || tab.id < 0) return;
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id, allFrames: true },
+          files: [runtimeFile("timing.js")],
+        });
+      } catch {
+        // Chrome Web Store pages, PDF viewers and other restricted origins refuse
+        // injection. They are still counted through `webRequest`, just estimated.
+      }
+    }),
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Badge
+ * ------------------------------------------------------------------ */
+
+async function updateBadge(settings?: Settings): Promise<void> {
+  const resolved = settings ?? (await getSettings());
+  if (resolved.badge === "off") {
+    await chrome.action.setBadgeText({ text: "" });
+    return;
+  }
+
+  const totals = emptyTotals();
+  if (resolved.badge === "session") {
+    const session = await ledger.sessionUsage();
+    for (const delta of Object.values(session.sites)) {
+      totals.down += delta.down;
+      totals.up += delta.up;
+    }
+  } else {
+    const today = dayKey();
+    for (const row of await getAll<UsageRow>(STORES.daily, bucketRange(today, today))) {
+      totals.down += row.down;
+      totals.up += row.up;
+    }
+  }
+
+  await chrome.action.setBadgeBackgroundColor({ color: "#0f6a62" });
+  await chrome.action.setBadgeTextColor({ color: "#ffffff" });
+  await chrome.action.setBadgeText({
+    text: formatBytesBadge(totals.down + totals.up, resolved.units),
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Settings
+ * ------------------------------------------------------------------ */
+
+void getSettings().then((settings) => {
+  ledger.setTrackHosts(settings.trackHosts);
+  void updateBadge(settings);
+});
+
+// Loaded eagerly: the `onErrorOccurred` handler has to decide whether a refused
+// request was this extension's doing, and it should not have to wait to find out.
+void ensureEnforcementReady();
+
+onSettingsChanged((settings) => {
+  ledger.setTrackHosts(settings.trackHosts);
+  void updateBadge(settings);
+});
+
+/* ------------------------------------------------------------------ *
+ * Messaging
+ * ------------------------------------------------------------------ */
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  handle(message as ExtensionRequest, sender)
+    .then((payload) => sendResponse({ ok: true, ...payload } satisfies Envelope<object>))
+    .catch((error: unknown) =>
+      sendResponse({
+        ok: false,
+        error: error instanceof Error ? error.message : "Something went wrong.",
+      } satisfies Envelope<object>),
+    );
+  return true;
+});
+
+async function handle(
+  request: ExtensionRequest,
+  sender: chrome.runtime.MessageSender,
+): Promise<object> {
+  switch (request.type) {
+    case "REPORT_TIMINGS": {
+      const tabId = sender.tab?.id ?? -1;
+      if (tabId >= 0) {
+        for (const entry of request.entries) {
+          settleTiming(tabId, entry.url, entry.transferSize);
+        }
+      }
+      return {};
+    }
+
+    case "GET_OVERVIEW": {
+      // Flushed first so an open popup can never show a total that is behind the
+      // traffic it is watching. Parked requests are deliberately *not* forced to
+      // expire here: a measurement two seconds away beats an estimate now, and a
+      // committed estimate cannot be corrected later.
+      await ledger.flush();
+      return overview(request.period, await getSettings());
+    }
+
+    case "GET_SITE": {
+      await ledger.flush();
+      return siteDetail(request.site, request.period, await getSettings());
+    }
+
+    case "GET_SERIES": {
+      await ledger.flush();
+      return { points: await dailySeries(request.days) };
+    }
+
+    case "GET_SETTINGS":
+      return { settings: await getSettings() };
+
+    case "SAVE_SETTINGS": {
+      const settings = await saveSettings(request.changes);
+      ledger.setTrackHosts(settings.trackHosts);
+      await updateBadge(settings);
+      return { settings };
+    }
+
+    case "GET_STORAGE_REPORT": {
+      await ledger.flush();
+      return storageReport();
+    }
+
+    case "EXPORT": {
+      await ledger.flush();
+      return exportData(request.format, request.days);
+    }
+
+    case "CLEAR_DATA": {
+      await ledger.flush();
+      await clearAllUsage();
+      await ledger.resetSession();
+      // Open tabs hold their own running counters, and the next flush would write
+      // them back into the visits store that was just emptied.
+      resetOpenVisits();
+      // Same argument for the size model. `clearAllUsage` empties its store, and an
+      // observation is recorded usage, but the model is held in memory for the whole
+      // life of the worker — so without this the next request rewrote its key with
+      // every sample it had ever seen.
+      sizeModel.reset();
+      // Budgets are settings and survive, but their windows restart from zero —
+      // otherwise a site would stay limited on the strength of usage that no longer
+      // exists anywhere.
+      await resetCounters();
+      await updateBadge();
+      return {};
+    }
+
+    case "SET_ENFORCEMENT": {
+      if (!isTier(request.tier)) throw new Error(`Unknown tier: ${String(request.tier)}`);
+      await ensureTabsReady();
+      const { rules } = await setEnforcement(
+        request.site,
+        request.tier,
+        tabIdsForSite(request.site),
+      );
+      return { rules, enforcement: enforcementSnapshot() };
+    }
+
+    case "GET_ENFORCEMENT": {
+      await ensureEnforcementReady();
+      return { enforcement: enforcementSnapshot() };
+    }
+
+    case "GET_BUDGETS":
+      return { statuses: await budgetStatuses() };
+
+    case "PUT_BUDGET": {
+      if (!request.site) throw new Error("Which site is the limit for?");
+      if (!Number.isFinite(request.bytes) || request.bytes <= 0) {
+        throw new Error("Give the limit a size.");
+      }
+      await putBudget({
+        site: request.site,
+        bytes: request.bytes,
+        period: request.period as BudgetPeriod,
+        ...(request.shape ? { shape: request.shape as BudgetShape } : {}),
+        ...(request.kbps ? { kbps: request.kbps } : {}),
+      });
+      await budgetsChanged();
+      return { statuses: await budgetStatuses() };
+    }
+
+    case "REMOVE_BUDGET": {
+      await removeBudget(request.site);
+      await budgetsChanged();
+      return { statuses: await budgetStatuses() };
+    }
+
+    case "SNOOZE_BUDGET": {
+      await snoozeBudget(request.site, Math.max(1, request.minutes));
+      await budgetsChanged();
+      return { statuses: await budgetStatuses() };
+    }
+
+    case "RESUME_BUDGET": {
+      await resumeBudget(request.site);
+      await budgetsChanged();
+      return { statuses: await budgetStatuses() };
+    }
+
+    case "GRANT_BYTES": {
+      await grantBytes(request.site, request.bytes, await currentPeriodKey(request.site));
+      await budgetsChanged();
+      return { statuses: await budgetStatuses() };
+    }
+
+    case "GET_TAB_NOTICE": {
+      const tabId = sender.tab?.id ?? -1;
+      if (tabId < 0) return { notice: null };
+      await ensureTabsReady();
+      const site = tabRecord(tabId)?.site;
+      return { notice: site ? await noticeForTab(site) : null };
+    }
+
+    case "OPEN_DASHBOARD": {
+      await chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+      return {};
+    }
+
+    case "GET_OPTIMIZE": {
+      const optimize = await getOptimizeSettings();
+      return { optimize, rules: ruleCounts().optimize };
+    }
+
+    case "SAVE_OPTIMIZE": {
+      const optimize = await saveOptimizeSettings(request.changes);
+      const rules = await applyOptimize(optimize);
+      return { optimize, rules };
+    }
+
+    case "SET_SITE_OPTIMIZE": {
+      const current = await getOptimizeSettings();
+      const exclusions = request.optimize
+        ? current.exclusions.filter((site) => site !== request.site)
+        : [...new Set([...current.exclusions, request.site])];
+      const optimize = await saveOptimizeSettings({ exclusions });
+      const rules = await applyOptimize(optimize);
+      return { optimize, rules };
+    }
+
+    case "GET_SAVINGS": {
+      await ledger.flush();
+      return savingsReport(request.days);
+    }
+
+    case "GET_PAGE_FEATURES": {
+      await optimizeReady;
+      const tabId = sender.tab?.id ?? -1;
+      const settings = optimizeSettingsSnapshot();
+      const site = siteKeyFromUrl(sender.tab?.url ?? sender.url ?? "");
+      const enabled =
+        tabId >= 0 &&
+        settings !== null &&
+        site !== null &&
+        optimizes(settings, site) &&
+        !isHoldoutTab(tabId);
+      return { features: enabled ? pageFeatures() : [] };
+    }
+  }
+}

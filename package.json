@@ -1,0 +1,26 @@
+{
+  "name": "byte-budget",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Chrome extension that measures per-site network usage, holds sites to a byte budget, and reports what optimizing them actually saved.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "build:throttle": "tsc --noEmit && vite build --mode throttle",
+    "build:all": "npm run build && npm run build:throttle",
+    "watch": "vite build --watch",
+    "zip": "npm run build && node scripts/package.mjs",
+    "zip:throttle": "npm run build:throttle && node scripts/package.mjs --throttle",
+    "clean": "node -e \"for (const d of ['dist','dist-throttle','artifacts']) fs.rmSync(d,{recursive:true,force:true})\"",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import ./tests/register-hooks.mjs --test \"tests/*.test.mjs\"",
+    "smoke": "npm run build && node scripts/smoke.mjs",
+    "icon": "node scripts/make-icon.mjs",
+    "verify": "npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.326",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.0"
+  }
+}

@@ -1,0 +1,581 @@
+/* ------------------------------------------------------------------ *
+ * Design tokens and the pieces both surfaces share.
+ *
+ * Same shape and the same names as the other extensions in this workspace, so a
+ * change to one reads the same in the next. Two colours are specific to this one:
+ * `--estimate`, which marks a number that is inferred rather than measured, and
+ * `--saved`, which marks bytes an optimizer prevented. They are tokens rather
+ * than one-off values because "is this figure measured" is a distinction that has
+ * to look the same everywhere it appears.
+ * ------------------------------------------------------------------ */
+
+:root {
+  --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+  --bg: #f2f6f6;
+  --bg-glow: #dceceb;
+  --surface: #ffffff;
+  --surface-2: #eef4f4;
+  --surface-3: #e3eded;
+  --border: #dde6e7;
+  --border-strong: #c9d7d8;
+  --text: #16262c;
+  --text-soft: #486067;
+  --text-muted: #6d8087;
+  --accent: #0f6a62;
+  --accent-hover: #0b524c;
+  --accent-soft: #e2f0ee;
+  --accent-contrast: #ffffff;
+  --saved: #17784b;
+  --saved-soft: #e6f4ec;
+  --estimate: #a95d10;
+  --estimate-soft: #fdf0e2;
+  --danger: #b6382f;
+  --danger-soft: #fdeeec;
+  --bar-track: #e3eded;
+  --scroll-thumb: rgba(72, 96, 103, 0.3);
+  --shadow-card: 0 1px 2px rgba(18, 44, 48, 0.05), 0 6px 20px rgba(18, 44, 48, 0.05);
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 9px;
+  --focus: 0 0 0 3px rgba(15, 106, 98, 0.28);
+  /* Composed on the element that carries `--hue`; see `.stack-segment`. */
+  --swatch-sat: 58%;
+  --swatch-lum: 43%;
+
+  color-scheme: light;
+  font-family: var(--font);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Dark values live in one place and are pointed at twice: once for an explicit
+ * choice, once for `prefers-color-scheme` when no choice has been made. The
+ * alternative — a media query wrapping `:root` — cannot be overridden by a person
+ * who wants light while their system is dark.
+ */
+:root[data-theme="dark"],
+:root:not([data-theme="light"]):not([data-theme="dark"]) {
+  --dark-bg: #0d1417;
+  --dark-bg-glow: #14262a;
+  --dark-surface: #162126;
+  --dark-surface-2: #1c2a30;
+  --dark-surface-3: #22333a;
+  --dark-border: #26363d;
+  --dark-border-strong: #33474f;
+  --dark-text: #e9f1f2;
+  --dark-text-soft: #b6c7cb;
+  --dark-text-muted: #8ea1a8;
+  --dark-accent: #52cfbe;
+  --dark-accent-hover: #7bded0;
+  --dark-accent-soft: #17322f;
+  --dark-accent-contrast: #06211f;
+  --dark-saved: #4fc98a;
+  --dark-saved-soft: #133024;
+  --dark-estimate: #e0a057;
+  --dark-estimate-soft: #33261a;
+  --dark-danger: #f08d84;
+  --dark-danger-soft: #3a1e1c;
+  --dark-bar-track: #22333a;
+}
+
+:root[data-theme="dark"] {
+  --bg: var(--dark-bg);
+  --bg-glow: var(--dark-bg-glow);
+  --surface: var(--dark-surface);
+  --surface-2: var(--dark-surface-2);
+  --surface-3: var(--dark-surface-3);
+  --border: var(--dark-border);
+  --border-strong: var(--dark-border-strong);
+  --text: var(--dark-text);
+  --text-soft: var(--dark-text-soft);
+  --text-muted: var(--dark-text-muted);
+  --accent: var(--dark-accent);
+  --accent-hover: var(--dark-accent-hover);
+  --accent-soft: var(--dark-accent-soft);
+  --accent-contrast: var(--dark-accent-contrast);
+  --saved: var(--dark-saved);
+  --saved-soft: var(--dark-saved-soft);
+  --estimate: var(--dark-estimate);
+  --estimate-soft: var(--dark-estimate-soft);
+  --danger: var(--dark-danger);
+  --danger-soft: var(--dark-danger-soft);
+  --bar-track: var(--dark-bar-track);
+  --scroll-thumb: rgba(182, 199, 203, 0.26);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --focus: 0 0 0 3px rgba(82, 207, 190, 0.32);
+  --swatch-sat: 52%;
+  --swatch-lum: 62%;
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: var(--dark-bg);
+    --bg-glow: var(--dark-bg-glow);
+    --surface: var(--dark-surface);
+    --surface-2: var(--dark-surface-2);
+    --surface-3: var(--dark-surface-3);
+    --border: var(--dark-border);
+    --border-strong: var(--dark-border-strong);
+    --text: var(--dark-text);
+    --text-soft: var(--dark-text-soft);
+    --text-muted: var(--dark-text-muted);
+    --accent: var(--dark-accent);
+    --accent-hover: var(--dark-accent-hover);
+    --accent-soft: var(--dark-accent-soft);
+    --accent-contrast: var(--dark-accent-contrast);
+    --saved: var(--dark-saved);
+    --saved-soft: var(--dark-saved-soft);
+    --estimate: var(--dark-estimate);
+    --estimate-soft: var(--dark-estimate-soft);
+    --danger: var(--dark-danger);
+    --danger-soft: var(--dark-danger-soft);
+    --bar-track: var(--dark-bar-track);
+    --scroll-thumb: rgba(182, 199, 203, 0.26);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --focus: 0 0 0 3px rgba(82, 207, 190, 0.32);
+    --swatch-sat: 52%;
+  --swatch-lum: 62%;
+
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+li,
+figure,
+table {
+  margin: 0;
+  padding: 0;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.live-region {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Buttons
+ * ------------------------------------------------------------------ */
+
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-soft);
+}
+
+.icon-button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.icon-button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.ghost-button {
+  padding: 7px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ghost-button:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.ghost-button[data-danger="true"] {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.primary-button {
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.primary-button:hover {
+  background: var(--accent-hover);
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.segmented button {
+  padding: 5px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.segmented button[aria-checked="true"],
+.segmented button[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-card);
+}
+
+/* ------------------------------------------------------------------ *
+ * Panels
+ * ------------------------------------------------------------------ */
+
+.panel {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.panel-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.panel-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ *
+ * Charts
+ * ------------------------------------------------------------------ */
+
+/*
+ * The bar track must have a *definite* height for the fill's percentage to mean
+ * anything, and that is the whole reason this is a grid rather than a column flex.
+ *
+ * The first version was `.chart { align-items: flex-end }` with a `flex: 1 1 auto`
+ * track. Under `flex-end` the bars are not stretched, so each one shrank to its
+ * content, the track resolved to the fill's 2px minimum, and every chart in the
+ * extension rendered as a flat line at the bottom — including one showing a
+ * measured 772 kB. `grid-template-rows: minmax(0, 1fr) auto` inside a fixed-height
+ * row gives the track a real number of pixels before the fill is laid out.
+ */
+.chart {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 76px;
+}
+
+.chart-bar {
+  display: grid;
+  min-width: 0;
+  /* Capped so a one-day period does not draw a single bar the width of the panel,
+     which reads as a filled block rather than as a measurement. */
+  max-width: 46px;
+  flex: 1 1 0;
+  grid-template-rows: minmax(0, 1fr) 12px;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: center;
+}
+
+/*
+ * The track is an axis, not a bar.
+ *
+ * Filling it with `--bar-track` made thirty empty days read as thirty near-full
+ * bars at a glance — the shape of the chart said "steady heavy use" for a browser
+ * that had recorded one afternoon. So the track is transparent with a baseline
+ * rule, and a day with nothing in it draws nothing.
+ */
+.chart-bar-track {
+  position: relative;
+  overflow: hidden;
+  border-radius: 3px 3px 0 0;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--border-strong);
+}
+
+.chart-bar-fill {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: block;
+  min-height: 2px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.chart-bar-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: block;
+  background: var(--saved);
+}
+
+.chart-bar[data-selected="true"] .chart-bar-fill {
+  background: var(--text);
+}
+
+button.chart-bar:hover .chart-bar-fill {
+  background: var(--accent-hover);
+}
+
+.chart-bar-tick {
+  overflow: hidden;
+  height: 12px;
+  font-size: 9px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.stack-track {
+  display: flex;
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--bar-track);
+}
+
+/*
+ * The hue is composed here, on the element that carries `--hue`, not through a
+ * `--swatch` token defined on `:root`.
+ *
+ * Custom properties are substituted where they are *declared*, so a `--swatch:
+ * hsl(var(--hue) …)` on `:root` resolves `--hue` against the root and inherits one
+ * finished colour — which is why every segment of the stacked bar came out the
+ * same teal. Saturation and lightness stay as tokens because they are plain values
+ * with no such trap, and they are what the dark theme needs to change.
+ */
+.stack-segment,
+.stack-swatch {
+  background: hsl(var(--hue, 180) var(--swatch-sat) var(--swatch-lum));
+}
+
+.stack-segment {
+  display: block;
+  min-width: 2px;
+  height: 100%;
+}
+
+.stack-legend {
+  display: grid;
+  gap: 4px;
+  margin-top: 9px;
+}
+
+.stack-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.stack-swatch {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+
+.stack-legend-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  color: var(--text-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stack-legend-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.stack-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ *
+ * Site rows
+ * ------------------------------------------------------------------ */
+
+.site-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  object-fit: contain;
+}
+
+.site-list {
+  display: grid;
+  gap: 2px;
+}
+
+.site-row {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  text-align: left;
+}
+
+.site-row:hover {
+  background: var(--surface-2);
+}
+
+.site-row[aria-current="true"] {
+  background: var(--accent-soft);
+}
+
+.site-main {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.site-name {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-name[data-reserved="true"] {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.site-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bar-track);
+}
+
+.site-bar-fill {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.site-figures {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+}
+
+.site-bytes {
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.site-share {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.site-estimate {
+  color: var(--estimate);
+}
+
+.empty {
+  padding: 6px 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+}

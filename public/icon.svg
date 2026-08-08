@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Byte Budget">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#127c72" />
+      <stop offset="1" stop-color="#0a514b" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="url(#tile)" />
+  <rect x="26" y="70" width="20" height="34" rx="4" fill="#d3eee9" />
+  <rect x="54" y="48" width="20" height="56" rx="4" fill="#e9f7f4" />
+  <rect x="82" y="26" width="20" height="78" rx="4" fill="#62d6c4" />
+</svg>

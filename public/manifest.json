@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "Byte Budget",
+  "version": "0.1.0",
+  "description": "See what each site costs you in data this session, today, this week and this month. Measured on your device; nothing is uploaded.",
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "webRequest",
+    "webNavigation",
+    "declarativeNetRequest",
+    "scripting",
+    "alarms",
+    "favicon"
+  ],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self'"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Byte Budget",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon.png",
+      "32": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
+  "options_page": "settings.html",
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["timing.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ]
+}

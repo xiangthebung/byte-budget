@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Byte Budget — settings</title>
+  </head>
+  <body>
+    <div class="page settings-page">
+      <header class="page-head">
+        <div class="brand">
+          <img class="brand-mark" src="./icon.svg" alt="" width="40" height="40" />
+          <div class="brand-copy">
+            <p class="brand-eyebrow">Byte Budget</p>
+            <h1 class="brand-title">Settings</h1>
+            <p class="brand-sub">Choose how Byte Budget saves data.</p>
+          </div>
+        </div>
+      </header>
+
+      <nav class="section-nav" aria-label="Main navigation">
+        <a href="./dashboard.html">Dashboard</a>
+        <a href="./settings.html" aria-current="page">Settings</a>
+      </nav>
+
+      <main class="settings-stack">
+        <section class="panel feature-panel" id="limits-panel" aria-labelledby="limits-title">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">Stay in control</p>
+              <h2 class="feature-title" id="limits-title">Daily site limits</h2>
+            </div>
+            <span class="panel-note" id="limits-note"></span>
+          </div>
+
+          <p class="section-intro">
+            Set an allowance for a heavy site. Media is reduced first as the limit fills.
+          </p>
+
+          <div class="table-scroll">
+            <table class="table" id="limits-table">
+              <thead>
+                <tr>
+                  <th scope="col">Site</th>
+                  <th scope="col">Limit</th>
+                  <th scope="col" class="numeric">Used</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Resets</th>
+                  <th scope="col"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="empty friendly-empty" id="limits-empty" hidden>
+            No limits yet. Add one below or choose a preset from the popup.
+          </p>
+
+          <form class="limit-form" id="limit-form">
+            <div class="limit-field">
+              <label class="field-label" for="limit-site">Website</label>
+              <input
+                class="search-input"
+                id="limit-site"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="youtube.com"
+                required
+              />
+            </div>
+            <div class="limit-field">
+              <label class="field-label" for="limit-size">Daily allowance</label>
+              <input
+                class="search-input"
+                id="limit-size"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="500 MB"
+                list="limit-sizes"
+                required
+              />
+              <datalist id="limit-sizes">
+                <option value="100 MB"></option>
+                <option value="250 MB"></option>
+                <option value="500 MB"></option>
+                <option value="1 GB"></option>
+              </datalist>
+            </div>
+            <button class="primary-button" id="limit-add" type="submit">Set daily limit</button>
+          </form>
+          <p class="field-hint form-status" id="limit-form-status" aria-live="polite">
+            Try 500 MB or 1 GB. Resets at midnight.
+          </p>
+
+          <details class="inline-details">
+            <summary>When a limit fills</summary>
+            <p>
+              Video is reduced first, then images and fonts. Pause or remove a limit at any time.
+            </p>
+          </details>
+        </section>
+
+        <section
+          class="panel feature-panel saver-panel"
+          id="optimize-panel"
+          aria-labelledby="optimize-title"
+        >
+          <div class="setting-hero">
+            <div class="feature-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path
+                  d="M5 12.5 9.2 17 19 7"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </div>
+            <div class="setting-hero-copy">
+              <p class="panel-kicker">Recommended</p>
+              <h2 class="feature-title" id="optimize-title">Data Saver</h2>
+              <p class="section-intro">
+                Makes supported pages lighter. Exclude any site that behaves differently.
+              </p>
+            </div>
+            <label class="switch-control">
+              <input type="checkbox" id="optimize-toggle" />
+              <span class="switch-track" aria-hidden="true"><span></span></span>
+              <span class="switch-label">Data Saver</span>
+            </label>
+          </div>
+
+          <div class="optimize-body" id="optimize-body" hidden>
+            <details class="inline-details advanced-settings">
+              <summary>Advanced</summary>
+              <p class="advanced-intro">Expected savings are relative and vary by site.</p>
+
+              <div class="advanced-options">
+                <label class="advanced-option">
+                  <input type="checkbox" id="media-on-click-toggle" />
+                  <span class="advanced-symbol" aria-hidden="true">▶</span>
+                  <span class="advanced-copy">
+                    <span class="advanced-heading">
+                      <span class="advanced-title">Click to load media</span>
+                      <span
+                        class="impact-meter"
+                        data-impact-feature="clickToLoadMedia"
+                      ></span>
+                    </span>
+                    <span class="advanced-hint">Video and audio wait for you.</span>
+                  </span>
+                </label>
+
+                <label class="advanced-option">
+                  <input type="checkbox" id="preload-toggle" />
+                  <span class="advanced-symbol" aria-hidden="true">↗</span>
+                  <span class="advanced-copy">
+                    <span class="advanced-heading">
+                      <span class="advanced-title">Stop page preloading</span>
+                      <span class="impact-meter" data-impact-feature="dropHints"></span>
+                    </span>
+                    <span class="advanced-hint">Trims links a page loads before you click.</span>
+                  </span>
+                </label>
+
+                <label class="advanced-option">
+                  <input type="checkbox" id="system-fonts-toggle" />
+                  <span class="advanced-symbol advanced-symbol-text" aria-hidden="true">Aa</span>
+                  <span class="advanced-copy">
+                    <span class="advanced-heading">
+                      <span class="advanced-title">Use system fonts</span>
+                      <span class="impact-meter" data-impact-feature="systemFonts"></span>
+                    </span>
+                    <span class="advanced-hint">Skips downloaded typefaces.</span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="exception-settings">
+                <div class="exception-head">
+                  <span class="field-label">Website exceptions</span>
+                  <span class="summary-note" id="exclusion-count"></span>
+                </div>
+                <p>Leave Data Saver off on specific sites.</p>
+                <form class="exclusion-form" id="exclusion-form">
+                  <input
+                    class="search-input"
+                    id="exclusion-input"
+                    type="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="example.com"
+                    aria-label="Website to exclude"
+                  />
+                  <button class="ghost-button" type="submit">Add exception</button>
+                </form>
+                <ul class="chip-list" id="exclusion-list"></ul>
+              </div>
+            </details>
+          </div>
+          <p class="save-status" id="optimize-note" aria-live="polite"></p>
+        </section>
+
+        <div class="bottom-grid">
+          <section class="panel" id="preferences-panel" aria-labelledby="preferences-title">
+            <div class="panel-head">
+              <h2 class="panel-title" id="preferences-title">Appearance</h2>
+              <span class="save-status" id="settings-status" aria-live="polite"></span>
+            </div>
+            <div class="simple-settings">
+              <div class="field">
+                <span class="field-label" id="theme-label">Theme</span>
+                <div
+                  class="segmented"
+                  role="radiogroup"
+                  aria-labelledby="theme-label"
+                  id="theme-group"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    data-theme-value="auto"
+                    aria-checked="true"
+                  >System</button>
+                  <button
+                    type="button"
+                    role="radio"
+                    data-theme-value="light"
+                    aria-checked="false"
+                  >Light</button>
+                  <button
+                    type="button"
+                    role="radio"
+                    data-theme-value="dark"
+                    aria-checked="false"
+                  >Dark</button>
+                </div>
+              </div>
+              <div class="field">
+                <span class="field-label">Toolbar</span>
+                <label class="switch-control preference-switch">
+                  <input type="checkbox" id="badge-toggle" />
+                  <span class="switch-track" aria-hidden="true"><span></span></span>
+                  <span class="switch-label">Show today’s usage</span>
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" id="data-panel" aria-labelledby="data-title">
+            <div class="panel-head">
+              <h2 class="panel-title" id="data-title">Privacy &amp; data</h2>
+              <span class="panel-note" id="storage-note">Stored on this device</span>
+            </div>
+            <p class="field-hint">Nothing is uploaded.</p>
+            <div class="actions">
+              <select class="select" id="export-days" aria-label="Export range">
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="400">Last 400 days</option>
+              </select>
+              <button class="ghost-button" id="export-csv" type="button">Export CSV</button>
+              <button class="ghost-button" id="export-json" type="button">Export JSON</button>
+              <button class="ghost-button" id="clear-data" type="button" data-danger="true">
+                Delete usage
+              </button>
+            </div>
+            <p class="field-hint form-status" id="data-status" aria-live="polite"></p>
+          </section>
+        </div>
+      </main>
+
+      <p class="live-region" id="live-region" role="status" aria-live="polite"></p>
+    </div>
+    <script type="module" src="./settings.ts"></script>
+  </body>
+</html>

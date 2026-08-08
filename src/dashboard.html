@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Byte Budget — data usage</title>
+  </head>
+  <body>
+    <div class="page dashboard-page">
+      <header class="page-head">
+        <div class="brand">
+          <img class="brand-mark" src="./icon.svg" alt="" width="40" height="40" />
+          <div class="brand-copy">
+            <p class="brand-eyebrow">Byte Budget</p>
+            <h1 class="brand-title">Your data usage</h1>
+            <p class="brand-sub" id="period-description">Loading…</p>
+          </div>
+        </div>
+        <div class="segmented" role="tablist" aria-label="Usage period" id="period-tabs"></div>
+      </header>
+
+      <nav class="section-nav" aria-label="Main navigation">
+        <a href="./dashboard.html" aria-current="page">Dashboard</a>
+        <a href="./settings.html">Settings</a>
+      </nav>
+
+      <section id="overview" aria-label="Usage overview">
+        <div class="stats" id="stats"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="sites-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="sites-title">Where your data went</h2>
+          <div class="panel-tools">
+            <input
+              class="search-input"
+              id="site-search"
+              type="search"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Find a site"
+              aria-label="Find a site"
+            />
+            <span class="panel-note" id="sites-note"></span>
+          </div>
+        </div>
+        <ol class="site-list" id="site-list"></ol>
+        <p class="empty" id="sites-empty" hidden>
+          No usage yet. Browse normally and sites will appear here.
+        </p>
+      </section>
+
+      <section class="panel" id="detail-panel" hidden aria-labelledby="detail-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="detail-title">Site details</h2>
+          <button class="ghost-button" id="detail-close" type="button">Close</button>
+        </div>
+        <div class="detail-headline">
+          <img class="site-icon" id="detail-icon" alt="" width="28" height="28" />
+          <div class="detail-copy">
+            <p class="detail-site" id="detail-site"></p>
+            <p class="detail-sub" id="detail-sub"></p>
+          </div>
+        </div>
+        <div class="detail-grid">
+          <div class="detail-block">
+            <h3 class="detail-heading">Today by hour</h3>
+            <div id="detail-hours"></div>
+          </div>
+          <div class="detail-block">
+            <h3 class="detail-heading">By day</h3>
+            <div id="detail-days"></div>
+          </div>
+          <div class="detail-block">
+            <h3 class="detail-heading">Type of data</h3>
+            <div id="detail-types"></div>
+          </div>
+          <div class="detail-block">
+            <h3 class="detail-heading">Source hosts</h3>
+            <table class="table" id="detail-hosts">
+              <thead>
+                <tr>
+                  <th scope="col">Host</th>
+                  <th scope="col" class="numeric">Data</th>
+                  <th scope="col" class="numeric">Requests</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+            <p class="empty" id="detail-hosts-empty" hidden>No host details are available.</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="columns">
+        <section class="panel dashboard-chart" aria-labelledby="trend-title">
+          <div class="panel-head">
+            <h2 class="panel-title" id="trend-title">Daily usage</h2>
+            <div class="segmented" role="tablist" aria-label="Chart range" id="range-tabs"></div>
+          </div>
+          <div id="trend-slot"></div>
+        </section>
+
+        <section class="panel" aria-labelledby="types-title">
+          <div class="panel-head">
+            <h2 class="panel-title" id="types-title">Type of data</h2>
+            <span class="panel-note" id="types-note"></span>
+          </div>
+          <div id="types-slot"></div>
+        </section>
+      </div>
+
+      <details class="method-details">
+        <summary>How Byte Budget measures usage</summary>
+        <p>
+          Totals use the best information available from Chrome and each site. If an
+          exact size is unavailable, Byte Budget makes a clearly labelled estimate.
+        </p>
+      </details>
+
+      <section class="panel" id="savings-panel" aria-labelledby="savings-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="savings-title">Data Saver results</h2>
+          <div class="panel-tools">
+            <span class="panel-note" id="savings-note"></span>
+            <a class="panel-link" href="./settings.html#optimize-panel">Manage Data Saver</a>
+          </div>
+        </div>
+        <div class="stats" id="savings-stats"></div>
+        <details class="inline-details savings-details">
+          <summary>About this number</summary>
+          <p class="field-hint" id="savings-explainer"></p>
+          <div class="table-scroll">
+            <table class="table" id="savings-table">
+              <thead>
+                <tr>
+                  <th scope="col">Site</th>
+                  <th scope="col" class="numeric">With</th>
+                  <th scope="col" class="numeric">Without</th>
+                  <th scope="col" class="numeric">Per load</th>
+                  <th scope="col" class="numeric">Loads</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="empty" id="savings-empty" hidden></p>
+        </details>
+      </section>
+
+      <p class="live-region" id="live-region" role="status" aria-live="polite"></p>
+    </div>
+    <script type="module" src="./dashboard.ts"></script>
+  </body>
+</html>

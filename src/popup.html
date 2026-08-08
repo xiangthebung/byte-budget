@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Byte Budget</title>
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="topbar">
+        <div class="headline">
+          <p class="headline-eyebrow" id="period-description">Loading…</p>
+          <p class="headline-total">
+            <span class="headline-value" id="total-value">–</span>
+            <span class="headline-unit" id="total-unit"></span>
+          </p>
+        </div>
+        <div class="topbar-actions">
+          <button
+            class="icon-button"
+            id="dashboard-button"
+            type="button"
+            aria-label="Open the full dashboard"
+            title="Open the full dashboard"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path
+                d="M4 19V9m5 10V5m5 14v-7m5 7V8"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="tabs" role="tablist" aria-label="Period" id="period-tabs"></div>
+
+      <p class="meta-line" id="meta-line"></p>
+
+      <section class="current" id="current-card" hidden aria-labelledby="current-site">
+        <img class="site-icon" id="current-icon" alt="" width="20" height="20" />
+        <span class="current-copy">
+          <span class="current-site" id="current-site"></span>
+          <span class="current-sub" id="current-sub"></span>
+        </span>
+        <span class="current-bytes" id="current-bytes"></span>
+      </section>
+
+      <section class="optimize-row" id="optimize-row" hidden></section>
+
+      <section class="limit" id="limit-card" hidden aria-labelledby="limit-heading">
+        <h2 class="limit-heading" id="limit-heading">Data limit</h2>
+        <div id="limit-slot"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="chart-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="chart-title">Over time</h2>
+          <span class="panel-note" id="chart-note"></span>
+        </div>
+        <div id="chart-slot"></div>
+        <div class="types-slot" id="types-slot"></div>
+      </section>
+
+      <main class="panel" aria-labelledby="sites-title">
+        <div class="panel-head">
+          <h2 class="panel-title" id="sites-title">Sites</h2>
+          <span class="panel-note" id="sites-note"></span>
+        </div>
+        <ol class="site-list" id="site-list"></ol>
+        <p class="empty" id="empty-state" hidden>
+          Nothing recorded for this period yet. Load a page and the numbers appear here.
+        </p>
+      </main>
+
+      <footer class="footer">
+        <button class="ghost-button" id="open-dashboard" type="button">
+          Open dashboard
+        </button>
+        <span class="footer-note" id="footer-note"></span>
+      </footer>
+
+      <p class="live-region" id="live-region" role="status" aria-live="polite"></p>
+    </div>
+    <script type="module" src="./popup.ts"></script>
+  </body>
+</html>
