@@ -38,10 +38,31 @@
  */
 interface I18nApi {
   getMessage(name: string, substitutions?: string | string[]): string;
+  getUILanguage?(): string;
 }
 
 function i18nApi(): I18nApi | undefined {
   return (globalThis as { chrome?: { i18n?: I18nApi } }).chrome?.i18n;
+}
+
+/**
+ * Puts the browser's UI language on `<html lang>`.
+ *
+ * Every page here ships `lang="en"` in its markup, which was true of the only build
+ * that existed and becomes a lie the moment a second catalogue does. It is not
+ * cosmetic: a screen reader picks its voice and its pronunciation rules from this
+ * attribute, so a German catalogue under `lang="en"` is read aloud as English words —
+ * which is worse than no translation, because the text is right and unintelligible.
+ * WCAG 3.1.1 is the same requirement.
+ *
+ * Called by each surface at startup rather than run on import, matching `applyTheme`:
+ * a module that reaches into the document the moment it is imported cannot be used by
+ * anything that has no document, and the worker imports the label tables that import
+ * this file.
+ */
+export function applyDocumentLanguage(root = document.documentElement): void {
+  const language = i18nApi()?.getUILanguage?.();
+  if (language) root.lang = language;
 }
 
 /**

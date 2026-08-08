@@ -11,7 +11,7 @@ import {
   replaceChildren,
 } from "./core/dom";
 import { formatAgo, formatBytes, formatCount, formatPercent, splitBytes } from "./core/format";
-import { t } from "./core/i18n";
+import { applyDocumentLanguage, t } from "./core/i18n";
 import {
   errorMessage,
   sendRequest,
@@ -32,6 +32,7 @@ import {
   cycleResetsAt,
   dayKeyFromMs,
   formatDayShort,
+  formatPeriodDescription,
   formatWeekday,
   startOfDay,
 } from "./core/period";
@@ -912,7 +913,7 @@ function renderDetail(payload: SiteDetailPayload): void {
   detailIcon.src = reserved ? "" : faviconUrl(`https://${payload.site}/`);
   detailSite.textContent = siteLabel(payload.site);
 
-  const pieces = [`${bytes(totalBytes(payload.totals))} · ${payload.description}`];
+  const pieces = [`${bytes(totalBytes(payload.totals))} · ${formatPeriodDescription(payload.description)}`];
   if (measuredShare(payload.totals) < 0.9) pieces.push(t("dashboardDetailIncludesEstimates"));
   if (payload.visits.count > 0) {
     pieces.push(
@@ -1688,11 +1689,11 @@ async function load(): Promise<void> {
     const payload = await sendRequest({ type: "GET_OVERVIEW", period });
     overview = payload;
     paintDashboardSettings(payload.settings);
-    periodDescription.textContent = payload.description;
+    periodDescription.textContent = formatPeriodDescription(payload.description);
     renderStats(payload);
     renderSites(payload);
     renderFreshness();
-    typesNote.textContent = payload.description;
+    typesNote.textContent = formatPeriodDescription(payload.description);
     replaceChildren(typesSlot, [
       stackedBar({
         segments: typeSegments(payload.byType),
@@ -1732,6 +1733,11 @@ function siteFromHash(): string | null {
 }
 
 async function start(): Promise<void> {
+  // Before anything is painted. A screen reader picks its voice and its pronunciation
+  // rules from `<html lang>`, and every page here ships `lang="en"` in its markup — true
+  // of the only catalogue that exists, and a lie the moment a second one does. Text that
+  // is correct and read aloud in the wrong language is worse than text left untranslated.
+  applyDocumentLanguage();
   selectedSite = siteFromHash();
   bindControls();
   await load();

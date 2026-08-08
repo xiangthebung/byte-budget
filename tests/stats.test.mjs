@@ -104,7 +104,15 @@ test("a multi-day period adds up every day inside it and none outside it", async
   // previous window, which is the only thing in the product that can say a budgeting
   // tool changed anything.
   assert.equal(payload.previousTotals.down, 9_000_000);
-  assert.ok(payload.description.length > 0);
+
+  // `description` is the structured window, not a finished sentence: the worker has no
+  // business composing prose whose word order a translation cannot then change. The
+  // surface formats it. So what the payload owes is a described window with a real
+  // span, which is also what makes it checkable here at all.
+  assert.ok(payload.description.kind, "the payload names no period kind");
+  assert.equal(typeof payload.description.days, "number");
+  assert.ok(payload.description.from, "the payload describes no window start");
+  assert.ok(payload.description.to, "the payload describes no window end");
 });
 
 test("the estimated part of a total is carried across days with the total", async () => {

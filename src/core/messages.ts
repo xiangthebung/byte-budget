@@ -14,6 +14,7 @@ import type { Tier } from "../limit/tiers";
 import type { OptimizeSettings, PageFeatureId } from "../optimize/features";
 import type { FlushError } from "../track/ledger";
 import type { Projection } from "./forecast";
+import type { PeriodDescription } from "./period";
 import type {
   Period,
   ResourceType,
@@ -49,8 +50,15 @@ export interface CurrentTab {
 
 export interface OverviewPayload {
   period: Period;
-  /** A sentence naming exactly what the period covers. */
-  description: string;
+  /**
+   * What the period covers, structured rather than as a finished sentence.
+   *
+   * It used to be a string composed in the worker. A sentence
+   * assembled worker-side cannot be reordered by a translator, and the worker's locale
+   * is not obviously the surface's — so the shape travels and
+   * `formatPeriodDescription` turns it into words at the point of display.
+   */
+  description: PeriodDescription;
   totals: UsageTotals;
   byType: TypeBytes;
   /** Descending by total bytes. */
@@ -110,7 +118,8 @@ export interface VisitStats {
 export interface SiteDetailPayload {
   site: string;
   period: Period;
-  description: string;
+  /** As on `OverviewPayload`: structured, formatted by the surface. */
+  description: PeriodDescription;
   totals: UsageTotals;
   byType: TypeBytes;
   /** Descending by bytes. Empty when host tracking is switched off. */

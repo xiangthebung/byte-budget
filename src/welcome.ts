@@ -16,7 +16,7 @@
 import "./welcome.css";
 import { element, query, queryAll, replaceChildren } from "./core/dom";
 import { formatBytes, parseByteSize } from "./core/format";
-import { t } from "./core/i18n";
+import { applyDocumentLanguage, t } from "./core/i18n";
 import { errorMessage, sendRequest } from "./core/messages";
 import { cycleResetsAt, dayKey, formatDayShort, startOfCycle } from "./core/period";
 import { applyTheme } from "./core/settings";
@@ -309,6 +309,11 @@ planSkip.addEventListener("click", () => void skip());
 saverToggle.addEventListener("change", () => void changeSaver(saverToggle.checked));
 
 async function start(): Promise<void> {
+  // Before anything is painted. A screen reader picks its voice and its pronunciation
+  // rules from `<html lang>`, and every page here ships `lang="en"` in its markup — true
+  // of the only catalogue that exists, and a lie the moment a second one does. Text that
+  // is correct and read aloud in the wrong language is worse than text left untranslated.
+  applyDocumentLanguage();
   replaceChildren(cycleDay, cycleOptions());
 
   try {

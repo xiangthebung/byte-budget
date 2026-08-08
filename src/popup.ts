@@ -40,7 +40,7 @@ import {
   type Child,
 } from "./core/dom";
 import { formatAgo, formatBytes, formatCount, formatPercent, splitBytes } from "./core/format";
-import { t } from "./core/i18n";
+import { applyDocumentLanguage, t } from "./core/i18n";
 import {
   errorMessage,
   sendRequest,
@@ -51,7 +51,14 @@ import {
   type SeriesPoint,
   type SiteUsage,
 } from "./core/messages";
-import { cycleElapsed, cycleResetsAt, dayKeyFromMs, formatDayShort, hourKey } from "./core/period";
+import {
+  cycleElapsed,
+  cycleResetsAt,
+  dayKeyFromMs,
+  formatDayShort,
+  formatPeriodDescription,
+  hourKey,
+} from "./core/period";
 import { applyTheme, getSettings, onSettingsChanged } from "./core/settings";
 import type { BudgetPeriod } from "./limit/budgets";
 import { TIER_DESCRIPTIONS, TIERS } from "./limit/tiers";
@@ -532,7 +539,7 @@ function measuredNote(totals: OverviewPayload["totals"]): HTMLElement {
 function renderMeta(payload: OverviewPayload): void {
   // `description` names the window and is composed in the worker, so it arrives as
   // prose and passes through rather than being looked up here.
-  const parts: HTMLElement[] = [element("span", { text: payload.description })];
+  const parts: HTMLElement[] = [element("span", { text: formatPeriodDescription(payload.description) })];
 
   // With a plan the headline belongs to the cycle, so the period figure the tabs
   // above actually control has to be printed somewhere or the tabs move nothing
@@ -594,7 +601,7 @@ const OVERLAY_LABEL = t("popupOverlayLabel");
 
 function renderChart(payload: OverviewPayload): void {
   const series = withoutFutureHours(payload.series);
-  const signature = `${units}|${payload.description}|${series
+  const signature = `${units}|${formatPeriodDescription(payload.description)}|${series
     .map((point) => `${point.bucket}:${point.down + point.up}:${point.saved}`)
     .join(",")}`;
   // Rebuilding an identical chart every two seconds costs a screen reader the table
@@ -623,7 +630,7 @@ function renderChart(payload: OverviewPayload): void {
     barChart({
       points,
       format: (value) => bytes(value),
-      caption: payload.description,
+      caption: formatPeriodDescription(payload.description),
       tickEvery: points.length > 16 ? Math.ceil(points.length / 8) : 1,
       overlayLabel: OVERLAY_LABEL,
     }),
@@ -964,7 +971,7 @@ function showLimitStatus(status: BudgetStatus, payload: OverviewPayload): void {
   if (status.tier !== "off" && modelled > 0) {
     limitPrevented.hidden = false;
     limitPrevented.textContent = t("popupLimitPrevented", bytes(modelled));
-    limitPrevented.title = t("popupLimitPreventedTitle", payload.description);
+    limitPrevented.title = t("popupLimitPreventedTitle", formatPeriodDescription(payload.description));
   } else {
     limitPrevented.hidden = true;
   }
@@ -1101,7 +1108,7 @@ function renderOptimize(payload: OverviewPayload, biting: boolean): void {
       "popupOptimizeMeasuredHere",
       bytes(payload.current.totals.savedMeasured),
     );
-    optimizeMeasured.title = t("popupOptimizeMeasuredHereTitle", payload.description);
+    optimizeMeasured.title = t("popupOptimizeMeasuredHereTitle", formatPeriodDescription(payload.description));
   } else {
     optimizeMeasured.hidden = true;
   }
@@ -1456,6 +1463,11 @@ onSettingsChanged((changed) => {
  * ------------------------------------------------------------------ */
 
 async function start(): Promise<void> {
+  // Before anything is painted. A screen reader picks its voice and its pronunciation
+  // rules from `<html lang>`, and every page here ships `lang="en"` in its markup — true
+  // of the only catalogue that exists, and a lie the moment a second one does. Text that
+  // is correct and read aloud in the wrong language is worse than text left untranslated.
+  applyDocumentLanguage();
   // Theme first, and read straight out of storage rather than asked of the worker.
   // An explicit light or dark choice otherwise waits on a message round trip that may
   // have to wake a service worker, and the popup paints the other theme meanwhile —

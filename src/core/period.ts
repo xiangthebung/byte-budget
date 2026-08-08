@@ -285,9 +285,10 @@ export interface PeriodDescription {
  * elsewhere, or no separator at all, and none of that is reachable once the worker has
  * already joined the pieces.
  *
- * `track/stats.ts` still sends `describePeriod`'s English on `payload.description`; the
- * three surfaces move over to this one at a time, and that field goes when the last of
- * them has.
+ * This is what `payload.description` now carries. The string-composing `describePeriod`
+ * it replaced is gone: it produced a sentence in the worker, before the surface's locale
+ * was in the picture, and no amount of translating it there could have fixed the word
+ * order it had already fixed.
  */
 export function periodDescription(
   period: Period,
@@ -346,42 +347,6 @@ export function formatPeriodDescription(description: PeriodDescription): string 
   }
 }
 
-/**
- * A sentence naming what a period actually covers, for the UI to show.
- *
- * @deprecated Composed in the worker, in English, and shipped as
- * `payload.description`. Use `periodDescription` on the producing side and
- * `formatPeriodDescription` on the rendering side; this exists only so the three
- * surfaces can migrate one at a time instead of all in the same commit.
- *
- * Deliberately still literal English rather than a set of catalogue lookups. It has no
- * localised behaviour to offer — the worker composes it before the surface's locale is
- * in the picture — so translating it would duplicate the six `corePeriod*` sentences in
- * `i18n/core.json` for a function that is being deleted. Delete this once nothing reads
- * `payload.description`.
- */
-export function describePeriod(
-  period: Period,
-  settings: Pick<Settings, "weekMode" | "monthMode" | "weekStart">,
-  now: Date = new Date(),
-): string {
-  const description = periodDescription(period, settings, now);
-  if (description.from === null || description.to === null) return "Since this browser started";
-  const span = `${formatDayShort(description.from)} – ${formatDayShort(description.to)}`;
-  switch (description.kind) {
-    case "session":
-      return "Since this browser started";
-    case "day":
-      return formatDayShort(description.to);
-    case "calendarWeek":
-      return `This week · ${span}`;
-    case "calendarMonth":
-      return `This month · ${span}`;
-    case "rollingWeek":
-    case "rollingMonth":
-      return `Last ${description.days} days · ${span}`;
-  }
-}
 
 /** The oldest day key worth keeping, given a retention setting. `null` = keep all. */
 export function retentionCutoff(retentionDays: number, now: Date = new Date()): string | null {

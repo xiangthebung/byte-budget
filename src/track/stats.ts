@@ -22,7 +22,7 @@ import {
   dayKey,
   dayKeysInRange,
   daysBetween,
-  describePeriod,
+  periodDescription,
   hourKeyFromMs,
   hourKeysInDay,
   periodRange,
@@ -333,7 +333,7 @@ export async function overview(period: Period, settings: Settings): Promise<Over
 
   return {
     period,
-    description: describePeriod(period, settings),
+    description: periodDescription(period, settings),
     totals,
     byType,
     sites,
@@ -409,7 +409,7 @@ export async function siteDetail(
   return {
     site,
     period,
-    description: describePeriod(period, settings),
+    description: periodDescription(period, settings),
     totals,
     byType,
     hosts,

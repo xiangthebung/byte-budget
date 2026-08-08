@@ -27,7 +27,8 @@ import {
   dayKeysInRange,
   dayOfBucket,
   daysBetween,
-  describePeriod,
+  formatPeriodDescription,
+  periodDescription,
   hourKey,
   hourKeysInDay,
   periodRange,
@@ -136,13 +137,43 @@ test("each period covers what its name claims", () => {
 });
 
 test("a period description says what it covers and never reads as undefined", () => {
+  /*
+   * Two functions now, not one. The worker computes the SHAPE and the surface turns it
+   * into words, because a sentence composed in the worker has already fixed its word
+   * order and no translation can move it afterwards.
+   *
+   * This asserts on the shape rather than on English. `formatPeriodDescription` calls
+   * `t()`, and under `node --test` there is no `chrome.i18n`, so it returns catalogue
+   * keys — asserting on the wording here would be asserting on key names. What must
+   * hold is that every period yields a described window, and that nothing reaches the
+   * formatter as undefined.
+   */
   const now = new Date(2026, 6, 31, 14, 0);
   for (const period of ["session", "today", "week", "month"]) {
-    const text = describePeriod(period, SETTINGS, now);
+    const described = periodDescription(period, SETTINGS, now);
+    assert.ok(described.kind, `${period} has no kind`);
+    assert.equal(typeof described.days, "number");
+    assert.ok(Number.isFinite(described.days), `${period} has a non-finite day count`);
+
+    const text = formatPeriodDescription(described);
     assert.ok(text.length > 0);
     assert.doesNotMatch(text, /undefined|NaN|Invalid/);
   }
-  assert.match(describePeriod("session", SETTINGS, now), /browser/i);
+
+  // Session is the one with no day range at all: its totals come from
+  // `chrome.storage.session`, not from a span of days, and `from`/`to` being null is
+  // what tells the formatter to say so rather than printing an empty range.
+  const session = periodDescription("session", SETTINGS, now);
+  assert.equal(session.kind, "session");
+  assert.equal(session.from, null);
+  assert.equal(session.to, null);
+
+  // And a dated period really does carry its span, since that is the whole reason the
+  // structured form exists.
+  const month = periodDescription("month", SETTINGS, now);
+  assert.equal(month.kind, "calendarMonth");
+  assert.equal(month.from, "2026-07-01");
+  assert.equal(month.to, "2026-07-31");
 });
 
 test("retention keeps exactly the number of days asked for", () => {
