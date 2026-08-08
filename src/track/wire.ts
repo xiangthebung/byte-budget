@@ -12,7 +12,16 @@ import { hostFromUrl, siteKeyFromHost } from "../core/sites";
 /** The shape of a header, narrowed from `chrome.webRequest.HttpHeader`. */
 export interface WireHeader {
   name: string;
-  value?: string;
+  /**
+   * Explicitly `| undefined`, not just optional.
+   *
+   * Chrome's own `HttpHeader.value` is optional because a header may arrive carrying
+   * `binaryValue` instead, so under `exactOptionalPropertyTypes` a declaration of
+   * `value?: string` will not accept what `webRequest` actually hands over. Every
+   * reader here already treats a missing value as zero-length rather than assuming a
+   * string — this only makes the type say what the callers already do.
+   */
+  value?: string | undefined;
 }
 
 /**

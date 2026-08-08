@@ -185,9 +185,15 @@ export function optimizeRules(context: OptimizeContext): RuleSpec[] {
  * Deliberately coarser than the rules since the beacon block was scoped by destination:
  * a `ping` refused to a host that is not in `ANALYTICS_DOMAINS` was refused by something
  * else — an ad blocker, or the page — and `isRefusedByOptimizer` will still credit it
- * here. Narrowing it needs the destination at the call site, which is the missing
- * site/host argument on `isRefusedByOptimizer` (AUDIT.md §3, "Any extension's block is
- * credited to Byte Budget"), not another set of resource types in this file.
+ * here.
+ *
+ * `isRefusedByOptimizer` now takes the site and the tab, so the excluded-site and
+ * holdout-tab cases are already excluded from the credit. What is still missing is the
+ * REQUEST's destination host, which is what would let this distinguish a beacon we
+ * refused from one somebody else did. Fixing that means threading the destination to
+ * the call site in `track/requests.ts`, not adding another set of resource types here.
+ * Until then the residual over-credit is bounded to `ping` and `font` requests refused
+ * by another extension on a site where Data Saver is on.
  */
 export function refusedTypes(settings: OptimizeSettings): Set<ResourceType> {
   const types = new Set<ResourceType>();

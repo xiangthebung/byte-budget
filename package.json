@@ -16,7 +16,11 @@
     "test": "node --import ./tests/register-hooks.mjs --test \"tests/*.test.mjs\"",
     "smoke": "npm run build && node scripts/smoke.mjs",
     "icon": "node scripts/make-icon.mjs",
-    "verify": "npm run typecheck && npm run test && npm run build"
+    "verify": "npm run typecheck && npm run test && npm run build",
+    "lint": "eslint ."
+  },
+  "engines": {
+    "node": ">=22.18"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.326",

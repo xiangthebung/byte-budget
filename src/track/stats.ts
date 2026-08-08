@@ -143,16 +143,30 @@ function hourBuckets(range: DayRange, from: number | null): string[] {
   // day the browser started, which on a machine that is never shut down is months ago:
   // every one of those days became twenty-four keys, on every poll, so that all but
   // the last day of them could be thrown away again.
-  const earliest = shiftDay(range.to, -(HOUR_BUCKET_DAYS - 1));
+  const earliest = addDays(range.to, -(HOUR_BUCKET_DAYS - 1));
   const days = dayKeysInRange(range.from > earliest ? range.from : earliest, range.to);
   const first = from === null ? null : hourKeyFromMs(from);
-  // Nothing past the current hour. The bucket list is what the chart draws ticks for,
-  // so an unfiltered "today" put bars for 22:00 and 23:00 on the panel at nine in the
-  // evening — hours that have not happened, drawn as if they had cost nothing.
-  const now = hourKeyFromMs(Date.now());
   return days
-    .flatMap((day) => hourKeysInDay(day))
-    .filter((bucket) => bucket <= now && (first === null || bucket >= first));
+    .flatMap((day) => hoursSoFar(day))
+    .filter((bucket) => first === null || bucket >= first);
+}
+
+/**
+ * The hour keys of a day, stopping at the hour it is now.
+ *
+ * A bucket list is what a chart draws ticks for, so an unfiltered "today" put bars for
+ * 22:00 and 23:00 on the panel at nine in the evening — hours that have not happened,
+ * drawn as if they had cost nothing. A day in the past is untouched: all 24 of its
+ * keys sort below the current hour.
+ *
+ * Both hourly series go through here — the popup's "Over time" chart and the
+ * dashboard's per-site one — so the two cannot disagree about how much of today has
+ * happened. The alternative was each surface trimming its own copy, which is how one
+ * of them came to draw hours the other did not.
+ */
+function hoursSoFar(day: string): string[] {
+  const now = hourKeyFromMs(Date.now());
+  return hourKeysInDay(day).filter((bucket) => bucket <= now);
 }
 
 /** One point per bucket, with empty buckets filled in so a chart has no gaps. */
@@ -400,7 +414,7 @@ export async function siteDetail(
     byType,
     hosts,
     days: seriesFrom(dailyRows, dayKeysInRange(range.from, range.to)),
-    hours: seriesFrom(hourRows, hourKeysInDay(today)),
+    hours: seriesFrom(hourRows, hoursSoFar(today)),
     visits,
     settings,
   };
@@ -457,15 +471,9 @@ async function visitStats(site: string, range: DayRange): Promise<VisitStats> {
 /** Daily totals across the whole browser, for the dashboard's headline chart. */
 export async function dailySeries(days: number): Promise<SeriesPoint[]> {
   const to = dayKey();
-  const from = shiftDay(to, -(Math.max(1, days) - 1));
+  const from = addDays(to, -(Math.max(1, days) - 1));
   const rows = await getAll<UsageRow>(STORES.daily, bucketRange(from, to));
   return seriesFrom(rows, dayKeysInRange(from, to));
-}
-
-function shiftDay(day: string, offset: number): string {
-  const date = startOfDay(day);
-  date.setDate(date.getDate() + offset);
-  return dayKey(date);
 }
 
 /**
@@ -578,7 +586,7 @@ export async function exportData(
   days: number,
 ): Promise<{ filename: string; mimeType: string; body: string }> {
   const to = dayKey();
-  const from = shiftDay(to, -(Math.max(1, days) - 1));
+  const from = addDays(to, -(Math.max(1, days) - 1));
   const rows = (await getAll<UsageRow>(STORES.daily, bucketRange(from, to))).sort((a, b) =>
     a.key < b.key ? -1 : 1,
   );

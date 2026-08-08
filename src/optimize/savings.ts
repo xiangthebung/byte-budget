@@ -436,6 +436,22 @@ function intervalHalfWidth(a: TrimmedArm, b: TrimmedArm): number {
  * belongs to neither arm, so an upgrade starts the comparison over rather than
  * inheriting a control group nobody chose.
  */
+/**
+ * Bytes from the loads on one side of the comparison.
+ *
+ * Reads `visit.reason` directly and deliberately does NOT go through `visitReason()`,
+ * which resolves a pre-migration row carrying only `optimized: true` to `"optimized"`.
+ * That helper is right for labelling one visit and wrong here, and the difference is
+ * worth stating because the two look interchangeable.
+ *
+ * A legacy row's `optimized: true` really does mean optimized, so admitting it would
+ * add real samples. But `optimized: false` was ambiguous — control, excluded, disabled,
+ * or a load where the settings had not resolved — so the legacy CONTROL rows can never
+ * be recovered. Taking the treatment ones alone would load one arm with older loads and
+ * not the other, which is the same class of defect as the contamination this rewrite
+ * removed: a comparison whose two sides are drawn from different populations. Dropping
+ * both costs a few days of samples after an upgrade and keeps the arms comparable.
+ */
 function armBytes(visits: readonly Visit[], reason: VisitReason): number[] {
   const bytes: number[] = [];
   for (const visit of visits) {

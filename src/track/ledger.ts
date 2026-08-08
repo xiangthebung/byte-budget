@@ -20,7 +20,7 @@
  */
 
 import { bucketRange, put, remove, runTransaction, STORES } from "../core/db";
-import { dayKeyFromMs, hourKeyFromMs } from "../core/period";
+import { addDays, dayKeyFromMs, hourKeyFromMs, startOfDay } from "../core/period";
 import {
   addTotals,
   addTypeBytes,
@@ -589,7 +589,13 @@ export async function pruneOldRows(dailyCutoff: string | null, today: string): P
   // `HOURLY_RETENTION_DAYS - 1` because today is one of the days kept, and the
   // bound is the *first* hour to keep. Off by one the other way, this dropped
   // everything before `today - 3` and so kept four days' worth while claiming three.
-  const hourlyCutoff = `${addDaysTo(today, -(HOURLY_RETENTION_DAYS - 1))}T00`;
+  //
+  // The shift itself comes from `core/period`, which has tests. This file used to
+  // carry a byte-identical private copy of it, and that copy was the one wired to the
+  // only code in the extension that permanently deletes user data. A drift there does
+  // not show up as a wrong number on a chart; it shows up as a day of someone's
+  // history gone, with nothing left to notice it by.
+  const hourlyCutoff = `${addDays(today, -(HOURLY_RETENTION_DAYS - 1))}T00`;
   await remove(STORES.hourly, IDBKeyRange.upperBound(`${hourlyCutoff}|`, true));
 
   if (!dailyCutoff) return;
@@ -599,17 +605,11 @@ export async function pruneOldRows(dailyCutoff: string | null, today: string): P
   await pruneOldVisits(dailyCutoff);
 }
 
-function addDaysTo(day: string, days: number): string {
-  const [year, month, date] = day.split("-").map(Number);
-  const value = new Date(year ?? 1970, (month ?? 1) - 1, date ?? 1);
-  value.setDate(value.getDate() + days);
-  const pad = (input: number) => String(input).padStart(2, "0");
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
-}
-
 async function pruneOldVisits(dailyCutoff: string): Promise<void> {
-  const [year, month, date] = dailyCutoff.split("-").map(Number);
-  const cutoffMs = new Date(year ?? 1970, (month ?? 1) - 1, date ?? 1).getTime();
+  // Local midnight, through the same helper every day key in the extension is built
+  // from. Parsing the key by hand here was the second private copy of that arithmetic
+  // in the one function that deletes rows rather than displaying them.
+  const cutoffMs = startOfDay(dailyCutoff).getTime();
   await runTransaction(STORES.visits, "readwrite", (transaction) => {
     const index = transaction.objectStore(STORES.visits).index("byStart");
     const request = index.openCursor(IDBKeyRange.upperBound(cutoffMs, true));

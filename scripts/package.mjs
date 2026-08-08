@@ -22,6 +22,31 @@ const throttle = process.argv.slice(2).includes('--throttle');
 const source = path.join(root, throttle ? 'dist-throttle' : 'dist');
 const artifacts = path.join(root, 'artifacts');
 
+/**
+ * Strings that must never reach an upload.
+ *
+ * `homepage_url` ships as `https://REPLACE-ME.example/byte-budget`. It was flagged
+ * in wave 1, written down as a pre-submission step, and is still there — which is
+ * what a pre-submission step that lives only in a document does. `.example` is a
+ * reserved TLD that can never resolve, so anything under it is a placeholder by
+ * definition; both patterns are checked because filling in the name and leaving the
+ * domain is the likelier half-fix.
+ */
+const PLACEHOLDER_PATTERNS = [/REPLACE[-_ ]?ME/i, /\.example(?![a-z0-9-])/i];
+
+/**
+ * Code that must not exist in the store channel's bundles.
+ *
+ * README says the store build "compiles the throttle code out entirely rather than
+ * shipping a branch that can never be taken", and until now the only thing behind
+ * that claim was the manifest's `permissions` array — which says what the extension
+ * asked for, not what the file contains. A `debugger` call in a build that cannot
+ * hold the permission is dead weight at best and a review question at worst, and
+ * the tree-shake that removes it depends on `__THROTTLE_BUILD__` folding to a
+ * literal `false`, which is a property of the bundler's mood on any given upgrade.
+ */
+const THROTTLE_MARKERS = ['chrome.debugger', 'emulateNetworkConditions'];
+
 /** Files a loadable extension cannot be missing. */
 const REQUIRED = [
   'manifest.json',
@@ -71,6 +96,68 @@ function verifyManifestReferences(manifest, present) {
   }
 }
 
+/**
+ * Refuse to package a manifest that still carries a fill-me-in value.
+ *
+ * Reports the field path, because "REPLACE-ME is still in the manifest" sends the
+ * reader looking and `homepage_url` does not. Walks every string rather than
+ * checking `homepage_url` by name: the next placeholder will be somewhere else.
+ */
+function verifyNoPlaceholders(manifest) {
+  const found = [];
+  const walk = (value, path) => {
+    if (typeof value === 'string') {
+      if (PLACEHOLDER_PATTERNS.some((pattern) => pattern.test(value))) {
+        found.push(`${path} = ${value}`);
+      }
+    } else if (Array.isArray(value)) value.forEach((entry, index) => walk(entry, `${path}[${index}]`));
+    else if (value && typeof value === 'object') {
+      for (const [key, entry] of Object.entries(value)) walk(entry, path ? `${path}.${key}` : key);
+    }
+  };
+  walk(manifest, '');
+
+  if (found.length > 0) {
+    throw new Error(
+      `the manifest still carries placeholder values, fill them in before submitting:\n  ${found.join('\n  ')}`,
+    );
+  }
+}
+
+/**
+ * Prove the channel split in the bundles, not just in the manifest.
+ *
+ * Both directions are asserted, because both failures are silent. A store build
+ * that still contains the throttle code has shipped code it cannot run; a throttle
+ * build that does not contain it is an extension that asks for the `debugger`
+ * permission and then never throttles anything — and its manifest looks perfect.
+ *
+ * Every `.js` in the build is searched, not just `background.js`: a rollup chunking
+ * change could move the code into `assets/` without changing anything the manifest
+ * says.
+ */
+function verifyThrottleCode(files, expected) {
+  const scripts = files.filter((file) => file.name.endsWith('.js'));
+  for (const marker of THROTTLE_MARKERS) {
+    const hits = scripts
+      .filter((file) => file.data.toString('utf8').includes(marker))
+      .map((file) => file.name);
+
+    if (!expected && hits.length > 0) {
+      throw new Error(
+        `the store channel must not ship throttle code, but ${hits.join(', ')} ` +
+          `contains "${marker}"`,
+      );
+    }
+    if (expected && hits.length === 0) {
+      throw new Error(
+        `the throttle channel declares the "debugger" permission but no bundle ` +
+          `contains "${marker}"`,
+      );
+    }
+  }
+}
+
 async function main() {
   let files;
   try {
@@ -82,6 +169,14 @@ async function main() {
     );
   }
 
+  // Source maps are produced for both channels but shipped with only one. The store
+  // channel builds them `hidden` (vite.config.ts), so nothing in the bundle points at
+  // them and they would travel to the Web Store as unreferenced source; they stay in
+  // `dist/` instead, where they are what turns a stack trace in a bug report back
+  // into line numbers. The throttle channel links its maps, so it ships them — a
+  // linked map that is missing from the archive is a DevTools error on every page.
+  if (!throttle) files = files.filter((file) => !file.name.endsWith('.map'));
+
   const present = new Set(files.map((file) => file.name));
   const missing = REQUIRED.filter((name) => !present.has(name));
   if (missing.length > 0) {
@@ -92,6 +187,7 @@ async function main() {
     files.find((file) => file.name === 'manifest.json').data.toString('utf8'),
   );
   verifyManifestReferences(manifest, present);
+  verifyNoPlaceholders(manifest);
 
   // The channels differ by exactly one permission. Getting that backwards would
   // publish a store build that asks to debug the browser, or a throttle build
@@ -104,10 +200,20 @@ async function main() {
         : 'the store channel must not declare the "debugger" permission',
     );
   }
+  verifyThrottleCode(files, throttle);
 
+  // The manifest's version is written by the `manifest-channel` plugin from
+  // `package.json`, so this is no longer two sources disagreeing — it is the check
+  // that this archive came from a build of this version. `npm run zip` chains the
+  // build, but `node scripts/package.mjs` on its own does not, and packaging a
+  // `dist/` from before a version bump produces an artifact named for a release it
+  // does not contain.
   const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   if (manifest.version !== pkg.version) {
-    throw new Error(`manifest is ${manifest.version} but package.json is ${pkg.version}`);
+    throw new Error(
+      `dist/manifest.json is ${manifest.version} but package.json is ${pkg.version}; ` +
+        `rebuild before packaging`,
+    );
   }
 
   await mkdir(artifacts, { recursive: true });

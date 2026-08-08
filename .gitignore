@@ -17,5 +17,26 @@ outputs/
 # packaged. See writeRootManifest in vite.config.ts.
 /manifest.json
 
+# tsc writes one of these the moment anyone turns on `incremental`, and it is a
+# cache of the last compile — committing it makes CI's typecheck depend on
+# whichever machine wrote it last.
+*.tsbuildinfo
+
+# Vite loads .env files from the project root automatically. There are none
+# today; this is here so that if one ever appears it is not committed by
+# reflex along with whatever is in it.
+.env
+.env.*
+!.env.example
+
+# OS and editor droppings. .DS_Store was already covered; the Windows and
+# JetBrains/VS Code equivalents were not, and this project is developed on
+# Windows, so the asymmetry was the more likely accident.
 .DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+.vscode/
+.idea/
+
 *.log

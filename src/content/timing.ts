@@ -6,10 +6,36 @@
  * know, through `PerformanceResourceTiming.transferSize`, so this ships those
  * figures back and the worker settles the requests it had parked (PLAN.md §1.2).
  *
- * Only non-zero sizes are sent. A zero means one of two things — an opaque
- * cross-origin response with no `Timing-Allow-Origin`, or a cache hit — and in
- * neither case is it a measurement, so posting it would be noise on the message
- * bus and, worse, a number that could be mistaken for zero bytes.
+ * What gets sent is deliberately narrower than what gets measured. The first
+ * version posted every resource from every frame on every page load, for numbers the
+ * worker mostly threw away — one message per resource is real work on the bus and in
+ * the worker, and it kept the worker awake to do it. Three filters, all of which can
+ * be *proved* from what the page sees rather than guessed:
+ *
+ * 1. A zero size. That means an opaque cross-origin response with no
+ *    `Timing-Allow-Origin`, or a cache hit; in neither case is it a measurement, so
+ *    sending it would be noise and, worse, a number that could be mistaken for zero
+ *    bytes.
+ * 2. A URL that is not `http:` or `https:`. Only those reach `webRequest`, so a
+ *    `blob:` media segment or a `data:` image has no parked request to settle and
+ *    never will.
+ * 3. A transfer smaller than the body it delivered. That body did not come off the
+ *    wire — it came out of the cache, with a revalidating 304 as the whole transfer.
+ *    The worker prices cache hits from `details.fromCache` the moment they complete
+ *    and never parks one, so nothing is waiting for this number.
+ *
+ * Plus one sample per URL per batch; see `queue`.
+ *
+ * What is deliberately *not* filtered: whether the response carried a
+ * `Content-Length`, which is the property that actually decides whether the worker
+ * parked the request. A page cannot read response headers, so that test does not
+ * exist here at any price. Every proxy for it — trusting `initiatorType`, assuming a
+ * same-origin response is always sized — would throw away exactly the streamed and
+ * chunked bodies this path exists for, and `scripts/smoke.mjs` pins one of them:
+ * "the streamed fetch is measured from resource timing". Sending a report the worker
+ * discards costs a message; withholding one it needed costs a measurement, and the
+ * request is then priced by a model instead. The filter only removes responses that
+ * provably never crossed the network.
  *
  * Two structural constraints, both learned the hard way:
  *
@@ -39,10 +65,26 @@
   }
 
   const BATCH_DELAY_MS = 1500;
-  /** Send early rather than let a heavy page build an unbounded batch. */
+  /** Send early rather than let a heavy page build an unbounded batch. Distinct URLs. */
   const MAX_BATCH = 250;
 
-  let queue: TimingSample[] = [];
+  /**
+   * One sample per URL, in the order the resources finished.
+   *
+   * The worker matches a report to a parked request on `tabId|url` and hands the size
+   * to the oldest request still waiting under that key, so a second sample for the
+   * same URL in the same batch is an entry that can only settle a request the first
+   * one already settled. On a page that fetches one URL repeatedly — a poll, a tile
+   * server, a sprite requested from several frames — those duplicates were most of
+   * what crossed the bus. The first sample is kept rather than the last, which is the
+   * same end of the queue the worker pairs from.
+   *
+   * The cost is real and worth stating: a URL fetched twice inside one batch window
+   * leaves the second request to expire on the parked queue's own timer and be priced
+   * by the size model. That request is then recorded as estimated, so the total stays
+   * honest about which part of itself is measured — it is only less precise.
+   */
+  const queue = new Map<string, TimingSample>();
   let timer: ReturnType<typeof setTimeout> | null = null;
   let disconnected = false;
 
@@ -51,9 +93,9 @@
       clearTimeout(timer);
       timer = null;
     }
-    if (disconnected || queue.length === 0) return;
-    const entries: TimingSample[] = queue;
-    queue = [];
+    if (disconnected || queue.size === 0) return;
+    const entries: TimingSample[] = [...queue.values()];
+    queue.clear();
     try {
       chrome.runtime.sendMessage({ type: "REPORT_TIMINGS", entries }, () => {
         // Reading `lastError` is what stops Chrome logging "message port closed"
@@ -70,7 +112,7 @@
 
   function schedule(): void {
     if (disconnected) return;
-    if (queue.length >= MAX_BATCH) {
+    if (queue.size >= MAX_BATCH) {
       send();
       return;
     }
@@ -78,19 +120,44 @@
     timer = setTimeout(send, BATCH_DELAY_MS);
   }
 
+  /**
+   * Whether a request under this URL could be parked in the worker at all.
+   *
+   * `webRequest` only ever sees http and https, so anything else — `blob:`, `data:`,
+   * `filesystem:`, an extension URL — has no counterpart there to settle. Tested on
+   * the prefix rather than by parsing, because this runs once per resource on every
+   * page in the browser and `new URL()` here would allocate for all of them.
+   */
+  function isNetworkUrl(url: string): boolean {
+    return url.startsWith("https://") || url.startsWith("http://");
+  }
+
   function collect(entries: PerformanceEntryList): void {
     for (const entry of entries) {
       const timing = entry as PerformanceResourceTiming;
       const transferSize = Number(timing.transferSize);
       if (!Number.isFinite(transferSize) || transferSize <= 0) continue;
-      queue.push({
-        url: timing.name,
+
+      const url = timing.name;
+      if (!isNetworkUrl(url)) continue;
+
+      const encodedBodySize = Number(timing.encodedBodySize) || 0;
+      // Strictly smaller, so a body of zero — a 204, a redirect, an empty streamed
+      // response — still counts as a network transfer worth reporting. Only a body
+      // larger than the transfer that supposedly carried it proves the cache served
+      // it, and the worker has already priced that request from `details.fromCache`.
+      if (encodedBodySize > 0 && transferSize < encodedBodySize) continue;
+
+      // Same URL twice in one batch: keep the first. See `queue`.
+      if (queue.has(url)) continue;
+      queue.set(url, {
+        url,
         transferSize,
-        encodedBodySize: Number(timing.encodedBodySize) || 0,
+        encodedBodySize,
         initiatorType: timing.initiatorType || "other",
       });
     }
-    if (queue.length > 0) schedule();
+    if (queue.size > 0) schedule();
   }
 
   function observe(type: "resource" | "navigation"): void {

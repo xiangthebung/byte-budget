@@ -10,15 +10,25 @@ export function queryAll<T extends Element>(selector: string, root: ParentNode =
   return [...root.querySelectorAll<T>(selector)];
 }
 
+/**
+ * Every field is explicitly `| undefined` as well as optional.
+ *
+ * Under `exactOptionalPropertyTypes` those are different claims: `text?: string` means
+ * "may be absent", while `text?: string | undefined` also means "may be present and
+ * undefined". Callers here build options inline from values that are themselves
+ * optional — `text: point.tick` where the tick may not exist — and forcing each of
+ * those into a conditional spread would trade a real readability cost for no safety,
+ * because `element()` already skips any field that is undefined.
+ */
 export interface ElementOptions {
-  className?: string;
-  text?: string;
-  title?: string;
-  ariaLabel?: string;
-  ariaHidden?: boolean;
-  role?: string;
-  style?: Partial<Record<string, string>>;
-  dataset?: Record<string, string>;
+  className?: string | undefined;
+  text?: string | undefined;
+  title?: string | undefined;
+  ariaLabel?: string | undefined;
+  ariaHidden?: boolean | undefined;
+  role?: string | undefined;
+  style?: Partial<Record<string, string>> | undefined;
+  dataset?: Record<string, string> | undefined;
 }
 
 export type Child = Node | string | undefined | null | false;

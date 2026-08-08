@@ -1,0 +1,31 @@
+# Editor defaults, so a contributor's editor does not silently reformat a file it
+# opens. There is no formatter in this project — nothing rewrites the tree on
+# save — which makes these settings load-bearing rather than cosmetic: without
+# them a single editor with different defaults turns a two-line change into a
+# whole-file diff and buries the change in it.
+#
+# Every value here describes what the tree already contains (checked, not
+# assumed): no tabs anywhere, LF throughout, UTF-8, two-space indent. Nothing is
+# aspirational. In particular there is no max_line_length, because ~120 lines in
+# src/ already exceed 100 and declaring a limit the code does not keep would make
+# this file lie the way the settings this audit started from did.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.md]
+# Two trailing spaces are a hard line break in Markdown, so trimming them edits
+# the rendered document.
+trim_trailing_whitespace = false
+
+[*.{yml,yaml}]
+# YAML has no tab representation at all — a tab in an indent is a parse error,
+# not a style difference.
+indent_style = space
+indent_size = 2

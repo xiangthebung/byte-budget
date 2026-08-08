@@ -17,8 +17,26 @@
  * be upgraded before the resolver saw it and a plain local server would die with
  * ERR_SSL_PROTOCOL_ERROR.
  *
- * Playwright is expected to be installed out of tree (`npm i --no-save playwright`)
- * so it stays out of the extension's dependencies.
+ * Three rules this file holds itself to, because it is the only evidence in the repo
+ * that the extension works at all:
+ *
+ * 1. Every claim is checked against something the extension does not control — what
+ *    the local server was asked for, what Playwright's route handler was handed, or
+ *    what `chrome.declarativeNetRequest` says it is holding. A figure the extension
+ *    reports about itself is logged, not asserted.
+ * 2. A failure prints one named FAIL and the run continues. The README quotes the
+ *    summary verbatim, so a thrown exception does not just lose one line — it deletes
+ *    every check after it from the evidence.
+ * 3. Waits are on conditions, not on clocks. Three clocks are left, and each says in
+ *    a comment what it is waiting for and why there is nothing to poll.
+ *
+ * Playwright is installed out of tree (`npm i --no-save playwright`). The reason
+ * originally given for that — keeping it out of the extension's dependencies — does
+ * not hold: `scripts/package.mjs` builds the archive by walking `dist/` only, so no
+ * entry in `package.json` can reach it. What `--no-save` does buy is a floating
+ * Chromium, which is the wrong thing to leave floating in the one test that pins
+ * browser behaviour. The recommendation, for whoever owns `package.json`: make it a
+ * pinned `devDependency` and drop the out-of-tree install.
  */
 import { createServer } from 'node:http';
 import { mkdir, readFile, readdir, stat } from 'node:fs/promises';
@@ -90,8 +108,82 @@ navigator.sendBeacon('https://www.google-analytics.com/collect', 'x');
 const PLAIN_PAGE =
   '<!doctype html><html><head><meta charset="utf-8"><title>plain</title></head><body>plain</body></html>';
 
+/**
+ * A page carrying one asset of every kind the tier ladder sheds.
+ *
+ * `lean` was the only tier ever exercised in a browser, and it is the least
+ * interesting of the three. `trim` refuses exactly one resource type, so a bug that
+ * widens it changes nothing any total would show. `strict` is the only tier that ever
+ * sends `sub_frame`, `script`, `stylesheet` and `websocket` to Chrome — and Chrome
+ * applies a rule update atomically, so one type it will not accept means the whole set
+ * is rejected, nothing is installed, and every limit in the browser stops working while
+ * every surface carries on saying it is enforcing.
+ *
+ * Each element is here to make one resource type observable at the server, which is the
+ * only witness that can tell "refused" from "never wanted".
+ */
+const TIERS_PAGE = `<!doctype html>
+<html><head><meta charset="utf-8"><title>tiers</title>
+<link rel="stylesheet" href="/fixture.css">
+</head>
+<body>
+<h1>tiers</h1>
+<audio id="sound" src="/fixture.wav" preload="auto" muted></audio>
+<script>
+// The preload attribute is a hint Chrome is free to decline, and a media request that
+// is never made is indistinguishable at the server from one that was refused - which
+// would make the trim assertion pass for the wrong reason. Inline on purpose, so it
+// runs at every tier: DNR refuses network requests and an inline script is not one,
+// which is what lets this one page be both the control and the experiment.
+document.getElementById('sound').load();
+</script>
+<img src="/fixture.png" alt="" width="120">
+<iframe src="/frame" title="frame" width="120" height="60"></iframe>
+<script src="/fixture.js"></script>
+</body></html>`;
+
+/** The paths `TIERS_PAGE` asks for, in shed order: media, image, then the rest. */
+const TIER_ASSETS = ['/fixture.wav', '/fixture.png', '/fixture.css', '/frame', '/fixture.js'];
+
+const FRAME_PAGE =
+  '<!doctype html><html><head><meta charset="utf-8"><title>frame</title></head><body>frame</body></html>';
+
+const CSS_FIXTURE = `/* ${'-'.repeat(2000)} */\nh1 { color: #333; }\n`;
+
 function fixture(size, byte = 0x41) {
   return Buffer.alloc(size, byte);
+}
+
+/**
+ * A *valid* 8-bit mono WAV, for the same reason the PNG below is a valid PNG.
+ *
+ * Chrome hands the first bytes of a media response to a decoder while the rest is still
+ * arriving, and abandons the request when they are not decodable — `onCompleted` never
+ * fires and the element gives up. A silently abandoned media request and a media request
+ * the extension refused look identical from the server's side, which would make the
+ * `trim` assertion pass for the wrong reason. WAV rather than MP4 because its header is
+ * a dozen lines of arithmetic and needs no encoder.
+ */
+function buildWav(sampleRate = 8000, seconds = 8) {
+  const samples = sampleRate * seconds;
+  const buffer = Buffer.alloc(44 + samples);
+  buffer.write('RIFF', 0, 'ascii');
+  buffer.writeUInt32LE(36 + samples, 4);
+  buffer.write('WAVE', 8, 'ascii');
+  buffer.write('fmt ', 12, 'ascii');
+  buffer.writeUInt32LE(16, 16); // PCM header length
+  buffer.writeUInt16LE(1, 20); // format: uncompressed PCM
+  buffer.writeUInt16LE(1, 22); // channels
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate, 28); // byte rate: one channel, one byte per sample
+  buffer.writeUInt16LE(1, 32); // block align
+  buffer.writeUInt16LE(8, 34); // bits per sample
+  buffer.write('data', 36, 'ascii');
+  buffer.writeUInt32LE(samples, 40);
+  // A quiet sawtooth rather than silence: a decoder that discards all-zero audio would
+  // otherwise be free to skip the fetch this whole fixture exists to produce.
+  for (let index = 0; index < samples; index++) buffer[44 + index] = 128 + (index % 32);
+  return buffer;
 }
 
 /**
@@ -145,6 +237,7 @@ function buildPng(width, height) {
 
 const IMAGE = pngFixture();
 const IMAGE_BYTES = IMAGE.length;
+const AUDIO = buildWav();
 
 /**
  * What the size model assumes an image weighs when it has never seen one, read out of
@@ -228,6 +321,53 @@ function startServer() {
       response.end();
       return;
     }
+    // The tier page and its four non-image assets. Every one is served with a declared
+    // length so that "the bytes did not arrive" is never the reason a check fails.
+    if (request.url.startsWith('/tiers')) {
+      const body = Buffer.from(TIERS_PAGE, 'utf8');
+      response.writeHead(200, {
+        'Content-Type': 'text/html',
+        'Content-Length': String(body.length),
+        'Cache-Control': 'no-store',
+      });
+      response.end(body);
+      return;
+    }
+    if (request.url === '/frame') {
+      const body = Buffer.from(FRAME_PAGE, 'utf8');
+      response.writeHead(200, {
+        'Content-Type': 'text/html',
+        'Content-Length': String(body.length),
+        'Cache-Control': 'no-store',
+      });
+      response.end(body);
+      return;
+    }
+    if (request.url === '/fixture.css') {
+      const body = Buffer.from(CSS_FIXTURE, 'utf8');
+      response.writeHead(200, {
+        'Content-Type': 'text/css',
+        'Content-Length': String(body.length),
+        'Cache-Control': 'no-store',
+        'Timing-Allow-Origin': '*',
+      });
+      response.end(body);
+      return;
+    }
+    if (request.url === '/fixture.wav') {
+      // `Accept-Ranges` is deliberately absent. Chrome range-requests media when the
+      // server offers to, which turns one observable request into several and makes the
+      // hit log harder to read for no gain — what is being asserted is whether the
+      // request happens at all.
+      response.writeHead(200, {
+        'Content-Type': 'audio/wav',
+        'Content-Length': String(AUDIO.length),
+        'Cache-Control': 'no-store',
+        'Timing-Allow-Origin': '*',
+      });
+      response.end(AUDIO);
+      return;
+    }
     if (request.url === '/fixture.js') {
       const body = fixture(SCRIPT_BYTES, 0x20);
       response.writeHead(200, {
@@ -266,6 +406,118 @@ function startServer() {
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
   });
+}
+
+/* ------------------------------------------------------------------ *
+ * Waiting on conditions instead of on the clock
+ * ------------------------------------------------------------------ */
+
+/**
+ * Polls `read` until `accept` is satisfied, then answers with the last value read.
+ *
+ * This replaces most of what used to be `waitForTimeout`, and the gain is not only
+ * speed. A fixed sleep is wrong in both directions: too long on the machine it was
+ * tuned on — twenty of them totalled 64 seconds, and a two-minute gate is the gate
+ * people skip, which is the exact failure the stale-build guard below exists to
+ * prevent — and too short on a loaded CI runner, where it fails for a reason that is
+ * not a defect.
+ *
+ * It resolves rather than throwing when the deadline passes, on purpose: the caller's
+ * `check` then prints the number actually seen instead of a timeout, and one named FAIL
+ * beats an exception that aborts the remaining checks.
+ */
+async function until(read, accept, { timeout = 20_000, interval = 250 } = {}) {
+  const deadline = Date.now() + timeout;
+  let value = await read();
+  while (!accept(value) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, interval));
+    value = await read();
+  }
+  return value;
+}
+
+/**
+ * Turns a Playwright wait into a named check.
+ *
+ * `waitForSelector` and `waitForFunction` reject on timeout, and a rejection anywhere
+ * in `main()` ends the run — so the summary the README quotes as evidence loses every
+ * check after the failure and gains nothing naming the one that failed. Two assertions
+ * were written `check(true, …)` immediately after a bare wait, which prints a passing
+ * line that no condition was ever evaluated for: the wait was the real assertion and
+ * its failure mode was a stack trace. This makes the wait itself the assertion.
+ */
+async function checkWait(check, message, run) {
+  try {
+    await run();
+    check(true, message);
+    return true;
+  } catch (error) {
+    const reason = String(error?.message ?? error).split('\n')[0];
+    check(false, `${message} — ${reason}`);
+    return false;
+  }
+}
+
+/**
+ * Waits for a surface to be done laying out, rather than for a number of milliseconds.
+ *
+ * Fonts first, because they change metrics and a measurement taken before they land
+ * describes a layout nobody sees; then a layout property is read, which flushes pending
+ * style and layout synchronously. Deliberately not `requestAnimationFrame`: only one of
+ * this script's four pages is the foreground tab, and Chromium does not run animation
+ * frames in the others — a rAF-based settle would hang on `settings` and `dashboard`.
+ */
+function settle(target) {
+  return target.evaluate(async () => {
+    // Bounded, because `evaluate` has no timeout of its own and `document.fonts.ready`
+    // is the one promise here that a font which neither loads nor fails can leave
+    // pending. Trading a hung run for a slightly early measurement is the right way
+    // round: the measurement then fails as a named check.
+    await Promise.race([
+      document.fonts?.ready ?? Promise.resolve(),
+      new Promise((resolve) => setTimeout(resolve, 2000)),
+    ]);
+    return document.documentElement.scrollWidth;
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Reading Chrome's rules rather than the extension's opinion of them
+ * ------------------------------------------------------------------ */
+
+/** One line per installed rule, for a failure message that can be acted on. */
+function describeRules(rules) {
+  if (rules.length === 0) return 'none';
+  return rules
+    .map((rule) => {
+      const condition = rule.condition ?? {};
+      const scope = [
+        (condition.initiatorDomains ?? []).length > 0
+          ? `from:${condition.initiatorDomains.join(',')}`
+          : '',
+        (condition.tabIds ?? []).length > 0 ? `tabs:${condition.tabIds.join(',')}` : '',
+      ]
+        .filter(Boolean)
+        .join(' ');
+      return `#${rule.id} p${rule.priority} ${rule.action?.type} [${(
+        condition.resourceTypes ?? []
+      ).join(',')}]${scope ? ` ${scope}` : ''}`;
+    })
+    .join(' | ');
+}
+
+/**
+ * Whether Chrome holds exactly `count` rules, numbered 1..count.
+ *
+ * Contiguity from 1 is not incidental. `rules/session.ts` is the single owner of the
+ * session set precisely because `updateSessionRules` replaces by id: it composes the
+ * limit rules and the optimizer's rules together and renumbers the whole set on every
+ * install, which is what lets two publishers share one id space without deleting each
+ * other's work. A gap means a rule the extension composed is not one Chrome kept.
+ */
+function ruleIdsAreContiguous(rules, count) {
+  const ids = rules.map((rule) => rule.id).sort((a, b) => a - b);
+  return ids.length === count && ids.every((id, index) => id === index + 1);
 }
 
 /**
@@ -328,8 +580,13 @@ async function checkRootLoad(chromium, check) {
 
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/dist/popup.html`);
-    await page.waitForSelector('#period-tabs button', { timeout: 10_000 });
-    check(true, 'its popup renders from the root manifest');
+    // The wait is the assertion. Written as `check(true, …)` after a bare
+    // `waitForSelector`, this line printed "ok" for a condition nothing had evaluated,
+    // and a popup that failed to render threw instead — taking the remaining checks,
+    // and the summary the README quotes, down with it.
+    await checkWait(check, 'its popup renders from the root manifest', () =>
+      page.waitForSelector('#period-tabs button', { timeout: 10_000 }),
+    );
 
     // The path both content scripts are injected by, resolved the way the worker
     // resolves it. Wrong and the banner never shows.
@@ -350,6 +607,22 @@ async function checkRootLoad(chromium, check) {
   }
 }
 
+/**
+ * Whether a launch failure means "the `chromium` channel is not installed here".
+ *
+ * Playwright words that one of two ways depending on how the channel resolves — a
+ * missing executable, or a distribution it cannot find — and both point at the same
+ * install command. Matched on the message because Playwright does not give it a code.
+ */
+function isMissingChannel(error) {
+  const text = String(error?.message ?? error);
+  return (
+    /Executable doesn'?t exist/i.test(text) ||
+    /is not found at/i.test(text) ||
+    /playwright install/i.test(text)
+  );
+}
+
 /** Launches a persistent context with an unpacked extension loaded from `dir`. */
 async function launch(chromium, dir) {
   /**
@@ -367,9 +640,35 @@ async function launch(chromium, dir) {
   ];
   try {
     return await chromium.launchPersistentContext('', { channel: 'chromium', args });
-  } catch {
+  } catch (error) {
+    /**
+     * Narrow, because this catch used to swallow everything.
+     *
+     * A missing binary, a Chromium whose major the installed Playwright cannot drive,
+     * and a genuine crash on launch all arrived at the same log line — "running headed"
+     * — and the retry then failed differently, or on a headless runner sat waiting for
+     * a display until the job timed out. A real crash has to surface as itself.
+     */
+    if (!isMissingChannel(error)) throw error;
+    /**
+     * And the fallback is only a fallback where a window can actually open. On Linux
+     * with no display server the headed retry blocks until Playwright's own timeout,
+     * turning a one-line install instruction into a hung CI job.
+     */
+    if (process.platform === 'linux' && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) {
+      throw new Error(
+        'the "chromium" channel is not installed and there is no display to fall back to. ' +
+          'Run `npx playwright install --with-deps chromium`.',
+      );
+    }
     console.log('note  the "chromium" channel is unavailable; running headed');
-    return await chromium.launchPersistentContext('', { headless: false, args });
+    return await chromium.launchPersistentContext('', {
+      headless: false,
+      args,
+      // Bounded rather than open-ended: this path is already the degraded one, and a
+      // second failure here should be reported, not waited on indefinitely.
+      timeout: 60_000,
+    });
   }
 }
 
@@ -421,6 +720,39 @@ async function main() {
     await settings.waitForSelector('#optimize-toggle', { timeout: 10_000 });
     await settings.waitForSelector('.impact-label', { state: 'attached', timeout: 10_000 });
 
+    /**
+     * One message to the worker, from an extension page.
+     *
+     * Defined here rather than beside the first blocking experiment because the waits
+     * throughout now poll it: "has the worker finished counting the load" is a question
+     * the extension can be asked, and asking beats sleeping for six seconds and hoping.
+     */
+    const ask = (message) =>
+      dashboard.evaluate(
+        (payload) =>
+          new Promise((resolve) =>
+            chrome.runtime.sendMessage(payload, (value) =>
+              resolve(value ?? { lastError: chrome.runtime.lastError?.message }),
+            ),
+          ),
+        message,
+      );
+
+    /**
+     * What Chrome is actually holding.
+     *
+     * Every rule count in this script used to come from the extension: `SET_ENFORCEMENT`
+     * answers with the length of the array it composed, and `SAVE_OPTIMIZE` with the
+     * length of the array it handed to `publishRules`. Neither has ever asked the
+     * browser. That matters because `updateSessionRules` is atomic — a set containing
+     * one condition Chrome will not accept installs *nothing*, and the number the
+     * extension reports is exactly the number that does not change when it happens. So
+     * "we think we installed N" and "Chrome holds N" are different claims, and only the
+     * second one is evidence.
+     */
+    const sessionRules = () =>
+      dashboard.evaluate(() => chrome.declarativeNetRequest.getSessionRules());
+
     const optionsPage = await dashboard.evaluate(
       () => chrome.runtime.getManifest().options_page ?? '',
     );
@@ -469,10 +801,16 @@ async function main() {
     );
 
     await settings.click('[data-theme-value="dark"]');
-    await settings.waitForFunction(
-      () => document.documentElement.getAttribute('data-theme') === 'dark',
+    // Same correction as the popup check above: the `waitForFunction` is the assertion,
+    // and a theme picker that does not repaint the document has to print a FAIL rather
+    // than throw a timeout over the rest of the run.
+    await checkWait(check, 'the Settings appearance control works', () =>
+      settings.waitForFunction(
+        () => document.documentElement.getAttribute('data-theme') === 'dark',
+        null,
+        { timeout: 10_000 },
+      ),
     );
-    check(true, 'the Settings appearance control works');
     await settings.click('[data-theme-value="auto"]');
     await settings.waitForFunction(
       () => document.querySelector('[data-theme-value="auto"]')?.getAttribute('aria-checked') === 'true',
@@ -490,13 +828,29 @@ async function main() {
      * afterwards means the measured numbers are still only from the second load.
      */
     await page.goto(`${origin}/`, { waitUntil: 'load' });
-    await page.waitForTimeout(3000);
-    await dashboard.evaluate(
-      () =>
-        new Promise((resolve) =>
-          chrome.runtime.sendMessage({ type: 'CLEAR_DATA' }, () => resolve(true)),
-        ),
+    /**
+     * Waited out on the ledger, not on a clock.
+     *
+     * "The extension has finished loading" is exactly "the extension has recorded this
+     * load", and that is a question it can be asked. The condition is both fixtures at
+     * full size rather than merely the site appearing, because a clear that lands while
+     * a request is still parked would commit those bytes *after* it — polluting the
+     * measured phase with warm-up traffic, which is the one thing this sequence exists
+     * to prevent.
+     */
+    const warmed = await until(
+      () => ask({ type: 'GET_OVERVIEW', period: 'today' }),
+      (value) =>
+        (value.byType?.script ?? 0) >= SCRIPT_BYTES && (value.byType?.image ?? 0) >= IMAGE_BYTES,
+      { timeout: 25_000 },
     );
+    check(
+      (warmed.byType?.script ?? 0) >= SCRIPT_BYTES && (warmed.byType?.image ?? 0) >= IMAGE_BYTES,
+      `the warm-up load is fully recorded before anything is cleared (script ${
+        warmed.byType?.script ?? 0
+      } B, image ${warmed.byType?.image ?? 0} B)`,
+    );
+    await ask({ type: 'CLEAR_DATA' });
 
     await page.goto(`${origin}/?measured`, { waitUntil: 'load' });
     await page.evaluate(
@@ -504,8 +858,18 @@ async function main() {
       `${origin}/streamed`,
     );
 
-    // Long enough for the content script's batch, the parked-request TTL, and the
-    // ledger flush behind both.
+    /**
+     * The first of the three deliberate clocks in this file.
+     *
+     * Long enough for the content script's batch, the parked-request TTL, and the ledger
+     * flush behind both. It stays a clock because the TTL is one: the document and the
+     * streamed fetch are both chunked with no declared length, so `webRequest` cannot
+     * size either, and each waits in the parked queue for the page's resource timing —
+     * posted on the content script's own batching interval — or for the queue's own
+     * eight-second sweep. Neither the batch nor the queue is exposed on any message, and
+     * adding one so the test could poll it would be changing the product to suit its
+     * test.
+     */
     await page.waitForTimeout(12_000);
     await dashboard.reload();
     try {
@@ -681,11 +1045,25 @@ async function main() {
         ),
       `${origin}/streamed`,
     );
-    // Long enough for the body to arrive and `onCompleted` to fire, so the request is
-    // parked rather than cancelled by the navigation.
+    /**
+     * The second deliberate clock, and the smallest.
+     *
+     * The `evaluate` above already resolved, so the body has arrived — what is still
+     * outstanding is `onCompleted` reaching the worker and the request being filed in the
+     * parked queue. Neither is reported on any message, so there is no condition to poll:
+     * the queue is deliberately invisible to the UI, and adding a message to expose it
+     * would be changing the product to suit its test. 1500 ms is generous for one event
+     * following a body the page has finished reading.
+     */
     await page.waitForTimeout(1500);
     await page.goto(`${origin}/plain`, { waitUntil: 'load' });
-    // The eight-second wait, the queue's sweep behind it, and the flush behind that.
+    /**
+     * The third deliberate clock: the parked queue's eight-second TTL, its sweep, and the
+     * ledger flush behind that. Same argument as the first — the page is gone, so nothing
+     * can report the request and no traffic remains to schedule a flush. Whether these
+     * bytes are counted at all is decided by that timer, which is the defect this whole
+     * block exists to pin.
+     */
     await page.waitForTimeout(12_000);
 
     const carried = await dashboard.evaluate(
@@ -738,7 +1116,7 @@ async function main() {
     if (process.argv.includes('--shots')) {
       await dashboard.setViewportSize({ width: 1280, height: 1100 });
       await mkdir(path.join(root, 'outputs'), { recursive: true });
-      await dashboard.waitForTimeout(300);
+      await settle(dashboard);
       await dashboard.screenshot({
         path: path.join(root, 'outputs', 'dashboard-dark.png'),
         fullPage: true,
@@ -764,17 +1142,6 @@ async function main() {
      * dispatched — but that is a claim from a document until the server confirms it
      * was never asked.
      * ---------------------------------------------------------------- */
-
-    const ask = (message) =>
-      dashboard.evaluate(
-        (payload) =>
-          new Promise((resolve) =>
-            chrome.runtime.sendMessage(payload, (value) =>
-              resolve(value ?? { lastError: chrome.runtime.lastError?.message }),
-            ),
-          ),
-        message,
-      );
 
     // Cleared *before* the tier is set by hand, not after. `CLEAR_DATA` now also drops
     // every enforcement decision — deleting the usage a limit was computed from and
@@ -809,12 +1176,33 @@ async function main() {
       `the site is recorded as limited (${JSON.stringify(applied.enforcement)})`,
     );
 
+    // And Chrome's own answer, which is a different claim. The optimizer is off at this
+    // point, so the whole session set is these rules and nothing else.
+    const leanHeld = await sessionRules();
+    console.log('  rules Chrome holds at lean:', describeRules(leanHeld));
+    check(
+      ruleIdsAreContiguous(leanHeld, applied.rules ?? 0),
+      `Chrome holds the ${applied.rules ?? 0} rule(s) it was handed, numbered from 1 (${describeRules(
+        leanHeld,
+      )})`,
+    );
+    check(
+      leanHeld.length > 0 &&
+        leanHeld.every(
+          (rule) =>
+            rule.action?.type === 'block' &&
+            (rule.condition?.initiatorDomains ?? []).includes('127.0.0.1'),
+        ),
+      'and every one of them is a block scoped to the limited site',
+    );
+
     resetHits();
     await page.goto(`${origin}/?limited`, { waitUntil: 'load' });
-    await page.waitForTimeout(8000);
 
     // The server's own record. `lean` refuses media, images and fonts, so the
-    // document and the script must still arrive and the image must not.
+    // document and the script must still arrive and the image must not. The load event
+    // is what makes the record final: every subresource has by then either arrived or
+    // been refused, so no wait is needed before reading it.
     console.log('  server hits while limited:', JSON.stringify(hits));
     check(
       !hits.includes('/fixture.png'),
@@ -825,7 +1213,13 @@ async function main() {
       'the script was still allowed through, so the block is selective',
     );
 
-    const limited = await ask({ type: 'GET_OVERVIEW', period: 'today' });
+    // What is still in flight is the worker's accounting, so that is what is polled for.
+    const limited = await until(
+      () => ask({ type: 'GET_OVERVIEW', period: 'today' }),
+      (value) =>
+        (value.byType?.script ?? 0) >= SCRIPT_BYTES && (value.totals?.blocked ?? 0) >= 1,
+      { timeout: 25_000 },
+    );
     console.log(
       '  while limited:',
       JSON.stringify({
@@ -886,10 +1280,147 @@ async function main() {
     // And it must be reversible: a rule that cannot be lifted is a broken browser.
     const lifted = await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'off' });
     check(lifted.rules === 0, `lifting the limit removes every rule (${lifted.rules})`);
+    const afterLift = await sessionRules();
+    check(
+      afterLift.length === 0,
+      `and Chrome holds none afterwards, not merely none composed (${describeRules(afterLift)})`,
+    );
     resetHits();
     await page.goto(`${origin}/?unlimited`, { waitUntil: 'load' });
-    await page.waitForTimeout(2500);
-    check(hits.includes('/fixture.png'), 'the image loads again once the limit is lifted');
+    await until(() => hits, (list) => list.includes('/fixture.png'), { timeout: 15_000 });
+    check(
+      hits.includes('/fixture.png'),
+      `the image loads again once the limit is lifted (hits: ${hits.join(' ')})`,
+    );
+
+    /* ---------------------------------------------------------------- *
+     * The other two tiers
+     *
+     * `lean` above is where the budget ladder lands first, and it was the only tier ever
+     * exercised in a browser. The two that were not are the two that can fail in ways
+     * `lean` cannot show.
+     *
+     * `trim` refuses exactly one resource type. A bug that widens it — an off-by-one in
+     * `TIER_DEPTH`, a reordered `SHED_ORDER` — costs a person their images at the tier
+     * whose whole promise is that nothing visible changes, and no aggregate anywhere
+     * would look different.
+     *
+     * `strict` is the only tier that sends `sub_frame`, `script`, `stylesheet` and
+     * `websocket` to Chrome. A rule set Chrome rejects is rejected atomically: nothing is
+     * installed, every limit in the browser silently stops working, and the count the
+     * extension reports is exactly the number that does not change when it happens. This
+     * script already guards the pack patterns with `isRegexSupported`; enforcement rules
+     * had no equivalent, and this is it.
+     * ---------------------------------------------------------------- */
+
+    /**
+     * The control arm, and it is not a formality.
+     *
+     * "The server was never asked for the audio" is satisfied just as well by a Chrome
+     * that never requests media in this environment as by a working `trim`. Asserting the
+     * request happens with nothing enforcing is what tells those two apart, and it is the
+     * same argument as the beacon pair further down.
+     */
+    resetHits();
+    await page.goto(`${origin}/tiers?control`, { waitUntil: 'load' });
+    await until(() => hits, (list) => TIER_ASSETS.every((asset) => list.includes(asset)), {
+      timeout: 20_000,
+    });
+    console.log('  tier control hits:', JSON.stringify(hits));
+    check(
+      TIER_ASSETS.every((asset) => hits.includes(asset)),
+      `with nothing enforced the page asks for all of ${TIER_ASSETS.join(' ')} (${hits.join(' ')})`,
+    );
+
+    const trimmed = await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'trim' });
+    check(
+      trimmed.ok === true && trimmed.rules >= 1,
+      `trim installs ${trimmed.rules ?? 0} rule(s) (${JSON.stringify(trimmed.enforcement)})`,
+    );
+    const trimHeld = await sessionRules();
+    console.log('  rules Chrome holds at trim:', describeRules(trimHeld));
+    check(
+      ruleIdsAreContiguous(trimHeld, trimmed.rules ?? 0),
+      `Chrome accepted the whole trim set (${describeRules(trimHeld)})`,
+    );
+    check(
+      trimHeld.length > 0 &&
+        trimHeld.every((rule) => {
+          const types = rule.condition?.resourceTypes ?? [];
+          return types.length === 1 && types[0] === 'media';
+        }),
+      `and trim asks it to refuse media and nothing else (${describeRules(trimHeld)})`,
+    );
+
+    resetHits();
+    await page.goto(`${origin}/tiers?trim`, { waitUntil: 'load' });
+    await until(() => hits, (list) => list.includes('/fixture.js'), { timeout: 20_000 });
+    console.log('  server hits at trim:', JSON.stringify(hits));
+    check(
+      !hits.includes('/fixture.wav'),
+      `trim refuses the audio (hits: ${hits.join(' ')})`,
+    );
+    check(
+      ['/fixture.png', '/fixture.css', '/frame', '/fixture.js'].every((asset) =>
+        hits.includes(asset),
+      ),
+      `and refuses nothing else — image, stylesheet, frame and script all arrive (${hits.join(' ')})`,
+    );
+
+    const strict = await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'strict' });
+    check(
+      strict.ok === true && strict.rules >= 1,
+      `strict installs ${strict.rules ?? 0} rule(s) (${JSON.stringify(strict.enforcement)})`,
+    );
+    const strictHeld = await sessionRules();
+    console.log('  rules Chrome holds at strict:', describeRules(strictHeld));
+    check(
+      ruleIdsAreContiguous(strictHeld, strict.rules ?? 0),
+      `Chrome accepted the strict set rather than rejecting it whole (${describeRules(strictHeld)})`,
+    );
+    /**
+     * The four types no other tier ever sends.
+     *
+     * This is the assertion the section exists for. If Chrome refuses one of them the
+     * update fails atomically, `getSessionRules` comes back empty or stale, and the
+     * extension's own `strict.rules` is unchanged — so this is the only reading in the
+     * script that can see it.
+     */
+    const strictTypes = new Set(
+      strictHeld.flatMap((rule) => rule.condition?.resourceTypes ?? []),
+    );
+    check(
+      ['sub_frame', 'script', 'stylesheet', 'websocket'].every((type) => strictTypes.has(type)),
+      `and accepted sub_frame, script, stylesheet and websocket (${[...strictTypes].join(' ')})`,
+    );
+    check(
+      !strictTypes.has('main_frame'),
+      'and no tier asks it to block the document, which is what leaves the page able to explain itself',
+    );
+
+    resetHits();
+    await page.goto(`${origin}/tiers?strict`, { waitUntil: 'load' });
+    // Waiting for a subresource here would be waiting for something that must never
+    // arrive, so the navigation itself is the condition.
+    await until(() => hits, (list) => list.some((url) => url.startsWith('/tiers')), {
+      timeout: 20_000,
+    });
+    console.log('  server hits at strict:', JSON.stringify(hits));
+    check(
+      hits.some((url) => url.startsWith('/tiers?strict')),
+      `the document still arrives at strict (hits: ${hits.join(' ')})`,
+    );
+    check(
+      TIER_ASSETS.every((asset) => !hits.includes(asset)),
+      `and every subresource on it is refused (${hits.join(' ')})`,
+    );
+
+    const unstrict = await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'off' });
+    check(unstrict.rules === 0, `lifting strict removes every rule (${unstrict.rules})`);
+    check(
+      (await sessionRules()).length === 0,
+      'and Chrome is left holding none of them',
+    );
 
     /* ---------------------------------------------------------------- *
      * A budget enforcing itself
@@ -929,9 +1460,15 @@ async function main() {
 
     resetHits();
     await page.goto(`${origin}/?budget-1`, { waitUntil: 'load' });
-    await page.waitForTimeout(6000);
-
-    const crossed = await ask({ type: 'GET_BUDGETS' });
+    // Polled on both halves of what is being claimed — the governor counted it, and the
+    // governor acted on it. A sleep here proved neither: it just made the read late
+    // enough that they were usually both true.
+    const crossed = await until(
+      () => ask({ type: 'GET_BUDGETS' }),
+      (value) =>
+        (value.statuses?.[0]?.used ?? 0) > 600_000 && value.statuses?.[0]?.tier !== 'off',
+      { timeout: 25_000 },
+    );
     const first = crossed.statuses?.[0];
     console.log(
       '  after one load:',
@@ -962,19 +1499,20 @@ async function main() {
     // Second load: the budget is already over, so the image must never be requested.
     resetHits();
     await page.goto(`${origin}/?budget-2`, { waitUntil: 'load' });
-    await page.waitForTimeout(4000);
     console.log('  server hits over budget:', JSON.stringify(hits));
     check(
       !hits.includes('/fixture.png'),
       `the over-budget load never asked for the image (hits: ${hits.join(' ')})`,
     );
 
-    // And the page has to say so, or a limit is indistinguishable from a bug.
-    const banner = await page.evaluate(() => {
-      const host = document.getElementById('byte-budget-notice');
-      return host ? { present: true, tag: host.tagName } : { present: false };
-    });
-    check(banner.present === true, `the page shows a notice (${JSON.stringify(banner)})`);
+    // And the page has to say so, or a limit is indistinguishable from a bug. The banner
+    // is injected by the worker after the load, so this is the one condition here that is
+    // genuinely still outstanding when `load` fires — and it is polled, not slept on.
+    await checkWait(check, 'the page shows a notice', () =>
+      page.waitForFunction(() => Boolean(document.getElementById('byte-budget-notice')), null, {
+        timeout: 15_000,
+      }),
+    );
 
     /* ---------------------------------------------------------------- *
      * Settings at a phone width
@@ -991,7 +1529,9 @@ async function main() {
     await settings.setViewportSize({ width: 390, height: 900 });
     await settings.reload();
     await settings.waitForSelector('#limits-table tbody tr', { timeout: 10_000 });
-    await settings.waitForTimeout(300);
+    // Fonts, then a forced layout flush — the actual precondition for measuring a
+    // stacked table, rather than a third of a second and a hope.
+    await settle(settings);
     const narrow = await settings.evaluate(() => {
       const doc = document.documentElement;
       const label = (cell) => getComputedStyle(cell, '::before').content;
@@ -1062,7 +1602,7 @@ async function main() {
       await settings.setViewportSize({ width: 1280, height: 1100 });
       await settings.waitForSelector('#limits-table tbody tr', { timeout: 10_000 });
       await settings.evaluate(() => window.scrollTo(0, 0));
-      await settings.waitForTimeout(400);
+      await settle(settings);
       await settings.screenshot({
         path: path.join(root, 'outputs', 'settings-limits.png'),
         fullPage: true,
@@ -1081,21 +1621,241 @@ async function main() {
 
     // The banner has to go with it, on the page that is already open. A notice that
     // outlives the limit it describes is worse than no notice.
-    await page.waitForTimeout(700);
-    const stillThere = await page.evaluate(() =>
-      Boolean(document.getElementById('byte-budget-notice')),
+    await checkWait(check, 'the notice is withdrawn when the limit is lifted', () =>
+      page.waitForFunction(() => !document.getElementById('byte-budget-notice'), null, {
+        timeout: 15_000,
+      }),
     );
-    check(stillThere === false, 'the notice is withdrawn when the limit is lifted');
 
     resetHits();
     await page.goto(`${origin}/?granted`, { waitUntil: 'load' });
-    await page.waitForTimeout(2500);
-    check(hits.includes('/fixture.png'), 'the image loads again after the grant');
+    await until(() => hits, (list) => list.includes('/fixture.png'), { timeout: 15_000 });
+    check(
+      hits.includes('/fixture.png'),
+      `the image loads again after the grant (hits: ${hits.join(' ')})`,
+    );
 
     const removed = await ask({ type: 'REMOVE_BUDGET', site: '127.0.0.1' });
     check(
       (removed.statuses ?? []).length === 0,
       `removing the budget leaves nothing behind (${JSON.stringify(removed.statuses)})`,
+    );
+
+    /* ---------------------------------------------------------------- *
+     * First run
+     *
+     * The install used to open nothing and say nothing. `welcome.html` asks two
+     * questions, and the second half of the first one is load-bearing in a way that is
+     * easy to miss: `settings.planBytes` on its own produces no alert and no enforcement,
+     * because both read the governor's *budgets*. A plan recorded without a matching
+     * `#all` allowance is a number on a screen and a default-on plan warning watching
+     * nothing — a failure that is silent and looks exactly like one that works.
+     *
+     * So the assertion is not "the form saves". It is that answering the question wires
+     * the two together, in both directions.
+     * ---------------------------------------------------------------- */
+
+    const PLAN_BYTES = 2_000_000_000;
+    const welcome = await context.newPage();
+    try {
+      await welcome.goto(`chrome-extension://${extensionId}/welcome.html`);
+      await checkWait(check, 'the first-run page asks its two questions and offers the switch', () =>
+        Promise.all([
+          welcome.waitForSelector('#plan-size', { timeout: 10_000 }),
+          welcome.waitForSelector('#cycle-day', { timeout: 10_000 }),
+          welcome.waitForSelector('#saver-toggle', { timeout: 10_000 }),
+        ]),
+      );
+
+      await welcome.fill('#plan-size', '2 GB');
+      // The echo is the whole reason that field has a hint. `parseByteSize` reads a bare
+      // number as megabytes and reads a comma differently depending on how many digits
+      // follow it, and a size taken as ten times what was typed produces a limit that
+      // then simply never fires. Matched loosely on the separator because the hint is
+      // formatted with `Intl` and the browser's locale decides the character.
+      const sizeHint = await welcome.textContent('#plan-size-hint');
+      check(
+        /\b2[.,]0 GB\b/.test(sizeHint ?? ''),
+        `and echoes back the size it actually read (${sizeHint})`,
+      );
+
+      await welcome.selectOption('#cycle-day', '17');
+      await welcome.click('#plan-save');
+      await checkWait(check, 'the plan saves', () =>
+        welcome.waitForFunction(
+          () => /Saved/.test(document.querySelector('#plan-status')?.textContent ?? ''),
+          null,
+          { timeout: 15_000 },
+        ),
+      );
+
+      const planned = await ask({ type: 'GET_SETTINGS' });
+      check(
+        planned.settings?.planBytes === PLAN_BYTES && planned.settings?.cycleStartDay === 17,
+        `the plan and the cycle are stored (${planned.settings?.planBytes} B, resets on day ${planned.settings?.cycleStartDay})`,
+      );
+      const planBudget = ((await ask({ type: 'GET_BUDGETS' })).statuses ?? []).find(
+        (entry) => entry.budget?.site === '#all',
+      );
+      check(
+        planBudget?.budget?.bytes === PLAN_BYTES && planBudget?.budget?.period === 'month',
+        `and the plan is an allowance the governor tracks, not just a number on a screen (${JSON.stringify(
+          planBudget?.budget,
+        )})`,
+      );
+
+      // The other direction, which is the one that leaves a browser broken when it is
+      // missing: clearing the plan has to take the allowance with it, or a `hard` cap
+      // keeps refusing requests on the strength of a figure no surface displays any more.
+      await welcome.fill('#plan-size', '');
+      await welcome.click('#plan-save');
+      await checkWait(check, 'clearing the plan saves too', () =>
+        welcome.waitForFunction(
+          () => /No plan set/.test(document.querySelector('#plan-status')?.textContent ?? ''),
+          null,
+          { timeout: 15_000 },
+        ),
+      );
+      const unplanned = await ask({ type: 'GET_SETTINGS' });
+      const leftover = ((await ask({ type: 'GET_BUDGETS' })).statuses ?? []).filter(
+        (entry) => entry.budget?.site === '#all',
+      );
+      check(
+        unplanned.settings?.planBytes === null && leftover.length === 0,
+        `clearing the plan takes its allowance with it (${unplanned.settings?.planBytes}, ${JSON.stringify(
+          leftover,
+        )})`,
+      );
+    } finally {
+      await welcome.close();
+    }
+
+    /* ---------------------------------------------------------------- *
+     * The budget over everything
+     *
+     * `#all` is the only budget whose rule names no site. Its condition carries
+     * `resourceTypes` and nothing else, which Chrome reads as "every request in this
+     * browser" — the one shape that can reach traffic with no origin to scope against,
+     * which is most of what a data plan is actually spent on. It is also the one shape
+     * that can go wrong everywhere at once, and until now nothing had proven it installs,
+     * that it applies past the site that happened to trip it, or that it lifts.
+     *
+     * The proof that it is genuinely unscoped is the second load. `localhost` and
+     * `127.0.0.1` are the same server and two different site keys, so a rule that had
+     * quietly acquired an `initiatorDomains` — by a bad merge, or by the `ALL_SITES`
+     * branch in `enforcementRules` falling through — would still refuse the first and let
+     * the second straight through, and every byte-counting assertion in this file would
+     * carry on passing.
+     * ---------------------------------------------------------------- */
+
+    const totalOf = (statuses) => (statuses ?? []).find((entry) => entry.budget?.site === '#all');
+
+    await ask({ type: 'CLEAR_DATA' });
+    const total = await ask({
+      type: 'PUT_BUDGET',
+      site: '#all',
+      bytes: ALLOWANCE,
+      period: 'day',
+      shape: 'progressive',
+    });
+    check(
+      totalOf(total.statuses)?.budget?.bytes === ALLOWANCE,
+      `a budget over everything is stored (${JSON.stringify(totalOf(total.statuses)?.budget)})`,
+    );
+    check(
+      totalOf(total.statuses)?.tier === 'off',
+      `and nothing is enforced before any traffic (${totalOf(total.statuses)?.tier})`,
+    );
+
+    resetHits();
+    await page.goto(`${origin}/?all-1`, { waitUntil: 'load' });
+    const totalCrossed = await until(
+      () => ask({ type: 'GET_BUDGETS' }),
+      (value) => (totalOf(value.statuses)?.used ?? 0) > 600_000 && totalOf(value.statuses)?.tier !== 'off',
+      { timeout: 25_000 },
+    );
+    const totalStatus = totalOf(totalCrossed.statuses);
+    console.log(
+      '  total budget after one load:',
+      JSON.stringify({ used: totalStatus?.used, share: totalStatus?.share, tier: totalStatus?.tier }),
+    );
+    check(
+      (totalStatus?.used ?? 0) > 600_000,
+      `the total counted the load, priming from every site's rows rather than one (${
+        totalStatus?.used ?? 0
+      } B)`,
+    );
+    check(
+      totalStatus?.tier === 'lean' || totalStatus?.tier === 'strict',
+      `and enforcement engaged from usage alone (${totalStatus?.tier})`,
+    );
+
+    /**
+     * The rule's shape, read from Chrome.
+     *
+     * No assertion about bytes can distinguish an unscoped rule from one scoped to the
+     * site that happened to trip it, because on this server they refuse the same request.
+     * This is the only reading that can, and it is why the check exists separately from
+     * the two loads either side of it.
+     */
+    const totalHeld = await sessionRules();
+    console.log('  rules while the total budget enforces:', describeRules(totalHeld));
+    check(
+      ruleIdsAreContiguous(totalHeld, 1),
+      `one rule covers everything, and Chrome holds it (${describeRules(totalHeld)})`,
+    );
+    check(
+      totalHeld.length > 0 &&
+        totalHeld.every(
+          (rule) =>
+            (rule.condition?.initiatorDomains ?? []).length === 0 &&
+            (rule.condition?.tabIds ?? []).length === 0,
+        ),
+      `and it names no site and no tab, as a limit over everything has to (${describeRules(
+        totalHeld,
+      )})`,
+    );
+
+    // The other half, on a site key that has never had a budget of its own.
+    resetHits();
+    await page.goto(`http://localhost:${port}/?all-2`, { waitUntil: 'load' });
+    await until(() => hits, (list) => list.some((url) => url.startsWith('/?all-2')), {
+      timeout: 20_000,
+    });
+    console.log('  server hits under the total budget:', JSON.stringify(hits));
+    check(
+      !hits.includes('/fixture.png'),
+      `the total budget refuses images on a site it was never pointed at (hits: ${hits.join(' ')})`,
+    );
+    // Deliberately not asserted against the script: one more load can carry the total
+    // past 100%, and at `strict` the script is refused too. What holds at every tier is
+    // that the document arrives, which is the property the ladder is built around.
+    check(
+      hits.some((url) => url.startsWith('/?all-2')),
+      'while the document itself is never refused, at any tier',
+    );
+
+    const totalRemoved = await ask({ type: 'REMOVE_BUDGET', site: '#all' });
+    check(
+      totalOf(totalRemoved.statuses) === undefined,
+      `removing it leaves no status behind (${JSON.stringify(totalRemoved.statuses)})`,
+    );
+    const afterTotal = await until(() => sessionRules(), (list) => list.length === 0, {
+      timeout: 15_000,
+    });
+    check(
+      afterTotal.length === 0,
+      `and Chrome is left holding nothing — an unscoped block outliving its budget is a ` +
+        `browser that refuses images on every site with nothing left anywhere to say why ` +
+        `(${describeRules(afterTotal)})`,
+    );
+
+    resetHits();
+    await page.goto(`http://localhost:${port}/?all-3`, { waitUntil: 'load' });
+    await until(() => hits, (list) => list.includes('/fixture.png'), { timeout: 15_000 });
+    check(
+      hits.includes('/fixture.png'),
+      `and images load again everywhere once it is removed (hits: ${hits.join(' ')})`,
     );
 
     /* ---------------------------------------------------------------- *
@@ -1167,6 +1927,50 @@ async function main() {
       enabled.ok === true && enabled.rules >= 6,
       `the optimizer installs its rules (${enabled.rules ?? 0})`,
     );
+    const optimizeHeld = await sessionRules();
+    console.log('  rules Chrome holds for the optimizer:', describeRules(optimizeHeld));
+    check(
+      ruleIdsAreContiguous(optimizeHeld, enabled.rules ?? 0),
+      `and Chrome holds all ${enabled.rules ?? 0} of them (${describeRules(optimizeHeld)})`,
+    );
+
+    /**
+     * Which of two matching rules Chrome would pick, asserted against Chrome.
+     *
+     * DNR compares `priority` first and falls back to the allow > block > redirect
+     * ordering only to break a tie *within* one priority. At the numbers this shipped
+     * with — limits at 1, pack redirects at 2 — a site over a hard cap kept spending
+     * bytes through exactly the five CDNs the optimizer knows how to rewrite, refused
+     * everywhere else and quietly not refused there. `tests/rules.test.mjs` pins the gap
+     * between the two pure functions; this pins that both sets survive into one
+     * installed rule set with the gap intact, which is a separate thing that can break.
+     *
+     * `trim` on the site the optimizer page is served from, because it refuses `media`
+     * and that page has none — so the limit is inert as an experiment and real as a rule.
+     */
+    const withBoth = await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'trim' });
+    const mixed = await sessionRules();
+    // Limits are composed first and the whole set is renumbered from 1, so the lowest
+    // ids are the limit rules. That ordering is `SOURCE_ORDER`'s only job and it is what
+    // makes the two halves separable here.
+    const limitCount = withBoth.rules ?? 0;
+    const limitPriority = mixed.filter((rule) => rule.id <= limitCount).map((rule) => rule.priority);
+    const optimizePriority = mixed
+      .filter((rule) => rule.id > limitCount)
+      .map((rule) => rule.priority);
+    console.log(
+      '  priorities Chrome holds:',
+      JSON.stringify({ limit: limitPriority, optimize: optimizePriority }),
+    );
+    check(
+      limitPriority.length > 0 &&
+        optimizePriority.length > 0 &&
+        Math.min(...limitPriority) > Math.max(...optimizePriority),
+      `every limit rule outranks every optimizer rule in Chrome's own set (limits ${JSON.stringify(
+        limitPriority,
+      )} vs optimizers ${JSON.stringify(optimizePriority)})`,
+    );
+    await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'off' });
 
     /**
      * A control load first, so the original variant's size is on record.
@@ -1185,7 +1989,18 @@ async function main() {
     wikiAsked.length = 0;
     analyticsAsked.length = 0;
     await page.goto(`${origin}/optimized`, { waitUntil: 'load' });
-    await page.waitForTimeout(3500);
+    // The three things this load has to produce, waited on as themselves. Both beacons
+    // are dispatched by the same inline script, so the first-party one arriving is what
+    // says the analytics one has been attempted — which is what makes its absence from
+    // the optimized load below mean something.
+    await until(
+      () => ({ hits, wikiAsked, analyticsAsked }),
+      (seen) =>
+        seen.hits.includes('/beacon') &&
+        seen.analyticsAsked.length > 0 &&
+        seen.wikiAsked.length > 0,
+      { timeout: 20_000 },
+    );
     console.log('  control load asked for:', JSON.stringify(wikiAsked));
     check(
       wikiAsked.some((url) => url.includes('/1600px-')),
@@ -1200,7 +2015,11 @@ async function main() {
       `and gets no Save-Data header (${saveDataByPath.get('/optimized')})`,
     );
 
-    const baselined = await ask({ type: 'GET_SAVINGS', days: 30 });
+    const baselined = await until(
+      () => ask({ type: 'GET_SAVINGS', days: 30 }),
+      (value) => (value.baselines ?? 0) >= 1,
+      { timeout: 20_000 },
+    );
     check(
       (baselined.baselines ?? 0) >= 1,
       `the original size is now on file (${baselined.baselines ?? 0})`,
@@ -1226,7 +2045,15 @@ async function main() {
     wikiAsked.length = 0;
     analyticsAsked.length = 0;
     await page.goto(`${origin}/optimized`, { waitUntil: 'load' });
-    await page.waitForTimeout(6000);
+    // The same two network conditions as the control load. The first-party beacon and
+    // the Wikimedia request are the last two things this page does, so their arrival is
+    // what says the page is finished — and the analytics beacon, which must *not*
+    // arrive, was dispatched by the same inline script as the one that did.
+    await until(
+      () => ({ hits, wikiAsked }),
+      (seen) => seen.hits.includes('/beacon') && seen.wikiAsked.length > 0,
+      { timeout: 20_000 },
+    );
 
     console.log('  wikimedia asked for:', JSON.stringify(wikiAsked));
     console.log('  server hits while optimizing:', JSON.stringify(hits));
@@ -1282,11 +2109,22 @@ async function main() {
      * anything it sets there is invisible to `page.evaluate`, which runs in the main
      * one. The DOM is what the two worlds share, and the DOM is what was supposed to
      * change.
+     *
+     * Polled rather than read once after a sleep, because the script runs after `load`
+     * and is the one part of this page that is genuinely still outstanding when the
+     * navigation resolves. Polled with `until` rather than `waitForFunction` so that a
+     * script which never arrives produces the two named failures below carrying the
+     * values actually found, instead of a timeout that asserts nothing and ends the run.
      */
-    const pageState = await page.evaluate(() => ({
-      belowLoading: document.getElementById('below')?.getAttribute('loading') ?? null,
-      prefetchLinks: document.querySelectorAll('link[rel~="prefetch"]').length,
-    }));
+    const pageState = await until(
+      () =>
+        page.evaluate(() => ({
+          belowLoading: document.getElementById('below')?.getAttribute('loading') ?? null,
+          prefetchLinks: document.querySelectorAll('link[rel~="prefetch"]').length,
+        })),
+      (state) => state.belowLoading === 'lazy' && state.prefetchLinks === 0,
+      { timeout: 20_000 },
+    );
     console.log('  page optimizer:', JSON.stringify(pageState));
     check(
       pageState.belowLoading === 'lazy',
@@ -1306,7 +2144,11 @@ async function main() {
       `  note  the offscreen image was ${hits.includes('/fixture.png') ? 'still' : 'not'} fetched on the initial load`,
     );
 
-    const report = await ask({ type: 'GET_SAVINGS', days: 30 });
+    const report = await until(
+      () => ask({ type: 'GET_SAVINGS', days: 30 }),
+      (value) => (value.rewritten ?? 0) >= 1 && (value.savedMeasured ?? 0) > 0,
+      { timeout: 20_000 },
+    );
     console.log(
       '  savings:',
       JSON.stringify({
@@ -1349,7 +2191,10 @@ async function main() {
       const node = document.querySelector('.advanced-settings');
       if (node) node.open = true;
     });
-    await settings.waitForTimeout(300);
+    // Fonts, then a layout flush. Opening a `<details>` is synchronous, so what the
+    // sleep here was covering was font metrics, and that is a condition rather than a
+    // duration.
+    await settle(settings);
     const narrowAdvanced = await settings.evaluate(() => {
       const doc = document.documentElement;
       const grid = document.querySelector('.advanced-options');
@@ -1416,7 +2261,7 @@ async function main() {
       // grouped list of all eight; Advanced now holds the packs and the holdout rate.
       await settings.waitForSelector('#feature-groups .impact-label', { timeout: 5000 });
       await settings.evaluate(() => window.scrollTo(0, 0));
-      await settings.waitForTimeout(400);
+      await settle(settings);
       await settings.screenshot({
         path: path.join(root, 'outputs', 'settings-optimize.png'),
         fullPage: true,
@@ -1426,6 +2271,13 @@ async function main() {
 
     const off = await ask({ type: 'SAVE_OPTIMIZE', changes: { enabled: false } });
     check(off.rules === 0, `switching the optimizer off removes every rule (${off.rules})`);
+    const afterOff = await sessionRules();
+    check(
+      afterOff.length === 0,
+      `and Chrome is holding none, so nothing is left rewriting requests (${describeRules(
+        afterOff,
+      )})`,
+    );
 
     const errors = await worker.evaluate(() => 'ok');
     check(errors === 'ok', 'the service worker is still alive and evaluable');
@@ -1439,14 +2291,14 @@ async function main() {
       if (closeDetail) await closeDetail.click();
       await dashboard.evaluate(() => window.scrollTo(0, 0));
       await dashboard.setViewportSize({ width: 1280, height: 1100 });
-      await dashboard.waitForTimeout(400);
+      await settle(dashboard);
       await dashboard.screenshot({ path: path.join(shots, 'dashboard.png'), fullPage: true });
 
       await settings.reload();
       await settings.setViewportSize({ width: 1280, height: 1100 });
       await settings.waitForSelector('#limits-panel', { timeout: 10_000 });
       await settings.evaluate(() => window.scrollTo(0, 0));
-      await settings.waitForTimeout(400);
+      await settle(settings);
       await settings.screenshot({ path: path.join(shots, 'settings.png'), fullPage: true });
 
       // The popup is a normal extension page; opening it directly at its real
@@ -1455,7 +2307,7 @@ async function main() {
       await popup.setViewportSize({ width: 420, height: 720 });
       await popup.goto(`chrome-extension://${extensionId}/popup.html`);
       await popup.waitForSelector('.site-row', { timeout: 10_000 });
-      await popup.waitForTimeout(400);
+      await settle(popup);
       await popup.screenshot({ path: path.join(shots, 'popup.png'), fullPage: true });
       console.log('  wrote outputs/dashboard.png, settings.png and popup.png');
     }

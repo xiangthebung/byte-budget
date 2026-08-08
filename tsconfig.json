@@ -12,6 +12,29 @@
     "noUnusedParameters": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
+
+    // `npm test` runs `node --test` straight over the .ts sources and leans on Node's
+    // type stripping (tests/hooks.mjs) — there is no compile step in front of the
+    // suite. Stripping only erases annotations, so an `enum`, a `namespace`, a
+    // constructor parameter property or a non-declare class field with `!` would
+    // survive into the code Node executes. Node reports that as a module-system
+    // error pointing at the import machinery rather than at the construct, which is
+    // an extremely expensive failure to diagnose. This flag turns it into a compile
+    // error at the line that caused it.
+    "erasableSyntaxOnly": true,
+
+    // Same harness, the other half of the problem: without this, `import { Foo }` for
+    // a type-only `Foo` compiles fine but leaves a real import in the stripped
+    // output, and Node fails at runtime resolving an export that never existed. It
+    // also stops the elision rules from differing between tsc and Vite.
+    "verbatimModuleSyntax": true,
+
+    // Every branch of a value-returning function has to say what it returns. The
+    // failure this prevents is a guard clause added to a byte-accounting helper that
+    // falls out the bottom as `undefined` and is then treated as 0.
+    "noImplicitReturns": true,
+    "exactOptionalPropertyTypes": true,
+
     "noEmit": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,

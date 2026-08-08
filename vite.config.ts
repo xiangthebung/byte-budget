@@ -5,6 +5,22 @@ import { fileURLToPath, URL } from "node:url";
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
 
 /**
+ * The extension's version, read from `package.json` — the one place it is written.
+ *
+ * `public/manifest.json` used to carry a second copy, and `scripts/package.mjs`
+ * compared the two at `npm run zip`: after typecheck, tests, build and archive
+ * assembly had all already run against a number that was wrong. The plugin below
+ * stamps this one into every channel's manifest instead, so the two cannot
+ * disagree and packaging is left checking only that `dist/` is current.
+ *
+ * Anything the source manifest still says about `version` is overwritten here and
+ * means nothing; the field belongs only in `package.json`.
+ */
+const { version } = JSON.parse(
+  readFileSync(`${projectRoot}/package.json`, "utf8"),
+) as { version: string };
+
+/**
  * Entries whose output is loaded as a *classic* script by Chrome, not a module.
  *
  * Content scripts registered in the manifest cannot be ES modules, so their
@@ -93,9 +109,25 @@ export default defineConfig(({ mode }) => {
           const manifestPath = `${outputDirectory}/manifest.json`;
           const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
             name: string;
+            version: string;
             description: string;
             permissions: string[];
           };
+          manifest.version = version;
+
+          // The copy in `public/manifest.json` is now inert — the line above wins —
+          // which makes it a place to bump a number and watch nothing happen. A
+          // warning rather than an error, because an ignored field breaks no build.
+          const sourceManifest = JSON.parse(
+            readFileSync(`${projectRoot}/public/manifest.json`, "utf8"),
+          ) as Record<string, unknown>;
+          if ("version" in sourceManifest) {
+            this.warn(
+              'public/manifest.json still declares "version". It is overwritten from ' +
+                "package.json on every build; delete the field so there is one source.",
+            );
+          }
+
           if (isThrottleBuild) {
             manifest.name = "Byte Budget (throttle)";
             manifest.description =
@@ -135,6 +167,24 @@ export default defineConfig(({ mode }) => {
       emptyOutDir: true,
       target: "es2022",
       minify: "esbuild",
+      /**
+       * Source maps, chosen per channel rather than omitted by default.
+       *
+       * Without them a bug report against `dist/background.js` is 50 kB of minified
+       * service worker and a stack trace whose line numbers mean nothing, which is
+       * the only diagnostic anyone will ever send for a worker that runs on their
+       * machine and not on ours.
+       *
+       * The two channels differ because their audiences do. The store build gets
+       * `"hidden"`: the maps are written, but no `sourceMappingURL` comment goes
+       * into the bundle and `scripts/package.mjs` keeps `.map` files out of the
+       * archive — so they exist here, for symbolicating a report, without publishing
+       * the source to every install. The throttle build gets `true`: it is
+       * sideloaded by people who deliberately chose a channel that holds the
+       * `debugger` permission, it never goes to the store, and a linked map means
+       * their report arrives with real file names in it.
+       */
+      sourcemap: isThrottleBuild ? true : "hidden",
       /**
        * No `<link rel="modulepreload">` in the extension pages.
        *

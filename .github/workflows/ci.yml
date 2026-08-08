@@ -1,0 +1,155 @@
+# Continuous integration for Byte Budget.
+#
+# The repository only became a repository in wave 0, so until now every claim in
+# README.md — that the typecheck is clean, that the suite passes, that both build
+# channels compile, that the extension actually measures traffic in a real browser
+# — was true because someone had recently run it on one machine. This file is what
+# turns those into things that are checked on every push.
+#
+# Three jobs, deliberately independent: `verify` and `smoke` are the merge signal,
+# and `lint` is not (see the comment on that job). Nothing uses `needs:`, so a
+# slow browser download never delays the fast answer.
+
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+# Read-only. Nothing here publishes, comments or tags, so anything more would be
+# scope this workflow cannot use.
+permissions:
+  contents: read
+
+# A second push to the same branch makes the first run's answer irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    # typecheck + unit tests + both build channels.
+    name: verify (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      # Without this, a failure on 24 cancels 22 and hides the one fact the
+      # matrix exists to establish: whether the break is version-specific.
+      fail-fast: false
+      matrix:
+        # 22 is the floor declared in package.json's `engines`, and it is a floor
+        # for a concrete reason: `npm test` runs `node --test` straight over the
+        # .ts sources and relies on type stripping, which Node unflagged in
+        # 22.18. On 20 the suite dies inside a .ts file with an error about the
+        # module system and nothing pointing at the cause. 24 is the other end of
+        # the supported range, so a change that only compiles on one of them is
+        # caught here rather than by whoever upgrades next.
+        node: ["22", "24"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs exactly what
+      # package-lock.json pins and fails if the lockfile and package.json
+      # disagree, so CI can never be green against a dependency tree the
+      # committed lockfile does not describe.
+      - run: npm ci
+
+      # typecheck, then the unit suite, then the store build. Sequential inside
+      # one script on purpose — a build is not worth waiting for if the types
+      # are wrong.
+      - run: npm run verify
+
+      # The throttle channel compiles a different bundle from the same sources
+      # (the `debugger` permission and the throttling code are compiled out of
+      # the store build), and nothing else in the project references this script.
+      # Without this step the second channel can break and stay broken until
+      # someone tries to package it.
+      - run: npm run build:throttle
+
+  smoke:
+    # The part `verify` structurally cannot prove: that chrome.webRequest fires,
+    # that resource timings reach the worker, that IndexedDB rows are written and
+    # read back, and that the number on the dashboard matches what the local
+    # server actually served.
+    name: smoke (real Chromium)
+    runs-on: ubuntu-latest
+    # The launcher in scripts/smoke.mjs falls back to a headed browser when the
+    # "chromium" channel is unavailable, and on a runner with no display that
+    # fallback hangs rather than failing. This cap is what turns that into a
+    # 25-minute red instead of a job that runs until GitHub's own limit.
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # Playwright is installed out of tree, matching how scripts/smoke.mjs
+      # documents it: it is a test harness, not something the extension depends
+      # on, and package.mjs collects the archive from dist/ only.
+      #
+      # This step must come *before* `playwright install`. Run the other way
+      # round, `npx` would fetch its own temporary copy of the Playwright CLI,
+      # download the browser build that copy expects, and then the local package
+      # installed afterwards would look for a different build and fail at launch
+      # with "Executable doesn't exist".
+      - name: Install Playwright out of tree
+        run: npm i --no-save playwright
+
+      # `--with-deps` pulls the shared libraries a headless Chromium needs on a
+      # bare Ubuntu image; without it the browser starts and immediately exits.
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Builds first (the script's own `assertFresh` refuses to run against a
+      # dist/ older than src/), then loads dist/ into a real browser.
+      - run: npm run smoke
+
+  lint:
+    # Deliberately NOT part of the merge signal, and deliberately not a `needs:`
+    # of anything.
+    #
+    # ESLint is not in package.json or package-lock.json — same call as
+    # Playwright, for the same reason — so this job installs it from the registry
+    # at run time. That makes it the one job here whose result depends on
+    # something outside the lockfile, and a registry hiccup or an eslint major
+    # bump must not be able to turn a correct commit red on the check that gates
+    # a merge. Keep this out of any required-checks list; read it as advice.
+    #
+    # The majors are pinned because the flat-config API is the thing being called
+    # here, and it is the thing that moves across a major.
+    #
+    # What it is worth reading for: eslint.config.js enforces
+    # @typescript-eslint/no-floating-promises, which is the only automated check
+    # on this codebase's central async convention — ~70 deliberate `void`
+    # prefixes in a worker where a forgotten await is a write that never lands.
+    name: lint (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # The rules are type-aware, so they need the project's own typescript and
+      # @types/chrome present, not just eslint.
+      - run: npm ci
+
+      - name: Install ESLint out of tree
+        run: npm i --no-save eslint@^10 typescript-eslint@^8
+
+      - run: npm run lint

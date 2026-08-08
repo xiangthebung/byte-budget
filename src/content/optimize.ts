@@ -491,11 +491,17 @@
         }
       }
     });
+    // Spread rather than an `undefined` value: `MutationObserverInit.attributeFilter`
+    // is optional, and passing it explicitly as undefined is a different thing from
+    // omitting it. Present-but-undefined would also mean observing every attribute
+    // mutation on every page, which is the cost this filter exists to avoid.
     observer.observe(document.documentElement, {
       childList: true,
       subtree: true,
       attributes: active.has("clickToLoadMedia"),
-      attributeFilter: active.has("clickToLoadMedia") ? ["src", "preload", "autoplay"] : undefined,
+      ...(active.has("clickToLoadMedia")
+        ? { attributeFilter: ["src", "preload", "autoplay"] }
+        : {}),
     });
   }
 
