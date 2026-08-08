@@ -471,12 +471,15 @@ function shiftDay(day: string, offset: number): string {
 /**
  * What is on disk, and whether the numbers behind it are complete.
  *
- * `lastFlushError` rides alongside `StorageReport` rather than inside it because the
- * shared type in `core/messages.ts` does not name the field yet. It belongs here all
- * the same: a rejected write leaves every total quietly behind the traffic it claims
- * to measure, and this is the only report in the extension whose job is to say what
- * the storage layer is actually doing. Fold it into `StorageReport` when that file
- * next changes.
+ * `lastFlushError` is a named field on `StorageReport` now, and it belongs there: a
+ * rejected write leaves every total quietly behind the traffic it claims to measure,
+ * and this is the only report in the extension whose job is to say what the storage
+ * layer is actually doing. A console nobody opens is not a surface.
+ *
+ * `baselineRows` is counted here with the rest rather than skipped as an internal
+ * cache. It is the one store retention pruning does not reach — capped by row count
+ * alone — so a disk panel that omitted it would understate exactly the thing that is
+ * hardest to get rid of.
  */
 export async function storageReport(): Promise<StorageReport> {
   const [dailyRows, hourlyRows, hostRows, visitRows, sizeModelRows, baselineRows] =

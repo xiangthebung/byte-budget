@@ -149,6 +149,20 @@ export default defineConfig(({ mode }) => {
           popup: `${projectRoot}/src/popup.html`,
           dashboard: `${projectRoot}/src/dashboard.html`,
           settings: `${projectRoot}/src/settings.html`,
+          /*
+           * The first-run screen, opened from `onInstalled`. An extension page like the
+           * three above, not a content script, so it may import freely — `welcome.ts`
+           * pulls in `core/messages`, `core/format` and the shared stylesheet, and the
+           * `assert-classic-scripts` check deliberately does not cover it.
+           *
+           * Nothing else has to change for it: it is reached through
+           * `chrome.runtime.getURL`, which needs no `web_accessible_resources` entry,
+           * and it loads one module script and one stylesheet from the extension's own
+           * origin, which `default-src 'self'` already allows. It carries no inline
+           * script, no inline `style` attribute and no remote asset, so it stays inside
+           * the tightened policy without an exception.
+           */
+          welcome: `${projectRoot}/src/welcome.html`,
           background: `${projectRoot}/src/background.ts`,
           timing: `${projectRoot}/src/content/timing.ts`,
           notice: `${projectRoot}/src/content/notice.ts`,

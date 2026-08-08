@@ -106,49 +106,98 @@ test("a grant applies to one window and then evaporates", () => {
   assert.equal(tierFor(granted, 40_000_000, 75_000_000), "off");
 });
 
+/**
+ * The window placement a budget is measured in.
+ *
+ * An object rather than the bare `weekStart` these functions used to take, because a
+ * `month` budget is the plan's cycle and not the calendar month. `cycleStartDay: 0`
+ * means "the calendar month", which is the default and what every pre-existing
+ * assertion below was written against.
+ */
+const MONDAY = { weekStart: 1, cycleStartDay: 0 };
+const SUNDAY = { weekStart: 0, cycleStartDay: 0 };
+const ON_17TH = { weekStart: 1, cycleStartDay: 17 };
+
 test("window keys identify the window, and change when it rolls", () => {
   const friday = new Date(2026, 6, 31, 14, 0);
   const saturday = new Date(2026, 7, 1, 0, 30);
 
   // A session window is identified by when the browser session began rather than by
   // the clock, so its key changes on a restart and at no other time.
-  assert.equal(periodKeyFor("session", 1, friday, 1_700_000_000_000), "session:1700000000000");
+  assert.equal(periodKeyFor("session", MONDAY, friday, 1_700_000_000_000), "session:1700000000000");
   assert.equal(
-    periodKeyFor("session", 1, saturday, 1_700_000_000_000),
-    periodKeyFor("session", 1, friday, 1_700_000_000_000),
+    periodKeyFor("session", MONDAY, saturday, 1_700_000_000_000),
+    periodKeyFor("session", MONDAY, friday, 1_700_000_000_000),
     "midnight does not end a browser session",
   );
-  assert.equal(periodKeyFor("day", 1, friday), "2026-07-31");
-  assert.notEqual(periodKeyFor("day", 1, friday), periodKeyFor("day", 1, saturday));
+  assert.equal(periodKeyFor("day", MONDAY, friday), "2026-07-31");
+  assert.notEqual(periodKeyFor("day", MONDAY, friday), periodKeyFor("day", MONDAY, saturday));
 
-  assert.equal(periodKeyFor("week", 1, friday), "2026-07-27", "Monday start");
-  assert.equal(periodKeyFor("week", 0, friday), "2026-07-26", "Sunday start");
-  assert.equal(periodKeyFor("week", 1, saturday), "2026-07-27", "same week, next day");
-  assert.equal(periodKeyFor("month", 1, friday), "2026-07-01");
-  assert.notEqual(periodKeyFor("month", 1, friday), periodKeyFor("month", 1, saturday));
+  assert.equal(periodKeyFor("week", MONDAY, friday), "2026-07-27", "Monday start");
+  assert.equal(periodKeyFor("week", SUNDAY, friday), "2026-07-26", "Sunday start");
+  assert.equal(periodKeyFor("week", MONDAY, saturday), "2026-07-27", "same week, next day");
+  assert.equal(periodKeyFor("month", MONDAY, friday), "2026-07-01");
+  assert.notEqual(periodKeyFor("month", MONDAY, friday), periodKeyFor("month", MONDAY, saturday));
+});
+
+test("a monthly window follows the plan cycle, not the calendar", () => {
+  // The defect this pins: a monthly allowance used to anchor to the 1st while the
+  // headline, the projection and "resets in N days" all counted from the reset day. So
+  // someone whose plan resets on the 17th got a 100% alert against a window nothing
+  // else in the product agreed with, and a figure that never matched the bill.
+  const beforeReset = new Date(2026, 6, 16, 23, 0);
+  const onReset = new Date(2026, 6, 17, 0, 0);
+  const afterReset = new Date(2026, 6, 20, 9, 0);
+
+  assert.equal(periodKeyFor("month", ON_17TH, beforeReset), "2026-06-17");
+  assert.equal(periodKeyFor("month", ON_17TH, onReset), "2026-07-17");
+  assert.equal(
+    periodKeyFor("month", ON_17TH, afterReset),
+    periodKeyFor("month", ON_17TH, onReset),
+    "the window does not roll again until the next 17th",
+  );
+
+  assert.deepEqual(periodDaysFor("month", ON_17TH, afterReset), {
+    from: "2026-07-17",
+    to: "2026-07-20",
+  });
+
+  const resets = new Date(periodResetsAt("month", ON_17TH, afterReset));
+  assert.equal(resets.getMonth(), 7, "August");
+  assert.equal(resets.getDate(), 17);
+
+  // A calendar cycle still behaves exactly as it always did, so nobody who never sets
+  // a reset day sees a change.
+  assert.equal(periodKeyFor("month", MONDAY, afterReset), "2026-07-01");
 });
 
 test("the day range matches the window key", () => {
   const friday = new Date(2026, 6, 31, 14, 0);
-  assert.equal(periodDaysFor("session", 1, friday), null, "read from session totals instead");
-  assert.deepEqual(periodDaysFor("day", 1, friday), { from: "2026-07-31", to: "2026-07-31" });
-  assert.deepEqual(periodDaysFor("week", 1, friday), { from: "2026-07-27", to: "2026-07-31" });
-  assert.deepEqual(periodDaysFor("month", 1, friday), { from: "2026-07-01", to: "2026-07-31" });
+  assert.equal(periodDaysFor("session", MONDAY, friday), null, "read from session totals instead");
+  assert.deepEqual(periodDaysFor("day", MONDAY, friday), { from: "2026-07-31", to: "2026-07-31" });
+  assert.deepEqual(periodDaysFor("week", MONDAY, friday), { from: "2026-07-27", to: "2026-07-31" });
+  assert.deepEqual(periodDaysFor("month", MONDAY, friday), { from: "2026-07-01", to: "2026-07-31" });
 });
 
 test("a window resets in the future, never in the past", () => {
   const friday = new Date(2026, 6, 31, 14, 0);
-  assert.equal(periodResetsAt("session", 1, friday), null);
+  assert.equal(periodResetsAt("session", MONDAY, friday), null);
   for (const period of ["day", "week", "month"]) {
-    const at = periodResetsAt(period, 1, friday);
+    const at = periodResetsAt(period, MONDAY, friday);
     assert.ok(at > friday.getTime(), `${period} resets at ${new Date(at).toISOString()}`);
   }
   // A December month must roll into January of the next year.
   const december = new Date(2026, 11, 20, 9, 0);
-  const rollover = new Date(periodResetsAt("month", 1, december));
+  const rollover = new Date(periodResetsAt("month", MONDAY, december));
   assert.equal(rollover.getFullYear(), 2027);
   assert.equal(rollover.getMonth(), 0);
   assert.equal(rollover.getDate(), 1);
+
+  // And so must an anchored one.
+  const anchored = new Date(periodResetsAt("month", ON_17TH, december));
+  assert.equal(anchored.getFullYear(), 2027);
+  assert.equal(anchored.getMonth(), 0);
+  assert.equal(anchored.getDate(), 17);
 });
 
 test("a snooze expires", () => {
@@ -160,8 +209,8 @@ test("a snooze expires", () => {
 
 test("a session grant belongs to the session it was made in", () => {
   const friday = new Date(2026, 6, 31, 14, 0);
-  const first = periodKeyFor("session", 1, friday, 1_000);
-  const second = periodKeyFor("session", 1, friday, 2_000);
+  const first = periodKeyFor("session", MONDAY, friday, 1_000);
+  const second = periodKeyFor("session", MONDAY, friday, 2_000);
   assert.notEqual(first, second, "a new browser session has to be a new window");
 
   const session = budget(100_000_000, { period: "session" });

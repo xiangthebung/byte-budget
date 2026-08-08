@@ -1,0 +1,104 @@
+/* ------------------------------------------------------------------ *
+ * The first-run screen.
+ *
+ * Built on the Settings stylesheet rather than beside it. This page is made of the
+ * same three controls Settings uses — the text field, the select, the Data Saver
+ * switch — and someone who answers here and later changes the answer there should be
+ * looking at the same control, not a lookalike. A second copy of those rules is a
+ * second thing to keep in step, and the first thing to drift.
+ *
+ * What is here is only what a one-column setup screen needs on top of that.
+ * ------------------------------------------------------------------ */
+
+@import "./dashboard.css";
+
+/*
+ * Narrower than Settings on purpose. Two questions laid across 980px read as a form
+ * to fill in; a setup screen that feels like a form is a setup screen people abandon.
+ */
+.welcome-page {
+  max-width: 720px;
+}
+
+/*
+ * Two lines under the title, not three. Settings' subtitle is six words and needs no
+ * measure; this one is a sentence, and left to the flex row it wrapped at the width of
+ * the heading above it.
+ */
+.welcome-page .brand-sub {
+  max-width: 74ch;
+}
+
+/*
+ * No rule above it, unlike the Settings limit form. There the form sits under a table
+ * it is separate from; here it follows its own heading directly, and a divider between
+ * a question and its two fields separates nothing.
+ */
+.welcome-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+/*
+ * `.field` is a grid, so its input stretches the full column. Both answers are short —
+ * "15 GB", "the 17th" — and a full-width box invites a paragraph.
+ */
+.welcome-form .search-input,
+.welcome-form .select {
+  width: 100%;
+  max-width: 260px;
+}
+
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.welcome-actions .primary-button {
+  min-height: 34px;
+}
+
+/*
+ * `.setting-hero` is three columns — icon, copy, switch — and this page has no icon:
+ * a decorative tile beside the one optional choice on the screen is weight the choice
+ * has not earned. Without the override the copy would sit in the icon's `auto` column
+ * and be squeezed to its longest word.
+ */
+.welcome-page .setting-hero {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.welcome-page .setting-hero-copy .section-intro + .section-intro {
+  margin-top: 6px;
+}
+
+/*
+ * Settings pins its nav to the top of the viewport, where it is a nav. Here it is the
+ * way out at the end of the page, and a sticky element in the last row of the grid
+ * detaches and follows the scroll for no reason.
+ */
+.welcome-page .section-nav {
+  position: static;
+  margin-top: 4px;
+}
+
+#scope-panel .section-intro {
+  margin-top: 6px;
+}
+
+/*
+ * The state line sits under the hero rather than beside the switch, so it needs its own
+ * space — without it the sentence that says whether Data Saver is on runs straight into
+ * the paragraph describing what it would do, and the two read as one block of prose.
+ */
+#saver-status {
+  margin-top: 10px;
+}
+
+#saver-status[data-active="true"] {
+  color: var(--saved);
+  font-weight: 650;
+}

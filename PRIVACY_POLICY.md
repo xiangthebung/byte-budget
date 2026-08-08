@@ -18,6 +18,13 @@ device; it is also why this total can be a good deal smaller than the one on a
 carrier bill, sometimes by a factor of several. Read it as "what my browsing in
 this profile costs", not "what my plan is spending".
 
+The extension asks for your plan size and the day it resets, and compares its own
+figure against them. That makes the gap more important rather than less: it
+puts a Chrome-profile total on one side and a whole-plan allowance on the other, so
+"10 GB of 15 GB" is a floor on what the plan has spent and not a reading of it. The
+plan size is a number you type in; nothing checks it against a carrier, because the
+extension has no way to ask one and does not try.
+
 ## What is stored on your device
 
 - **Per-site byte counts**, per day and per hour: bytes received, bytes sent,
@@ -31,12 +38,25 @@ this profile costs", not "what my plan is spending".
 - **A size model**: an average response size per host and resource type, used to
   estimate responses whose size the browser did not report.
 - **Observed image sizes**: when an image URL is one the extension can ask a
-  service for a smaller version of, the size of the original is recorded against
-  that URL. This is what lets it report a real saving rather than an estimate.
-  These are image asset URLs on content delivery networks, not pages you visited.
+  service for a smaller version of, the size of the original is recorded so a real
+  saving can be reported rather than an estimate. These are image assets on content
+  delivery networks, not pages you visited.
+
+  What is stored is a **SHA-256 digest of the URL**, not the URL. Earlier versions
+  kept the full address — `pbs.twimg.com/media/<mediaId>` and the like — and kept it
+  indefinitely, because the store was capped by row count and nothing else, so a
+  profile that never reached three thousand rows held its first observation for good.
+  Nothing ever reads that store except by looking up a URL it already has in hand, so
+  the readable form was never needed. The rows now also expire: sixty days, or your
+  retention setting if that is shorter.
 - **Your settings**: theme, badge choice, how long byte counts are kept, whether
-  per-host detail is recorded at all, and the display defaults (units, and how a
-  week and a month are counted).
+  per-host detail is recorded at all, the display defaults (units, and how a week and
+  a month are counted), the size of your data plan, the day of the month it resets,
+  and which usage alerts you want.
+- **Which alerts have already been sent**: for each allowance, the current window and
+  the thresholds announced in it, so the same warning is not repeated. It names the
+  sites you set limits on, so it is held on this device with them — see "What leaves
+  your device". Deleting your recorded usage clears it too.
 - **Your limits and your never-optimize list**: the domains you capped and the
   domains you excluded. These name sites, so they are held separately from the
   settings above and never leave this device — see "What leaves your device".
@@ -72,11 +92,31 @@ tracker tell one browser apart from the rest, whatever else it does about cookie
 Switching optimizing on makes this browser more distinguishable, not less. That is
 the trade: fewer bytes, one more stable bit about you.
 
-Today the header travels with the rest of optimizing — off until you turn
-optimizing on, never sent to a site on the never-optimize list. A switch for this
-one header, defaulting to off, is planned; the image packs deliver their savings
-without it, and only some services honour it. Until that ships, the two go
-together.
+The header now has its own switch, separate from the rest of optimizing, so you can
+have the image packs — which deliver their savings deterministically, without telling
+anyone anything — and not this. Being exact about the default: it is **on** whenever
+optimizing is on, and optimizing itself ships off, so nothing sends `Save-Data` until
+you turn optimizing on and nothing sends it to a site on your never-optimize list. If
+the paragraph above matters to you more than the bytes do, that one switch is where
+to turn it off.
+
+## And one about alerts
+
+The extension can now show a desktop notification when an allowance passes 75%, 90%
+or 100%. That is new in kind rather than in degree: everything else here is something
+you go and look at, and a notification arrives whether you were looking or not.
+
+Nothing is transmitted to send one. The figures come from the counts already on this
+device, Chrome draws the notification, and no request leaves the machine. The privacy
+question is a different one, and it is about your screen rather than your network: a
+notification is readable by anyone who can see the display, and it is captured by
+screen recording and screen sharing along with everything else.
+
+A plan alert names no site — "75% of your data allowance used" and two byte figures. A
+per-site alert names the site. That is one of the reasons per-site alerts are off by
+default and plan alerts are on; the other is in `README.md`. Both are switchable, and
+switching them off is enough — the extension asks Chrome for a notification only when
+it is about to show one, so with alerts off it never asks.
 
 ## What leaves your device
 
@@ -90,17 +130,21 @@ promise about our own code. (Earlier versions of this file cited `connect-src
 host on the internet, which is a weaker claim than the one being made here.)
 
 Your **preferences** — theme, badge, how long counts are kept, whether per-host
-detail is recorded — are stored in Chrome's `storage.sync`, so they follow your
-Chrome profile between your own devices if you have Chrome sync switched on. That
-transfer is Chrome's, governed by Google's own privacy terms. None of those values
-names a site.
+detail is recorded, your plan size, your reset day, and which alerts you want — are
+stored in Chrome's `storage.sync`, so they follow your Chrome profile between your own
+devices if you have Chrome sync switched on. That transfer is Chrome's, governed by
+Google's own privacy terms. None of those values names a site: a plan size is a number
+of bytes, a reset day is a day of the month, and the alert preferences are two
+switches.
 
 Everything that does name a site stays here. Your limits and your never-optimize
 list are lists of domains you care about — the most opinionated slice of a browsing
 history there is — so they are kept in local storage on this device and are not
-synced. The cost of that is real and worth stating rather than discovering: a limit
-you set on your laptop does not appear on your desktop. Your measurements — byte
-counts, per-host counts, page loads — never leave the device by either route.
+synced. The record of which alerts have already fired stays with them, for the same
+reason and no other: it is keyed by the sites you capped. The cost of that is real and
+worth stating rather than discovering: a limit you set on your laptop does not appear
+on your desktop. Your measurements — byte counts, per-host counts, page loads — never
+leave the device by either route.
 
 ## Why the permissions are needed
 
@@ -109,14 +153,18 @@ counts, per-host counts, page loads — never leave the device by either route.
   reports requests for hosts the extension has access to, which is why the access
   is broad; an extension that measured only some sites would not answer the
   question it exists to answer.
-- **`declarativeNetRequest`**: to refuse requests once a site is over a limit you
-  set, and to redirect image requests to smaller versions of the same file on a
-  fixed list of image services compiled into the extension — `pbs.twimg.com`,
-  `upload.wikimedia.org`, Photon (`i0-2.wp.com`), the Shopify CDN and Cloudinary.
-  No other host is ever rewritten. These rules are evaluated by Chrome itself —
-  the extension declares them and is not told about the individual requests they
-  match, which is the point of the API. They are session-scoped and do not survive
-  a browser restart.
+- **`declarativeNetRequest`**: for three things, all of them lists compiled into the
+  extension. To refuse requests once a site — or the browser as a whole, if you set a
+  total limit — is over a limit you set. To redirect image requests to smaller
+  versions of the same file on a fixed list of image services: `pbs.twimg.com`,
+  `upload.wikimedia.org`, Photon (`i0-2.wp.com`), the Shopify CDN and Cloudinary. No
+  other host is ever rewritten. And, while optimizing is on, to refuse beacons sent to
+  a fixed list of nineteen analytics domains — beacons to any other destination,
+  including the site's own, are left alone, because that is also how a page saves your
+  work as you close the tab. These rules are evaluated by Chrome itself — the
+  extension declares them and is not told about the individual requests they match,
+  which is the point of the API. They are session-scoped and do not survive a browser
+  restart.
 - **`webNavigation`**: to know which site each tab is showing, so bytes are
   attributed to the page you were on rather than to a CDN hostname.
 - **`scripting`**: for three small scripts, and no others. One reports the page's
@@ -127,7 +175,12 @@ counts, per-host counts, page loads — never leave the device by either route.
   on — with it off, no script of the extension's runs on any page. None of them
   reads page content, form fields or text.
 - **`storage`, `unlimitedStorage`**: to keep the counts.
-- **`alarms`**: to write buffered counts and to delete data past its retention.
+- **`alarms`**: to write buffered counts, to delete data past its retention, and to
+  check allowances against their thresholds.
+- **`notifications`**: to tell you an allowance is running out, at 75%, 90% and 100%
+  of it. Nothing else uses this permission, no notification is sent for anything but
+  a limit you set, and it is bounded at three per allowance per window. Turning both
+  alert switches off stops the extension asking Chrome for one at all.
 - **`favicon`**: to show site icons from the browser's existing cache, without
   fetching anything.
 
@@ -144,9 +197,14 @@ survives version changes, and the same URL belongs in the store listing's privac
 field and in the extension's `homepage_url` so the product itself links to it.
 
 Not yet done, and the one thing a person has to do by hand before submitting: the
-manifest currently carries the placeholder `https://REPLACE-ME.example/byte-budget`.
+manifest still carries the placeholder `https://REPLACE-ME.example/byte-budget`.
 Publish this document at a real URL, put that URL in the store listing, and replace
 the placeholder with it.
+
+Checked again at the date above, and still the only such item. Nothing in the build
+catches it — `scripts/package.mjs` verifies the version and the channel's permissions
+and does not look at `homepage_url` — so it is written down here instead, where the
+person doing the submission will be reading anyway.
 
 ## Changes
 

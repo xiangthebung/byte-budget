@@ -14,9 +14,18 @@
             <p class="brand-eyebrow">Byte Budget</p>
             <h1 class="brand-title">Your data usage</h1>
             <p class="brand-sub" id="period-description">Loading…</p>
+            <!-- Shown only once the payload on screen is older than the poll can
+                 explain; `dashboard.ts` owns the threshold. -->
+            <p class="brand-stale" id="updated-note" hidden></p>
           </div>
         </div>
-        <div class="segmented" role="tablist" aria-label="Usage period" id="period-tabs"></div>
+        <!--
+          No `role="tablist"` on either of the two segmented controls here. Neither
+          owns a tabpanel — choosing a period re-renders the whole surface — and the
+          role promises a keyboard contract that the hand-wired version never had.
+          `bindGroup` in core/dom.ts makes both real radio groups at startup.
+        -->
+        <div class="segmented" aria-label="Usage period" id="period-tabs"></div>
       </header>
 
       <nav class="section-nav" aria-label="Main navigation">
@@ -24,129 +33,243 @@
         <a href="./settings.html">Settings</a>
       </nav>
 
-      <section id="overview" aria-label="Usage overview">
-        <div class="stats" id="stats"></div>
-      </section>
+      <main class="page-main">
+        <section id="overview" aria-label="Usage overview">
+          <div class="stats" id="stats"></div>
+          <!--
+            The projection's basis, in full and in prose.
 
-      <section class="panel" aria-labelledby="sites-title">
-        <div class="panel-head">
-          <h2 class="panel-title" id="sites-title">Where your data went</h2>
-          <div class="panel-tools">
-            <input
-              class="search-input"
-              id="site-search"
-              type="search"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="Find a site"
-              aria-label="Find a site"
-            />
-            <span class="panel-note" id="sites-note"></span>
-          </div>
-        </div>
-        <ol class="site-list" id="site-list"></ol>
-        <p class="empty" id="sites-empty" hidden>
-          No usage yet. Browse normally and sites will appear here.
-        </p>
-      </section>
-
-      <section class="panel" id="detail-panel" hidden aria-labelledby="detail-title">
-        <div class="panel-head">
-          <h2 class="panel-title" id="detail-title">Site details</h2>
-          <button class="ghost-button" id="detail-close" type="button">Close</button>
-        </div>
-        <div class="detail-headline">
-          <img class="site-icon" id="detail-icon" alt="" width="28" height="28" />
-          <div class="detail-copy">
-            <p class="detail-site" id="detail-site"></p>
-            <p class="detail-sub" id="detail-sub"></p>
-          </div>
-        </div>
-        <div class="detail-grid">
-          <div class="detail-block">
-            <h3 class="detail-heading">Today by hour</h3>
-            <div id="detail-hours"></div>
-          </div>
-          <div class="detail-block">
-            <h3 class="detail-heading">By day</h3>
-            <div id="detail-days"></div>
-          </div>
-          <div class="detail-block">
-            <h3 class="detail-heading">Type of data</h3>
-            <div id="detail-types"></div>
-          </div>
-          <div class="detail-block">
-            <h3 class="detail-heading">Source hosts</h3>
-            <table class="table" id="detail-hosts">
-              <thead>
-                <tr>
-                  <th scope="col">Host</th>
-                  <th scope="col" class="numeric">Data</th>
-                  <th scope="col" class="numeric">Requests</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-            <p class="empty" id="detail-hosts-empty" hidden>No host details are available.</p>
-          </div>
-        </div>
-      </section>
-
-      <div class="columns">
-        <section class="panel dashboard-chart" aria-labelledby="trend-title">
-          <div class="panel-head">
-            <h2 class="panel-title" id="trend-title">Daily usage</h2>
-            <div class="segmented" role="tablist" aria-label="Chart range" id="range-tabs"></div>
-          </div>
-          <div id="trend-slot"></div>
+            It is the one modelled figure on the overview payload, and `forecast.ts`
+            makes `basis` a required field precisely so it cannot reach a screen
+            without saying what rate it assumed and over what window. It sits here
+            rather than inside the card because a `.stat-hint` is one ellipsised line.
+          -->
+          <p class="basis-note" id="projection-basis" hidden></p>
         </section>
 
-        <section class="panel" aria-labelledby="types-title">
+        <section class="panel" aria-labelledby="sites-title">
           <div class="panel-head">
-            <h2 class="panel-title" id="types-title">Type of data</h2>
-            <span class="panel-note" id="types-note"></span>
+            <h2 class="panel-title" id="sites-title">Where your data went</h2>
+            <div class="panel-tools">
+              <input
+                class="search-input"
+                id="site-search"
+                type="search"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Find a site"
+                aria-label="Find a site"
+              />
+              <span class="panel-note" id="sites-note"></span>
+            </div>
           </div>
-          <div id="types-slot"></div>
+          <ol class="site-list" id="site-list"></ol>
+          <p class="empty" id="sites-empty" hidden>
+            No usage yet. Browse normally and sites will appear here.
+          </p>
         </section>
-      </div>
 
-      <details class="method-details">
-        <summary>How Byte Budget measures usage</summary>
-        <p>
-          Totals use the best information available from Chrome and each site. If an
-          exact size is unavailable, Byte Budget makes a clearly labelled estimate.
-        </p>
-      </details>
-
-      <section class="panel" id="savings-panel" aria-labelledby="savings-title">
-        <div class="panel-head">
-          <h2 class="panel-title" id="savings-title">Data Saver results</h2>
-          <div class="panel-tools">
-            <span class="panel-note" id="savings-note"></span>
-            <a class="panel-link" href="./settings.html#optimize-panel">Manage Data Saver</a>
+        <!--
+          `tabindex="-1"` so opening can move focus into the panel and closing can put
+          it back on the row. Without it, hiding the panel while focus is inside drops
+          the user to <body> at the top of the document with no route back.
+        -->
+        <section
+          class="panel"
+          id="detail-panel"
+          hidden
+          tabindex="-1"
+          aria-labelledby="detail-title"
+        >
+          <div class="panel-head">
+            <h2 class="panel-title" id="detail-title">Site details</h2>
+            <button class="ghost-button" id="detail-close" type="button">Close</button>
           </div>
+          <div class="detail-headline">
+            <img class="site-icon" id="detail-icon" alt="" width="28" height="28" />
+            <div class="detail-copy">
+              <p class="detail-site" id="detail-site"></p>
+              <p class="detail-sub" id="detail-sub"></p>
+            </div>
+          </div>
+
+          <!--
+            Acting on a heavy site where it was spotted. Everything below sends the
+            same messages the popup and Settings send; noticing a site here and having
+            to retype its hostname into another page was the whole defect.
+          -->
+          <div class="detail-actions">
+            <div class="detail-action" id="detail-limit-block">
+              <h3 class="detail-heading">Limit this site</h3>
+              <div id="detail-limit-status"></div>
+              <div class="detail-controls" id="detail-limit-controls">
+                <div class="detail-control">
+                  <span class="field-label" id="detail-period-label">Window</span>
+                  <div
+                    class="segmented"
+                    id="detail-period"
+                    aria-labelledby="detail-period-label"
+                  ></div>
+                </div>
+                <div class="detail-control">
+                  <span class="field-label" id="detail-shape-label">When it runs out</span>
+                  <div
+                    class="segmented"
+                    id="detail-shape"
+                    aria-labelledby="detail-shape-label"
+                  ></div>
+                </div>
+              </div>
+              <div class="detail-presets" id="detail-presets"></div>
+              <p class="field-hint" id="detail-limit-hint"></p>
+            </div>
+
+            <div class="detail-action">
+              <h3 class="detail-heading">Data Saver</h3>
+              <div id="detail-saver"></div>
+              <p class="field-hint" id="detail-advice" hidden></p>
+            </div>
+          </div>
+
+          <div class="detail-grid">
+            <div class="detail-block">
+              <h3 class="detail-heading">Today by hour</h3>
+              <div id="detail-hours"></div>
+            </div>
+            <div class="detail-block">
+              <h3 class="detail-heading">By day</h3>
+              <div id="detail-days"></div>
+            </div>
+            <div class="detail-block">
+              <h3 class="detail-heading">Type of data</h3>
+              <div id="detail-types"></div>
+            </div>
+            <div class="detail-block">
+              <h3 class="detail-heading">Source hosts</h3>
+              <table class="table" id="detail-hosts">
+                <thead>
+                  <tr>
+                    <th scope="col">Host</th>
+                    <th scope="col" class="numeric">Data</th>
+                    <th scope="col" class="numeric">Requests</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <p class="empty" id="detail-hosts-empty" hidden></p>
+            </div>
+          </div>
+        </section>
+
+        <div class="columns">
+          <section class="panel dashboard-chart" aria-labelledby="trend-title">
+            <div class="panel-head">
+              <h2 class="panel-title" id="trend-title">Daily usage</h2>
+              <!-- The label names both panels this control scopes: it also re-scopes
+                   the Data Saver results several hundred pixels further down. -->
+              <div
+                class="segmented"
+                aria-label="Range for the daily chart and the Data Saver results"
+                id="range-tabs"
+              ></div>
+            </div>
+            <div id="trend-slot"></div>
+          </section>
+
+          <section class="panel" aria-labelledby="types-title">
+            <div class="panel-head">
+              <h2 class="panel-title" id="types-title">Type of data</h2>
+              <span class="panel-note" id="types-note"></span>
+            </div>
+            <div id="types-slot"></div>
+          </section>
         </div>
-        <div class="stats" id="savings-stats"></div>
-        <details class="inline-details savings-details">
-          <summary>About this number</summary>
-          <p class="field-hint" id="savings-explainer"></p>
-          <div class="table-scroll">
-            <table class="table" id="savings-table">
-              <thead>
-                <tr>
-                  <th scope="col">Site</th>
-                  <th scope="col" class="numeric">With</th>
-                  <th scope="col" class="numeric">Without</th>
-                  <th scope="col" class="numeric">Per load</th>
-                  <th scope="col" class="numeric">Loads</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <p class="empty" id="savings-empty" hidden></p>
+
+        <details class="method-details">
+          <summary>How Byte Budget measures usage</summary>
+          <p>
+            Totals use the best information available from Chrome and each site. If an
+            exact size is unavailable, Byte Budget makes a clearly labelled estimate.
+          </p>
+          <p>
+            The measured percentage covers response bodies and nothing else. Header
+            overhead is counted from the names and values and then halved, because
+            HTTP/2 compresses headers by an amount Chrome does not report; WebSocket
+            frames are invisible to an extension; a cancelled response counts as zero.
+            So 100% measured means every body was measured, not that the total is exact.
+          </p>
+          <p>
+            Every figure here covers this Chrome profile. A second profile, another
+            browser, a native app, an operating system update and every other device on
+            the same connection are invisible to an extension — there is no API that
+            would show them. A carrier's figure can be several times larger, and the
+            difference is not an error in this one.
+          </p>
         </details>
-      </section>
+
+        <section class="panel" id="savings-panel" aria-labelledby="savings-title">
+          <div class="panel-head">
+            <h2 class="panel-title" id="savings-title">Data Saver results</h2>
+            <div class="panel-tools">
+              <span class="panel-note" id="savings-note"></span>
+              <button class="ghost-button" id="savings-range" type="button">
+                Change range
+              </button>
+              <a class="panel-link" href="./settings.html#optimize-panel">Manage Data Saver</a>
+            </div>
+          </div>
+          <!--
+            Two tiles, never one. `saved` is a measured subtraction added to a model's
+            guess, and a surface that renders only the sum has merged them — the one
+            thing README.md:133-141 says must never happen.
+          -->
+          <div class="stats" id="savings-stats"></div>
+          <p class="field-hint" id="savings-hint"></p>
+
+          <div class="savings-compare">
+            <h3 class="detail-heading">The same sites, with Data Saver and without</h3>
+            <p class="field-hint" id="savings-compare-note"></p>
+            <div class="table-scroll">
+              <table class="table" id="savings-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Site</th>
+                    <th scope="col" class="numeric">With</th>
+                    <th scope="col" class="numeric">Without</th>
+                    <th scope="col" class="numeric">Saved per load</th>
+                    <th scope="col" class="numeric">Loads</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <p class="empty" id="savings-empty" hidden></p>
+          </div>
+
+          <details class="inline-details savings-details">
+            <summary>Where these numbers come from</summary>
+            <p class="field-hint" id="savings-explainer"></p>
+          </details>
+        </section>
+
+        <div class="bottom-grid">
+          <section class="panel" id="plan-panel" aria-labelledby="plan-title">
+            <div class="panel-head">
+              <h2 class="panel-title" id="plan-title">Plan and cycle</h2>
+              <span class="panel-note" id="plan-note"></span>
+            </div>
+            <div id="plan-body"></div>
+          </section>
+
+          <section class="panel" id="storage-panel" aria-labelledby="storage-title">
+            <div class="panel-head">
+              <h2 class="panel-title" id="storage-title">Stored on this device</h2>
+              <a class="panel-link" href="./settings.html#data-panel">Export or delete</a>
+            </div>
+            <div id="storage-body"></div>
+          </section>
+        </div>
+      </main>
 
       <p class="live-region" id="live-region" role="status" aria-live="polite"></p>
     </div>

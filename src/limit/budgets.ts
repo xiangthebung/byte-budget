@@ -7,9 +7,23 @@
  * asserted in a test rather than watched in a browser.
  */
 
-import { addDays, dayKey, startOfMonth, startOfWeek } from "../core/period";
+import { addDays, cycleResetsAt, dayKey, startOfCycle, startOfWeek } from "../core/period";
 import { ALL_SITES, type Settings } from "../core/types";
 import type { Tier } from "./tiers";
+
+/**
+ * What the three window functions below need in order to place a window.
+ *
+ * An object rather than the bare `weekStart` they used to take, because a `month`
+ * budget is not a calendar month. Anchoring it to the 1st while the plan, the
+ * projection and the "resets in N days" line all counted from `cycleStartDay` meant a
+ * person who told us their plan resets on the 17th got an allowance that rolled over on
+ * the 1st — so the 100% alert fired against a window nothing else in the product
+ * agreed with, and the figure on screen never matched the figure on the bill. Passing
+ * both together is what stops the two drifting apart again: there is no signature here
+ * that can place a monthly window without being told which day it starts on.
+ */
+export type BudgetWindow = Pick<Settings, "weekStart" | "cycleStartDay">;
 
 export const BUDGET_PERIODS = ["session", "day", "week", "month"] as const;
 export type BudgetPeriod = (typeof BUDGET_PERIODS)[number];
@@ -148,7 +162,7 @@ export function tierFor(budget: Budget, used: number, allowance: number): Tier {
  */
 export function periodKeyFor(
   period: BudgetPeriod,
-  weekStart: Settings["weekStart"],
+  window: BudgetWindow,
   now: Date = new Date(),
   sessionStartedAt = 0,
 ): string {
@@ -159,9 +173,9 @@ export function periodKeyFor(
     case "day":
       return today;
     case "week":
-      return startOfWeek(today, weekStart);
+      return startOfWeek(today, window.weekStart);
     case "month":
-      return startOfMonth(today);
+      return dayKey(startOfCycle(window, now));
   }
 }
 
@@ -173,7 +187,7 @@ export function periodKeyFor(
  */
 export function periodDaysFor(
   period: BudgetPeriod,
-  weekStart: Settings["weekStart"],
+  window: BudgetWindow,
   now: Date = new Date(),
 ): { from: string; to: string } | null {
   const today = dayKey(now);
@@ -183,16 +197,16 @@ export function periodDaysFor(
     case "day":
       return { from: today, to: today };
     case "week":
-      return { from: startOfWeek(today, weekStart), to: today };
+      return { from: startOfWeek(today, window.weekStart), to: today };
     case "month":
-      return { from: startOfMonth(today), to: today };
+      return { from: dayKey(startOfCycle(window, now)), to: today };
   }
 }
 
 /** When the current window ends, for "resets in 4 hours". */
 export function periodResetsAt(
   period: BudgetPeriod,
-  weekStart: Settings["weekStart"],
+  window: BudgetWindow,
   now: Date = new Date(),
 ): number | null {
   const today = dayKey(now);
@@ -202,11 +216,11 @@ export function periodResetsAt(
     case "day":
       return startOfDayMs(addDays(today, 1));
     case "week":
-      return startOfDayMs(addDays(startOfWeek(today, weekStart), 7));
-    case "month": {
-      const [year, month] = today.split("-").map(Number);
-      return new Date((year ?? 1970) + (month === 12 ? 1 : 0), month === 12 ? 0 : (month ?? 1), 1).getTime();
-    }
+      return startOfDayMs(addDays(startOfWeek(today, window.weekStart), 7));
+    case "month":
+      // The same function the plan headline and the projection call, so "resets in 9
+      // days" means one date across the whole product rather than three.
+      return cycleResetsAt(window, now);
   }
 }
 

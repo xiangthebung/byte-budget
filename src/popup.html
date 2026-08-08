@@ -5,11 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Byte Budget</title>
   </head>
+  <!--
+    Every fixed element on this surface is written here rather than built in script.
+
+    The popup polls every two seconds, and the old code answered each poll by calling
+    `replaceChildren` over three whole subtrees. A keyboard user had under two seconds
+    to reach "Pause 1 hour" before the button was destroyed and focus fell to <body>,
+    and a screen reader's buffer was wiped mid-sentence on the same clock. Nodes that
+    exist in the markup cannot be destroyed by a re-render: the render path only writes
+    textContent, style, dataset and `hidden`, so focus and the virtual buffer survive.
+    The three genuinely variable things — the bar chart, the type breakdown and the
+    site list — are the only things script creates, and the site list is reconciled by
+    key rather than rebuilt.
+  -->
   <body>
-    <div class="app" id="app">
+    <div class="app" id="app" data-state="loading">
       <header class="topbar">
         <div class="headline">
-          <p class="headline-eyebrow" id="period-description">Loading…</p>
+          <h1 class="sr-only">Byte Budget</h1>
+          <p class="pace-line" id="pace-line" hidden></p>
           <p class="headline-total">
             <span class="headline-value" id="total-value">–</span>
             <span class="headline-unit" id="total-unit"></span>
@@ -33,54 +47,171 @@
               />
             </svg>
           </button>
+          <button
+            class="icon-button"
+            id="settings-button"
+            type="button"
+            aria-label="Open settings"
+            title="Open settings"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.9" />
+              <path
+                d="M12 2.9v2.3M12 18.8v2.3M2.9 12h2.3M18.8 12h2.3M6.1 6.1l1.6 1.6M16.3 16.3l1.6 1.6M17.9 6.1l-1.6 1.6M7.7 16.3l-1.6 1.6"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
         </div>
       </header>
 
-      <div class="tabs" role="tablist" aria-label="Period" id="period-tabs"></div>
+      <!--
+        The plan meter. `aria-valuetext` carries the sentence rather than the raw
+        percentage: "132" read on its own is not the fact, "1.1 MB of 800 kB, 132% of
+        your plan" is.
+      -->
+      <div class="plan" id="plan-block" hidden>
+        <span
+          class="plan-meter"
+          id="plan-meter"
+          role="progressbar"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-label="Plan used"
+        >
+          <span class="plan-meter-fill" id="plan-meter-fill"></span>
+          <span class="plan-meter-pace" id="plan-meter-pace" aria-hidden="true"></span>
+        </span>
+        <p class="plan-line" id="plan-line"></p>
+      </div>
+
+      <p class="plan-cta" id="plan-cta" hidden>
+        <span class="plan-cta-copy">No plan set, so this total has no denominator.</span>
+        <button class="ghost-button" id="plan-cta-button" type="button">Set your plan</button>
+      </p>
+
+      <!--
+        Shown only when a plan size is recorded and no limit over everything exists to
+        check it against. `settings.planBytes` on its own produces no alert, ever: an
+        alert is computed from an allowance the governor tracks, so a plan with no
+        `#all` budget behind it is a number that watches nothing.
+      -->
+      <section class="plan-alerts" id="plan-alerts" hidden aria-labelledby="plan-alerts-title">
+        <span class="plan-alerts-copy">
+          <span class="plan-alerts-title" id="plan-alerts-title">Nothing is watching this plan</span>
+          <span class="plan-alerts-hint" id="plan-alerts-hint"></span>
+        </span>
+        <button class="ghost-button" id="plan-alerts-button" type="button">Turn on</button>
+      </section>
+
+      <section class="projection" id="projection" hidden aria-labelledby="projection-heading">
+        <h2 class="projection-heading" id="projection-heading">Projection</h2>
+        <p class="projection-figure" id="projection-figure" hidden></p>
+        <p class="projection-basis" id="projection-basis"></p>
+        <button class="link-button" id="projection-toggle" type="button" aria-expanded="false">
+          Show how this is worked out
+        </button>
+      </section>
+
+      <div class="tabs" id="period-tabs" aria-label="Period"></div>
 
       <p class="meta-line" id="meta-line"></p>
 
-      <section class="current" id="current-card" hidden aria-labelledby="current-site">
-        <img class="site-icon" id="current-icon" alt="" width="20" height="20" />
-        <span class="current-copy">
-          <span class="current-site" id="current-site"></span>
-          <span class="current-sub" id="current-sub"></span>
-        </span>
-        <span class="current-bytes" id="current-bytes"></span>
-      </section>
-
-      <section class="optimize-row" id="optimize-row" hidden></section>
+      <!--
+        Its own persistent element, not the footer note. A failed action used to be
+        written into 10px right-aligned grey and erased by the next two-second poll, so
+        "Could not change the limit" could come and go before it was read.
+      -->
+      <p class="action-error" id="action-error" role="alert" hidden>
+        <span class="action-error-text" id="action-error-text"></span>
+        <button class="link-button" id="action-error-dismiss" type="button">Dismiss</button>
+      </p>
 
       <section class="limit" id="limit-card" hidden aria-labelledby="limit-heading">
-        <h2 class="limit-heading" id="limit-heading">Data limit</h2>
-        <div id="limit-slot"></div>
+        <div class="limit-head">
+          <h2 class="limit-heading" id="limit-heading">Data limit</h2>
+          <span class="limit-scope" id="limit-scope"></span>
+        </div>
+        <p class="limit-status" id="limit-status" hidden></p>
+        <p class="limit-line" id="limit-line" hidden></p>
+        <span class="limit-bar" id="limit-bar" hidden aria-hidden="true">
+          <span class="limit-bar-fill" id="limit-bar-fill"></span>
+        </span>
+        <p class="limit-consequence" id="limit-consequence" hidden></p>
+        <p class="limit-prevented" id="limit-prevented" hidden></p>
+        <p class="limit-also" id="limit-also" hidden></p>
+        <p class="limit-note" id="limit-note" hidden></p>
+        <div class="limit-actions" id="limit-actions" hidden>
+          <button class="ghost-button" id="limit-grant" type="button"></button>
+          <button class="ghost-button" id="limit-pause" type="button"></button>
+          <button class="ghost-button" id="limit-remove" type="button">Remove</button>
+        </div>
+        <div class="limit-actions" id="limit-presets" hidden></div>
+        <button class="link-button" id="limit-more" type="button">Manage limits in settings</button>
       </section>
 
-      <section class="panel" aria-labelledby="chart-title">
+      <!--
+        Below the limit card, and suppressed while a limit is biting. It used to sit
+        directly above "1.1 MB of 800 kB · 132%", pitching an optimizer at someone
+        whose page was already being cut off by enforcement they had set themselves.
+      -->
+      <section class="optimize-row" id="optimize-row" hidden>
+        <input class="optimize-check" type="checkbox" id="optimize-site" hidden />
+        <label class="optimize-copy" id="optimize-copy">
+          <span class="optimize-title" id="optimize-title"></span>
+          <span class="optimize-hint" id="optimize-hint"></span>
+          <span class="optimize-measured" id="optimize-measured" hidden></span>
+        </label>
+        <span class="optimize-actions">
+          <button class="ghost-button" id="optimize-action" type="button"></button>
+          <button
+            class="icon-button optimize-dismiss"
+            id="optimize-dismiss"
+            type="button"
+            aria-label="Hide this suggestion"
+            title="Hide this suggestion. Data Saver stays reachable in settings."
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path
+                d="M6 6l12 12M18 6L6 18"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </span>
+      </section>
+
+      <section class="panel" id="chart-panel" aria-labelledby="chart-title">
         <div class="panel-head">
           <h2 class="panel-title" id="chart-title">Over time</h2>
           <span class="panel-note" id="chart-note"></span>
         </div>
-        <div id="chart-slot"></div>
+        <div class="chart-slot" id="chart-slot"></div>
         <div class="types-slot" id="types-slot"></div>
       </section>
 
-      <main class="panel" aria-labelledby="sites-title">
+      <main class="panel" id="sites-panel" aria-labelledby="sites-title">
         <div class="panel-head">
           <h2 class="panel-title" id="sites-title">Sites</h2>
           <span class="panel-note" id="sites-note"></span>
         </div>
         <ol class="site-list" id="site-list"></ol>
-        <p class="empty" id="empty-state" hidden>
-          Nothing recorded for this period yet. Load a page and the numbers appear here.
-        </p>
+        <button class="link-button" id="sites-expand" type="button" hidden></button>
       </main>
 
+      <p class="empty" id="empty-state" hidden></p>
+
       <footer class="footer">
-        <button class="ghost-button" id="open-dashboard" type="button">
-          Open dashboard
-        </button>
-        <span class="footer-note" id="footer-note"></span>
+        <span class="footer-note" id="footer-note">
+          One Chrome profile, on this device. Other browsers, other profiles, apps and
+          anything else sharing the connection are not counted.
+        </span>
       </footer>
 
       <p class="live-region" id="live-region" role="status" aria-live="polite"></p>

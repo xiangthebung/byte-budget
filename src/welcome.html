@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Byte Budget — set up</title>
+  </head>
+  <body>
+    <div class="page welcome-page">
+      <header class="page-head">
+        <div class="brand">
+          <img class="brand-mark" src="./icon.svg" alt="" width="40" height="40" />
+          <div class="brand-copy">
+            <p class="brand-eyebrow">Byte Budget</p>
+            <h1 class="brand-title">Two questions, then it runs on its own</h1>
+            <p class="brand-sub">
+              Byte Budget is already counting. Answering these turns a running total into a
+              position — on track, or not. All of it is optional; skip it and nothing breaks.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <main class="settings-stack">
+        <section class="panel feature-panel" id="plan-panel" aria-labelledby="plan-title">
+          <!--
+            The heading names the whole question rather than leaning on a kicker above
+            it: `aria-labelledby` points here, so this string is what a screen reader
+            announces on entering the region, with none of the surrounding page for
+            context.
+          -->
+          <div class="panel-head">
+            <h2 class="feature-title" id="plan-title">
+              How big is your plan, and when does it reset?
+            </h2>
+          </div>
+
+          <form class="welcome-form" id="plan-form">
+            <div class="field">
+              <label class="field-label" for="plan-size">Allowance per month</label>
+              <input
+                class="search-input"
+                id="plan-size"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="15 GB"
+                list="plan-sizes"
+                aria-describedby="plan-size-hint"
+              />
+              <datalist id="plan-sizes">
+                <option value="5 GB"></option>
+                <option value="10 GB"></option>
+                <option value="15 GB"></option>
+                <option value="30 GB"></option>
+                <option value="50 GB"></option>
+              </datalist>
+              <p class="field-hint" id="plan-size-hint" aria-live="polite"></p>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="cycle-day">Resets on</label>
+              <!--
+                Filled by `welcome.ts` rather than written out here: twenty-eight options
+                is a lot of markup to keep in step with `MAX_CYCLE_START_DAY`, and the
+                ceiling is the whole point of the control.
+              -->
+              <select class="select" id="cycle-day" aria-describedby="cycle-day-hint"></select>
+              <p class="field-hint" id="cycle-day-hint" aria-live="polite"></p>
+            </div>
+
+            <div class="welcome-actions">
+              <button class="primary-button" id="plan-save" type="submit">Save</button>
+              <button class="ghost-button" id="plan-skip" type="button">Skip for now</button>
+            </div>
+          </form>
+
+          <p class="field-hint form-status" id="plan-status" aria-live="polite"></p>
+
+          <details class="inline-details">
+            <summary>What saving a plan does</summary>
+            <p>
+              The size becomes an allowance over everything you browse, and that allowance is
+              what the warnings are measured against. They arrive at 75%, 90% and 100%. Those
+              three are fixed; there is no fourth.
+            </p>
+            <p>
+              Nothing is refused below 100%. At 100% Byte Budget starts refusing subresources —
+              images, video, scripts — on every site until the allowance rolls over. The page
+              itself always loads, carrying a banner that says why. Change the allowance, pause
+              it for an hour, or remove it entirely in Settings.
+            </p>
+            <p>
+              Reset days stop at the 28th because every month has one. A cycle anchored to the
+              31st would reset on a different date in February, and the reset date is the one
+              figure here you check against a bill.
+            </p>
+          </details>
+        </section>
+
+        <section class="panel feature-panel saver-panel" id="saver-panel" aria-labelledby="saver-title">
+          <div class="setting-hero">
+            <div class="setting-hero-copy">
+              <p class="panel-kicker">Optional</p>
+              <h2 class="feature-title" id="saver-title">Data Saver</h2>
+              <p class="section-intro">
+                Asks known image CDNs for a smaller version of the same picture, refuses
+                analytics beacons, and stops video that is off screen from pre-buffering. The
+                individual features, per-site exceptions and the off switch are all in Settings.
+              </p>
+              <p class="section-intro">
+                To measure what that saves rather than estimate it, about one page load in ten
+                is deliberately left unoptimized as a control.
+              </p>
+            </div>
+            <label class="switch-control">
+              <input type="checkbox" id="saver-toggle" />
+              <span class="switch-track" aria-hidden="true"><span></span></span>
+              <span class="switch-label">Data Saver</span>
+            </label>
+          </div>
+          <p class="save-status" id="saver-status" aria-live="polite"></p>
+        </section>
+
+        <section class="panel" id="scope-panel" aria-labelledby="scope-title">
+          <h2 class="panel-title" id="scope-title">What these numbers do not cover</h2>
+          <p class="section-intro">
+            Everything Byte Budget counts happens inside this Chrome profile. A second profile,
+            a different browser, apps outside Chrome, system and app updates, and every other
+            device sharing your connection are invisible to an extension — there is no API that
+            would show them — so a carrier’s figure can sit well above this one, sometimes by a
+            factor of several. Nothing is uploaded and there is no account.
+          </p>
+        </section>
+      </main>
+
+      <nav class="section-nav" aria-label="Where to go next">
+        <a href="./dashboard.html">Dashboard</a>
+        <a href="./settings.html">Settings</a>
+      </nav>
+    </div>
+    <script type="module" src="./welcome.ts"></script>
+  </body>
+</html>

@@ -439,14 +439,16 @@ async function main() {
         filled: node.querySelectorAll('[data-filled="true"]').length,
       })),
     );
+    // Asserted as a property, not as a fixed list. The features are now rendered by
+    // iterating FEATURES and grouped by visibility, so the order follows the grouping
+    // and the count follows how many features carry an impact figure — pinning either
+    // would make this fail the next time a feature is added, which is a test failing
+    // for a reason that is not a defect. What must hold is that the meter never
+    // disagrees with its own label.
+    const FILL_FOR = { High: 3, Medium: 2, Low: 1 };
     check(
-      JSON.stringify(impacts) ===
-        JSON.stringify([
-          { label: 'High', filled: 3 },
-          { label: 'Medium', filled: 2 },
-          { label: 'Low', filled: 1 },
-        ]),
-      `Advanced shows honest relative impact (${JSON.stringify(impacts)})`,
+      impacts.length > 0 && impacts.every((entry) => FILL_FOR[entry.label] === entry.filled),
+      `every impact meter matches its label (${JSON.stringify(impacts)})`,
     );
 
     // Exercise the extracted controller through visible controls, not direct messages.
@@ -589,16 +591,29 @@ async function main() {
       `measured ${local?.bytes ?? 'nothing'} (${parsed} B), expected between ${floor} and ${Math.round(ceiling)}`,
     );
 
+    // The measured share moved. It used to be a headline stat card called "Accuracy" —
+    // a near-constant number about the tool, sitting in one of four slots that could
+    // have carried something actionable, and overclaiming besides, since the figure
+    // excludes the halved headers and the zero-counted cancelled bodies. It is now a
+    // pill on the "Data used" card. Read it from there; falling back to a stat card
+    // keeps this assertion honest rather than silently passing on a missing element.
     const measured = await dashboard.$$eval('.stat', (nodes) =>
       nodes.map((node) => ({
         label: node.querySelector('.stat-label')?.textContent ?? '',
         value: node.querySelector('.stat-value')?.textContent ?? '',
+        pill: node.querySelector('.stat-pill')?.textContent ?? '',
       })),
     );
     console.log('  stats:', JSON.stringify(measured));
-    const share = measured.find((stat) => stat.label === 'Accuracy');
-    const percent = Number((share?.value ?? '0').replace(/[^\d]/g, ''));
-    check(percent >= 60, `measured share is ${share?.value ?? 'missing'}, expected 60% or better`);
+    const shareText =
+      measured.find((stat) => /%/.test(stat.pill))?.pill ??
+      measured.find((stat) => stat.label === 'Accuracy')?.value ??
+      '';
+    const percent = Number(shareText.replace(/[^\d]/g, ''));
+    check(
+      /%/.test(shareText) && percent >= 60,
+      `measured share is ${shareText || 'missing'}, expected 60% or better`,
+    );
 
     // The drill-down: a different set of queries (per-host rows, per-hour rows,
     // visit statistics) that the overview never touches.
@@ -1342,13 +1357,20 @@ async function main() {
         scrollW: doc.scrollWidth,
         clientW: doc.clientWidth,
         columns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/).length,
-        meters: [...document.querySelectorAll('.advanced-option')].map((option) => ({
-          label: option.querySelector('.impact-label')?.textContent ?? '',
-          filled: option.querySelectorAll('[data-filled="true"]').length,
-          onScreen:
-            option.querySelector('.impact-meter').getBoundingClientRect().right <=
-            doc.clientWidth + 1,
-        })),
+        // Only the options that actually carry a meter. Every feature used to have
+        // one; now the grid also holds the per-pack toggles and the features whose
+        // saving has never been measured, and dereferencing a missing `.impact-meter`
+        // throws inside `evaluate` — which aborts the whole run rather than failing
+        // one named check.
+        meters: [...document.querySelectorAll('.advanced-option')]
+          .filter((option) => option.querySelector('.impact-meter'))
+          .map((option) => ({
+            label: option.querySelector('.impact-label')?.textContent ?? '',
+            filled: option.querySelectorAll('[data-filled="true"]').length,
+            onScreen:
+              option.querySelector('.impact-meter').getBoundingClientRect().right <=
+              doc.clientWidth + 1,
+          })),
       };
     });
     console.log('  narrow advanced:', JSON.stringify(narrowAdvanced));
@@ -1390,7 +1412,9 @@ async function main() {
       await settings.setViewportSize({ width: 1280, height: 1100 });
       await settings.waitForSelector('#optimize-toggle:checked', { timeout: 10_000 });
       await settings.click('.advanced-settings > summary');
-      await settings.waitForSelector('.advanced-settings[open] .impact-label', { timeout: 5000 });
+      // The meters moved out of the Advanced disclosure when the features became a
+      // grouped list of all eight; Advanced now holds the packs and the holdout rate.
+      await settings.waitForSelector('#feature-groups .impact-label', { timeout: 5000 });
       await settings.evaluate(() => window.scrollTo(0, 0));
       await settings.waitForTimeout(400);
       await settings.screenshot({

@@ -13,7 +13,7 @@
           <div class="brand-copy">
             <p class="brand-eyebrow">Byte Budget</p>
             <h1 class="brand-title">Settings</h1>
-            <p class="brand-sub">Choose how Byte Budget saves data.</p>
+            <p class="brand-sub">Your plan, your limits, and what this keeps.</p>
           </div>
         </div>
       </header>
@@ -24,82 +24,74 @@
       </nav>
 
       <main class="settings-stack">
-        <section class="panel feature-panel" id="limits-panel" aria-labelledby="limits-title">
+        <!--
+          Plan, then Data Saver, then limits.
+
+          The old order led with the limits table — a table most profiles have no rows
+          for, above a form most people never fill — and put the plan nowhere at all.
+          Every "% of your plan", every projection and every plan alert is measured
+          against the two fields below, so a page that does not ask for them first is a
+          page whose other numbers cannot mean anything. Data Saver comes next because
+          it is one switch that applies everywhere; a per-site limit is the specialised
+          thing, so it goes below the general one.
+        -->
+        <section class="panel feature-panel" id="plan-panel" aria-labelledby="plan-title">
           <div class="panel-head">
             <div>
-              <p class="panel-kicker">Stay in control</p>
-              <h2 class="feature-title" id="limits-title">Daily site limits</h2>
+              <p class="panel-kicker">Start here</p>
+              <h2 class="feature-title" id="plan-title">Your data plan</h2>
             </div>
-            <span class="panel-note" id="limits-note"></span>
+            <span class="panel-note" id="plan-note"></span>
           </div>
 
           <p class="section-intro">
-            Set an allowance for a heavy site. Media is reduced first as the limit fills.
+            How much data your plan allows, and the day it resets. These two numbers are
+            what the cycle figures and the projection on the dashboard are measured
+            against. Byte Budget sees one Chrome profile on this device, so its total is
+            always lower than a carrier's — often by a lot.
           </p>
 
-          <div class="table-scroll">
-            <table class="table" id="limits-table">
-              <thead>
-                <tr>
-                  <th scope="col">Site</th>
-                  <th scope="col">Limit</th>
-                  <th scope="col" class="numeric">Used</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Resets</th>
-                  <th scope="col"><span class="sr-only">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <p class="empty friendly-empty" id="limits-empty" hidden>
-            No limits yet. Add one below or choose a preset from the popup.
-          </p>
-
-          <form class="limit-form" id="limit-form">
+          <form class="limit-form" id="plan-form">
             <div class="limit-field">
-              <label class="field-label" for="limit-site">Website</label>
+              <label class="field-label" for="plan-size">Plan size</label>
               <input
                 class="search-input"
-                id="limit-site"
+                id="plan-size"
                 type="text"
                 autocomplete="off"
                 spellcheck="false"
-                placeholder="youtube.com"
-                required
+                placeholder="15 GB"
+                list="plan-sizes"
               />
-            </div>
-            <div class="limit-field">
-              <label class="field-label" for="limit-size">Daily allowance</label>
-              <input
-                class="search-input"
-                id="limit-size"
-                type="text"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="500 MB"
-                list="limit-sizes"
-                required
-              />
-              <datalist id="limit-sizes">
-                <option value="100 MB"></option>
-                <option value="250 MB"></option>
-                <option value="500 MB"></option>
-                <option value="1 GB"></option>
+              <datalist id="plan-sizes">
+                <option value="5 GB"></option>
+                <option value="10 GB"></option>
+                <option value="15 GB"></option>
+                <option value="50 GB"></option>
               </datalist>
+              <span class="field-hint" id="plan-echo" aria-live="polite"></span>
             </div>
-            <button class="primary-button" id="limit-add" type="submit">Set daily limit</button>
+            <div class="limit-field">
+              <label class="field-label" for="plan-cycle">Resets on</label>
+              <select class="select" id="plan-cycle"></select>
+              <span class="field-hint">
+                Up to the 28th only: every month has a 28th, so the reset date never
+                moves.
+              </span>
+            </div>
+            <button class="primary-button" id="plan-save" type="submit">Save plan</button>
           </form>
-          <p class="field-hint form-status" id="limit-form-status" aria-live="polite">
-            Try 500 MB or 1 GB. Resets at midnight.
-          </p>
 
-          <details class="inline-details">
-            <summary>When a limit fills</summary>
-            <p>
-              Video is reduced first, then images and fonts. Pause or remove a limit at any time.
-            </p>
-          </details>
+          <p class="field-hint form-status" id="plan-status" aria-live="polite"></p>
+
+          <!-- `defaults-note` is only borrowed for its rule and spacing above. -->
+          <div class="field defaults-note" id="plan-shape-field">
+            <span class="field-label" id="plan-shape-label">As the plan fills</span>
+            <div class="segmented" id="plan-shape-group" aria-labelledby="plan-shape-label"></div>
+            <p class="field-hint" id="plan-shape-hint"></p>
+          </div>
+
+          <div id="plan-allowance"></div>
         </section>
 
         <section
@@ -121,10 +113,11 @@
               </svg>
             </div>
             <div class="setting-hero-copy">
-              <p class="panel-kicker">Recommended</p>
+              <p class="panel-kicker">Off until you switch it on</p>
               <h2 class="feature-title" id="optimize-title">Data Saver</h2>
               <p class="section-intro">
-                Makes supported pages lighter. Exclude any site that behaves differently.
+                Changes to what a page is allowed to ask for, each switchable on its own
+                and listed below by how much you will notice it.
               </p>
             </div>
             <label class="switch-control">
@@ -135,80 +128,168 @@
           </div>
 
           <div class="optimize-body" id="optimize-body" hidden>
-            <details class="inline-details advanced-settings">
-              <summary>Advanced</summary>
-              <p class="advanced-intro">Expected savings are relative and vary by site.</p>
+            <div id="feature-groups"></div>
 
-              <div class="advanced-options">
-                <label class="advanced-option">
-                  <input type="checkbox" id="media-on-click-toggle" />
-                  <span class="advanced-symbol" aria-hidden="true">▶</span>
-                  <span class="advanced-copy">
-                    <span class="advanced-heading">
-                      <span class="advanced-title">Click to load media</span>
-                      <span
-                        class="impact-meter"
-                        data-impact-feature="clickToLoadMedia"
-                      ></span>
-                    </span>
-                    <span class="advanced-hint">Video and audio wait for you.</span>
-                  </span>
-                </label>
-
-                <label class="advanced-option">
-                  <input type="checkbox" id="preload-toggle" />
-                  <span class="advanced-symbol" aria-hidden="true">↗</span>
-                  <span class="advanced-copy">
-                    <span class="advanced-heading">
-                      <span class="advanced-title">Stop page preloading</span>
-                      <span class="impact-meter" data-impact-feature="dropHints"></span>
-                    </span>
-                    <span class="advanced-hint">Trims links a page loads before you click.</span>
-                  </span>
-                </label>
-
-                <label class="advanced-option">
-                  <input type="checkbox" id="system-fonts-toggle" />
-                  <span class="advanced-symbol advanced-symbol-text" aria-hidden="true">Aa</span>
-                  <span class="advanced-copy">
-                    <span class="advanced-heading">
-                      <span class="advanced-title">Use system fonts</span>
-                      <span class="impact-meter" data-impact-feature="systemFonts"></span>
-                    </span>
-                    <span class="advanced-hint">Skips downloaded typefaces.</span>
-                  </span>
-                </label>
+            <div class="exception-settings">
+              <div class="exception-head">
+                <span class="field-label">Website exceptions</span>
+                <span class="summary-note" id="exclusion-count"></span>
               </div>
+              <p>
+                Leave a site completely alone: no rules, no page script, no rewritten
+                images. This is the first thing to try if a site looks wrong.
+              </p>
+              <form class="exclusion-form" id="exclusion-form">
+                <input
+                  class="search-input"
+                  id="exclusion-input"
+                  type="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="example.com"
+                  aria-label="Website to leave alone"
+                />
+                <button class="ghost-button" type="submit">Add exception</button>
+              </form>
+              <ul class="chip-list" id="exclusion-list"></ul>
+            </div>
 
-              <div class="exception-settings">
-                <div class="exception-head">
-                  <span class="field-label">Website exceptions</span>
-                  <span class="summary-note" id="exclusion-count"></span>
-                </div>
-                <p>Leave Data Saver off on specific sites.</p>
-                <form class="exclusion-form" id="exclusion-form">
-                  <input
-                    class="search-input"
-                    id="exclusion-input"
-                    type="text"
-                    autocomplete="off"
-                    spellcheck="false"
-                    placeholder="example.com"
-                    aria-label="Website to exclude"
-                  />
-                  <button class="ghost-button" type="submit">Add exception</button>
-                </form>
-                <ul class="chip-list" id="exclusion-list"></ul>
+            <details class="inline-details advanced-settings">
+              <summary>
+                Advanced<span class="summary-note">image services, and how savings are measured</span>
+              </summary>
+              <p class="advanced-intro" id="packs-intro"></p>
+              <div class="advanced-options" id="pack-list"></div>
+
+              <div class="field defaults-note" id="holdout-field">
+                <span class="field-label" id="holdout-label">Measuring what this saves</span>
+                <div class="segmented" id="holdout-group" aria-labelledby="holdout-label"></div>
+                <p class="field-hint" id="holdout-hint"></p>
               </div>
             </details>
           </div>
           <p class="save-status" id="optimize-note" aria-live="polite"></p>
         </section>
 
+        <section class="panel feature-panel" id="limits-panel" aria-labelledby="limits-title">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">One site at a time</p>
+              <h2 class="feature-title" id="limits-title">Site limits</h2>
+            </div>
+            <span class="panel-note" id="limits-note"></span>
+          </div>
+
+          <p class="section-intro">
+            An allowance for one heavy site, over a session, a day, a week or a month.
+            Click an allowance in the table to change it.
+          </p>
+
+          <div class="table-scroll">
+            <table class="table" id="limits-table">
+              <thead>
+                <tr>
+                  <th scope="col">Site</th>
+                  <th scope="col">Limit</th>
+                  <th scope="col" class="numeric">Used</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Resets</th>
+                  <th scope="col"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <p class="empty friendly-empty" id="limits-empty" hidden>
+            No site limits yet. Add one below, or set one from the popup while you are on
+            the site.
+          </p>
+
+          <form class="limit-form" id="limit-form">
+            <div class="limit-field">
+              <label class="field-label" for="limit-site">Website</label>
+              <input
+                class="search-input"
+                id="limit-site"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="youtube.com"
+                required
+              />
+            </div>
+            <div class="limit-field">
+              <label class="field-label" for="limit-size">Allowance</label>
+              <input
+                class="search-input"
+                id="limit-size"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="500 MB"
+                list="limit-sizes"
+                required
+              />
+              <datalist id="limit-sizes">
+                <option value="100 MB"></option>
+                <option value="250 MB"></option>
+                <option value="500 MB"></option>
+                <option value="1 GB"></option>
+              </datalist>
+            </div>
+            <div class="limit-field">
+              <span class="field-label" id="limit-period-label">Per</span>
+              <div
+                class="segmented"
+                id="limit-period-group"
+                aria-labelledby="limit-period-label"
+              ></div>
+            </div>
+            <div class="limit-field" id="limit-shape-field"></div>
+            <button class="primary-button" id="limit-add" type="submit">Set limit</button>
+          </form>
+          <p class="field-hint form-status" id="limit-form-status" aria-live="polite"></p>
+
+          <details class="inline-details">
+            <summary>What a limit does as it fills</summary>
+            <p id="limit-shape-explainer"></p>
+            <div class="table-scroll">
+              <table class="table" id="tier-table">
+                <thead>
+                  <tr>
+                    <th scope="col">At</th>
+                    <th scope="col">Refuses</th>
+                    <th scope="col">What you see</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <p>
+              The page's own HTML always loads, at every step, so the site can say what
+              happened instead of showing a browser error. Pause a limit for an hour, add
+              bytes to the current window, or remove it, at any time.
+            </p>
+          </details>
+        </section>
+
         <div class="bottom-grid">
+          <section class="panel" id="alerts-panel" aria-labelledby="alerts-title">
+            <div class="panel-head">
+              <h2 class="panel-title" id="alerts-title">Alerts</h2>
+              <span class="save-status" id="alerts-status" aria-live="polite"></span>
+            </div>
+            <p class="field-hint">
+              A desktop notification when an allowance is running out, said once per
+              window and not again for that window.
+            </p>
+            <div class="simple-settings" id="alert-options"></div>
+            <p class="field-hint" id="alerts-plan-note"></p>
+          </section>
+
           <section class="panel" id="preferences-panel" aria-labelledby="preferences-title">
             <div class="panel-head">
-              <h2 class="panel-title" id="preferences-title">Appearance</h2>
+              <h2 class="panel-title" id="preferences-title">Appearance &amp; units</h2>
               <span class="save-status" id="settings-status" aria-live="polite"></span>
             </div>
             <div class="simple-settings">
@@ -216,47 +297,59 @@
                 <span class="field-label" id="theme-label">Theme</span>
                 <div
                   class="segmented"
-                  role="radiogroup"
-                  aria-labelledby="theme-label"
                   id="theme-group"
-                >
-                  <button
-                    type="button"
-                    role="radio"
-                    data-theme-value="auto"
-                    aria-checked="true"
-                  >System</button>
-                  <button
-                    type="button"
-                    role="radio"
-                    data-theme-value="light"
-                    aria-checked="false"
-                  >Light</button>
-                  <button
-                    type="button"
-                    role="radio"
-                    data-theme-value="dark"
-                    aria-checked="false"
-                  >Dark</button>
-                </div>
+                  aria-labelledby="theme-label"
+                ></div>
               </div>
               <div class="field">
-                <span class="field-label">Toolbar</span>
-                <label class="switch-control preference-switch">
-                  <input type="checkbox" id="badge-toggle" />
-                  <span class="switch-track" aria-hidden="true"><span></span></span>
-                  <span class="switch-label">Show today’s usage</span>
-                </label>
+                <span class="field-label" id="badge-label">Toolbar badge</span>
+                <div
+                  class="segmented"
+                  id="badge-group"
+                  aria-labelledby="badge-label"
+                ></div>
+              </div>
+              <div class="field">
+                <span class="field-label" id="units-label">Units</span>
+                <div
+                  class="segmented"
+                  id="units-group"
+                  aria-labelledby="units-label"
+                ></div>
+                <span class="field-hint" id="units-hint"></span>
               </div>
             </div>
+            <details class="inline-details">
+              <summary>How weeks and months are counted</summary>
+              <div class="simple-settings" id="period-options"></div>
+            </details>
           </section>
+        </div>
 
-          <section class="panel" id="data-panel" aria-labelledby="data-title">
-            <div class="panel-head">
-              <h2 class="panel-title" id="data-title">Privacy &amp; data</h2>
-              <span class="panel-note" id="storage-note">Stored on this device</span>
-            </div>
-            <p class="field-hint">Nothing is uploaded.</p>
+        <section class="panel" id="data-panel" aria-labelledby="data-title">
+          <div class="panel-head">
+            <h2 class="panel-title" id="data-title">Privacy &amp; data</h2>
+            <span class="panel-note" id="storage-note">Stored on this device</span>
+          </div>
+          <p class="field-hint">
+            Byte Budget records bytes per site per day and per hour, which hosts a site's
+            bytes came from, and one row per page load holding the site and origin — never
+            a path or a query string. It has no account, no server and makes no network
+            request of its own. Preferences follow you through Chrome sync; site names,
+            limits and exceptions do not leave this profile. All of it covers this Chrome
+            profile on this device: other profiles, other browsers, other devices on the
+            same connection and everything outside Chrome are invisible to an extension.
+          </p>
+
+          <div class="simple-settings" id="privacy-options"></div>
+
+          <div class="defaults-note">
+            <span class="field-label">Export</span>
+            <p class="field-hint">
+              One row per site per day, as stored: the date, the site, bytes down and up,
+              requests, and how much of the down figure was estimated rather than
+              measured.
+            </p>
             <div class="actions">
               <select class="select" id="export-days" aria-label="Export range">
                 <option value="30">Last 30 days</option>
@@ -265,13 +358,22 @@
               </select>
               <button class="ghost-button" id="export-csv" type="button">Export CSV</button>
               <button class="ghost-button" id="export-json" type="button">Export JSON</button>
-              <button class="ghost-button" id="clear-data" type="button" data-danger="true">
-                Delete usage
-              </button>
             </div>
             <p class="field-hint form-status" id="data-status" aria-live="polite"></p>
-          </section>
-        </div>
+          </div>
+
+          <div class="defaults-note" id="delete-block">
+            <span class="field-label">Delete recorded usage</span>
+            <p class="field-hint" id="delete-scope-note"></p>
+            <div class="actions" id="delete-actions"></div>
+            <p class="field-hint form-status" id="delete-status" aria-live="polite"></p>
+          </div>
+
+          <details class="inline-details" id="storage-details">
+            <summary>What this is costing on disk</summary>
+            <div id="storage-report"></div>
+          </details>
+        </section>
       </main>
 
       <p class="live-region" id="live-region" role="status" aria-live="polite"></p>

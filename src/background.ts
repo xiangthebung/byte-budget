@@ -222,7 +222,35 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install" || details.reason === "update") {
     void injectIntoOpenTabs();
   }
+  if (details.reason === "install") void openWelcome();
 });
+
+/**
+ * The one screen that says what this is and asks for the two things it needs.
+ *
+ * `install` only. An update opening a tab is a hostile pattern — it interrupts work
+ * nobody asked to have interrupted, on a schedule the browser chooses — and there is
+ * nothing on that page an existing install has not already answered.
+ *
+ * What it prevents: with Data Saver off, the badge off and an empty ledger, the first
+ * thing a new install showed was "Nothing recorded for this period yet". Every number
+ * in the product is measured against a plan size and a cycle start, and neither has
+ * anywhere else to come from.
+ */
+async function openWelcome(): Promise<void> {
+  try {
+    // Through `runtimeFile` like the injected scripts: the build also writes a manifest
+    // at the project root pointing into `dist/`, and a bare "welcome.html" resolves to
+    // nothing when the extension is loaded that way — which is exactly how this is
+    // loaded during development, so the failure would be seen by developers and by
+    // nobody else.
+    await chrome.tabs.create({ url: chrome.runtime.getURL(runtimeFile("welcome.html")) });
+  } catch (error) {
+    // Swallowed like the alarms above: this is a fire-and-forget call from a listener,
+    // and an install whose setup tab did not open is still a working install.
+    console.error("Byte Budget: could not open the setup page", error);
+  }
+}
 
 chrome.runtime.onStartup.addListener(() => {
   void setUpAlarms();

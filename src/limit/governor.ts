@@ -16,7 +16,7 @@
 
 import { bucketRange, getAll, getAllFromIndex, STORES } from "../core/db";
 import { getSettings } from "../core/settings";
-import { ALL_SITES, type Settings, type UsageRow } from "../core/types";
+import { ALL_SITES, DEFAULT_SETTINGS, type Settings, type UsageRow } from "../core/types";
 import { ledger } from "../track/ledger";
 import { openTabRecords, tabIdsForSite } from "../track/tabs";
 import type { BudgetStatus, TabNotice } from "../core/messages";
@@ -31,6 +31,7 @@ import {
   tierFor,
   type Budget,
   type BudgetPeriod,
+  type BudgetWindow,
 } from "./budgets";
 import { checkAllowanceAlerts, type AllowanceReading } from "./alerts";
 import { enforcementFor, setEnforcement } from "./enforce";
@@ -75,6 +76,23 @@ export function budgetedSites(): string[] {
 }
 
 /**
+ * The two fields that place a budget's window.
+ *
+ * Read together, always. A `month` budget counts the plan's cycle, not the calendar
+ * month, so a caller reaching for `weekStart` alone would silently anchor monthly
+ * allowances to the 1st while the headline, the projection and "resets in N days" all
+ * counted from the reset day — and the 100% alert would then fire against a window
+ * nothing else in the product agreed with. `DEFAULT_SETTINGS` supplies the fallback so
+ * there is one definition of "not loaded yet" rather than one per call site.
+ */
+function budgetWindow(): BudgetWindow {
+  return {
+    weekStart: settings?.weekStart ?? DEFAULT_SETTINGS.weekStart,
+    cycleStartDay: settings?.cycleStartDay ?? DEFAULT_SETTINGS.cycleStartDay,
+  };
+}
+
+/**
  * Reloads the budgets and re-primes every live counter.
  *
  * Called at startup, after a budget changes, and at period rollover. Priming is a
@@ -88,7 +106,7 @@ export async function reloadBudgets(): Promise<void> {
 
   for (const budget of budgets) {
     seen.add(budget.site);
-    const periodKey = periodKeyFor(budget.period, settings.weekStart, new Date(), sessionStart);
+    const periodKey = periodKeyFor(budget.period, budgetWindow(), new Date(), sessionStart);
     const existing = live.get(budget.site);
     if (existing && existing.periodKey === periodKey && existing.primed) {
       existing.budget = budget;
@@ -131,8 +149,7 @@ function ensureReady(): Promise<void> {
 
 /** Reads the window's usage so far out of the ledger. */
 async function prime(entry: Live): Promise<void> {
-  const weekStart = settings?.weekStart ?? 1;
-  const days = periodDaysFor(entry.budget.period, weekStart);
+  const days = periodDaysFor(entry.budget.period, budgetWindow());
   const site = entry.budget.site;
   const total = site === ALL_SITES;
   let used = 0;
@@ -322,7 +339,7 @@ function statusOf(entry: Live, tier: Tier): BudgetStatus {
     wouldBe: tierFor(entry.budget, entry.used, allowance),
     snoozed: isSnoozed(entry.budget),
     periodKey: entry.periodKey,
-    resetsAt: periodResetsAt(entry.budget.period, settings?.weekStart ?? 1),
+    resetsAt: periodResetsAt(entry.budget.period, budgetWindow()),
   };
 }
 
@@ -416,7 +433,7 @@ export async function syncEnforcement(dropped: readonly string[] = []): Promise<
         used: entry.used,
         allowance,
         periodKey: entry.periodKey,
-        resetsAt: periodResetsAt(entry.budget.period, settings?.weekStart ?? 1),
+        resetsAt: periodResetsAt(entry.budget.period, budgetWindow()),
       });
 
       // The total budget's rule is unscoped, so it is given no tabs to be scoped by.
@@ -487,12 +504,7 @@ export async function refreshWindows(): Promise<void> {
   await refreshSessionStart([...live.values()].map((entry) => entry.budget.period));
   let rolled = false;
   for (const entry of live.values()) {
-    const periodKey = periodKeyFor(
-      entry.budget.period,
-      settings.weekStart,
-      new Date(),
-      sessionStart,
-    );
+    const periodKey = periodKeyFor(entry.budget.period, budgetWindow(), new Date(), sessionStart);
     if (periodKey === entry.periodKey) continue;
     entry.periodKey = periodKey;
     entry.used = 0;

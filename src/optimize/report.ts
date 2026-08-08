@@ -26,10 +26,11 @@ import { baselineCount, visitDeltas } from "./savings";
  * happened, which is the merge README.md:133-141 exists to forbid. A UI cannot render
  * one number by accident when both are handed to it under their own names.
  *
- * It rides alongside `SavingsReport` rather than inside it because `core/messages.ts`
- * does not name the field yet — the same arrangement `track/stats.ts` uses for
- * `lastFlushError`. Fold it into `SavingsReport` when that file next changes; until
- * then a surface reading `GET_SAVINGS` has to name this type to see the field.
+ * `savedModelled` is now a named field on `SavingsReport` itself, so every surface
+ * reading `GET_SAVINGS` sees all three under their own names and none of them has to
+ * remember a subtraction. A subtraction a caller has to remember is one a caller will
+ * forget, and the failure is silent: a modelled number arriving wearing a measured
+ * number's confidence.
  */
 export async function savingsReport(days: number): Promise<SavingsReport> {
   const to = dayKey();

@@ -2,6 +2,12 @@
 
 /* ------------------------------------------------------------------ *
  * The 420px panel. Everything reusable lives in app.css.
+ *
+ * Vertical space is the scarce resource here, not width. Every block below is
+ * either always earning its rows (the headline, the period group, the sites list)
+ * or is hidden until it has something to say — the plan meter, the projection, the
+ * limit card, the optimizer row and the error banner are all `hidden` by default
+ * and stay that way for a profile they do not apply to.
  * ------------------------------------------------------------------ */
 
 html,
@@ -27,6 +33,43 @@ body {
   margin-top: 12px;
 }
 
+/*
+ * Visually hidden, still in the accessibility tree.
+ *
+ * Its own class rather than `.live-region`: that one names a region that
+ * announces, and the only thing wearing this is the document's <h1>, which must
+ * not.
+ */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/*
+ * Space the cold popup would otherwise take by surprise.
+ *
+ * The first paint has no data, so the chart slot and the site list are empty boxes;
+ * when the first payload lands they grow and everything below them jumps. The
+ * chart slot is reserved permanently because a rendered chart is always about this
+ * tall anyway, and the list only while loading, so a one-site profile does not sit
+ * above three rows of nothing forever.
+ */
+.chart-slot {
+  min-height: 94px;
+}
+
+.app[data-state="loading"] #site-list {
+  min-height: 102px;
+}
+
+.app[data-state="loading"] .types-slot {
+  min-height: 58px;
+}
+
 /* ------------------------------------------------------------------ *
  * Top bar
  * ------------------------------------------------------------------ */
@@ -39,16 +82,40 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
-  padding: 14px 0 10px;
+  padding: 14px 0 8px;
   background: linear-gradient(var(--bg) 72%, transparent);
 }
 
-.headline-eyebrow {
+/*
+ * The two icon buttons never give up width, and the headline always can.
+ *
+ * Without this the pace verdict — the longest string in the block, and a whole
+ * sentence — sets the headline's width and squeezes the dashboard and settings
+ * buttons, which are the only two fixed-size things in the bar.
+ */
+.headline {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/*
+ * The eyebrow used to restate the date the period group already shows. It now
+ * carries the only thing on this surface that is a comparison rather than a
+ * reading, so it is sentence case rather than the old uppercase label styling —
+ * "TODAY · 38% MORE THAN YESTERDAY" reads as a shout, not as a verdict.
+ */
+.pace-line {
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.pace-line[data-tone="up"] {
+  color: var(--danger);
+}
+
+.pace-line[data-tone="down"] {
+  color: var(--saved);
 }
 
 .headline-total {
@@ -74,12 +141,161 @@ body {
 
 .topbar-actions {
   display: flex;
+  flex: 0 0 auto;
   gap: 6px;
   padding-top: 4px;
 }
 
 /* ------------------------------------------------------------------ *
- * Period tabs
+ * The plan
+ * ------------------------------------------------------------------ */
+
+.plan {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 8px;
+}
+
+.plan-meter {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bar-track);
+}
+
+.plan-meter-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.plan-meter-fill[data-over="true"] {
+  background: var(--danger);
+}
+
+/*
+ * Where an evenly spent plan would be right now.
+ *
+ * A meter answers "how much is gone"; the question the popup exists for is "am I
+ * ahead of the plan", and one tick turns the first into the second at no vertical
+ * cost. Hidden from assistive technology because `.plan-line` states the day and
+ * `aria-valuetext` states the share — a mark with no text is not a fact.
+ */
+.plan-meter-pace {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--text-soft);
+  opacity: 0.5;
+}
+
+.plan-line {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.plan-cta,
+.plan-alerts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.plan-cta-copy,
+.plan-alerts-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 1px;
+  color: var(--text-soft);
+}
+
+.plan-alerts-title {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.plan-alerts-hint {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.plan-cta .ghost-button,
+.plan-alerts .ghost-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ *
+ * Projection
+ *
+ * The only modelled figure on this surface, and the only block whose basis is
+ * required to be on screen with it. The basis is always in the DOM — clamped to
+ * two lines, never truncated in the markup — so a screen reader reads the whole
+ * sentence whether or not the toggle has been pressed.
+ * ------------------------------------------------------------------ */
+
+.projection {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--estimate);
+  border-radius: var(--radius-md);
+  background: var(--estimate-soft);
+}
+
+.projection-heading {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--estimate);
+}
+
+.projection-figure {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.projection-over {
+  color: var(--danger);
+  font-weight: 650;
+}
+
+.projection-spare {
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.projection-basis {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.projection-basis[data-expanded="true"] {
+  display: block;
+  overflow: visible;
+}
+
+/* ------------------------------------------------------------------ *
+ * Period group
  * ------------------------------------------------------------------ */
 
 .tabs {
@@ -109,13 +325,30 @@ body {
   box-shadow: var(--shadow-card);
 }
 
+/*
+ * The checked option sets its own box-shadow and would otherwise outrank the
+ * shared `:focus-visible` rule — and with a roving tabindex the checked option is
+ * exactly the one Tab lands on. Same fix, and same reason, as `.segmented`.
+ */
+.tabs button[aria-checked="true"]:focus-visible {
+  box-shadow: var(--shadow-card), var(--focus);
+}
+
 .meta-line {
   display: flex;
   flex-wrap: wrap;
+  align-items: baseline;
   gap: 4px 10px;
   padding: 8px 2px 0;
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.meta-figure {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .meta-flag {
@@ -124,85 +357,35 @@ body {
 }
 
 /* ------------------------------------------------------------------ *
- * Current site
+ * Action errors
  * ------------------------------------------------------------------ */
 
-.current {
+.action-error {
   display: flex;
-  align-items: center;
-  gap: 9px;
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--accent-soft);
-  border-radius: var(--radius-md);
-  background: var(--accent-soft);
-}
-
-.current-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1 1 auto;
-  flex-direction: column;
-}
-
-.current-site {
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.current-sub {
-  font-size: 11px;
-  color: var(--text-soft);
-}
-
-.current-bytes {
-  flex: 0 0 auto;
-  font-size: 14px;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
-.types-slot {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-/* ------------------------------------------------------------------ *
- * Footer
- * ------------------------------------------------------------------ */
-
-.footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  align-items: baseline;
   gap: 10px;
-  padding-top: 12px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  font-size: 12px;
 }
 
-.footer .ghost-button {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-.footer-note {
+.action-error-text {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 10px;
+  color: var(--danger);
+  font-weight: 600;
   line-height: 1.4;
-  color: var(--text-muted);
-  text-align: right;
 }
 
 /* ------------------------------------------------------------------ *
  * Data limit
  *
- * Quick actions only. The full editor lives in the dashboard: a 420px panel is
- * the wrong place to type a byte count, and the presets cover what someone
- * actually reaches for.
+ * Quick actions only. The full editor lives in settings: a 420px panel is the
+ * wrong place to type a byte count, and the presets cover what someone actually
+ * reaches for.
  * ------------------------------------------------------------------ */
 
 .limit {
@@ -213,13 +396,37 @@ body {
   background: var(--surface);
 }
 
-.limit[data-enforcing="true"] {
-  border-color: var(--estimate);
-  background: var(--estimate-soft);
+/*
+ * Colour follows the user's status, not the mechanism.
+ *
+ * The card used to turn `--estimate` orange whenever any tier was installed, which
+ * spends the one colour in this palette that means "this figure is modelled" on a
+ * state that is measured. Danger is reserved for past the limit, which is the only
+ * state that is a problem rather than a setting working.
+ */
+.limit[data-state="over"] {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.limit[data-state="near"] {
+  border-color: var(--border-strong);
+}
+
+.limit[data-state="paused"] {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+
+.limit-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
 }
 
 .limit-heading {
-  margin-bottom: 8px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -227,30 +434,46 @@ body {
   color: var(--text-muted);
 }
 
-.limit-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-}
-
-.limit-used {
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-}
-
-.limit-state {
+/*
+ * Which limit is talking. Being cut off by a limit you cannot identify is the
+ * worst version of this feature, and a limit over everything looks exactly like a
+ * limit on the site in front of you unless the card says otherwise.
+ */
+.limit-scope {
+  overflow: hidden;
   font-size: 11px;
   color: var(--text-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.limit-state[data-tone="enforcing"] {
-  color: var(--estimate);
+.limit-scope[data-scope="all"] {
+  color: var(--text);
   font-weight: 600;
 }
 
+.limit-status {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.limit-status[data-tone="over"] {
+  color: var(--danger);
+}
+
+.limit-status[data-tone="paused"] {
+  color: var(--text-soft);
+}
+
+.limit-line {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
 .limit-bar {
+  display: block;
   overflow: hidden;
   height: 6px;
   margin-top: 7px;
@@ -269,11 +492,28 @@ body {
   background: var(--danger);
 }
 
+.limit-consequence,
 .limit-note {
   margin-top: 7px;
   font-size: 11px;
   line-height: 1.45;
   color: var(--text-muted);
+}
+
+/* Modelled: a refused request is never sent, so its size is the estimator's. */
+.limit-prevented {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--estimate);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.limit-also {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 .limit-actions {
@@ -288,15 +528,28 @@ body {
   font-size: 11px;
 }
 
-.limit-more {
+.link-button {
+  justify-self: start;
+  margin-top: 8px;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--accent);
   font-size: 11px;
   font-weight: 600;
+  text-align: left;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.action-error .link-button {
+  flex: 0 0 auto;
+  margin-top: 0;
+  color: var(--danger);
+}
+
+.projection .link-button {
+  margin-top: 2px;
 }
 
 /* ------------------------------------------------------------------ *
@@ -320,7 +573,7 @@ body {
   background: var(--saved-soft);
 }
 
-.optimize-row input {
+.optimize-check {
   margin: 0;
   accent-color: var(--saved);
 }
@@ -338,12 +591,102 @@ body {
 
 .optimize-hint {
   font-size: 11px;
+  line-height: 1.45;
   color: var(--text-muted);
 }
 
-.optimize-saved {
-  flex: 0 0 auto;
+/* Measured, not modelled: a difference between two sets of real page loads. */
+.optimize-measured {
+  margin-top: 2px;
   color: var(--saved);
+  font-size: 11px;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
+}
+
+.optimize-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.optimize-dismiss {
+  width: 24px;
+  height: 24px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.optimize-dismiss svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ------------------------------------------------------------------ *
+ * Sites
+ * ------------------------------------------------------------------ */
+
+.types-slot {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/*
+ * The tab you are looking at, inside the list rather than in a card of its own.
+ *
+ * The separate "current site" card duplicated the whole surface on a profile with
+ * one site in it — same name, same byte count, same share, twice — and cost a full
+ * card of height on every other profile. The list already had an
+ * `[aria-current]` style waiting for it.
+ */
+.site-tag {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.site-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* A flex item's `min-width: auto` refuses to shrink below its content, so the
+   ellipsis on a long hostname never fires without this. */
+.site-heading .site-name {
+  min-width: 0;
+}
+
+.site-list {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* ------------------------------------------------------------------ *
+ * Footer
+ *
+ * One line, and it is a scope claim rather than a privacy one. "Your data stays on
+ * this device." is true and answers a question nobody reconciling against a carrier
+ * bill is asking; the gap between one Chrome profile and a household's plan can be
+ * a factor of several, and nothing else in the product said so.
+ * ------------------------------------------------------------------ */
+
+.footer {
+  padding-top: 12px;
+}
+
+.footer-note {
+  display: block;
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--text-muted);
 }
