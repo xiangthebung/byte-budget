@@ -800,7 +800,13 @@ async function main() {
       () => document.querySelector('#optimize-body')?.hasAttribute('hidden') === true,
     );
 
-    await settings.click('[data-theme-value="dark"]');
+    // `data-option`, not the old `data-theme-value`. Every segmented control on every
+    // surface now goes through `bindGroup` in `core/dom.ts`, which builds the options
+    // itself and stamps `dataset.option` — that is what gave the three fake tablists
+    // real radiogroup semantics, arrow keys and a roving tabindex. Scoped to
+    // `#theme-group` because there are eleven such groups on this page now, and an
+    // unscoped `[data-option="dark"]` is only unambiguous by luck.
+    await settings.click('#theme-group [data-option="dark"]');
     // Same correction as the popup check above: the `waitForFunction` is the assertion,
     // and a theme picker that does not repaint the document has to print a FAIL rather
     // than throw a timeout over the rest of the run.
@@ -811,9 +817,12 @@ async function main() {
         { timeout: 10_000 },
       ),
     );
-    await settings.click('[data-theme-value="auto"]');
+    await settings.click('#theme-group [data-option="auto"]');
     await settings.waitForFunction(
-      () => document.querySelector('[data-theme-value="auto"]')?.getAttribute('aria-checked') === 'true',
+      () =>
+        document
+          .querySelector('#theme-group [data-option="auto"]')
+          ?.getAttribute('aria-checked') === 'true',
     );
 
     /**
@@ -1870,10 +1879,29 @@ async function main() {
     // Every pattern has to be one Chrome's RE2 will accept. An invalid one is not
     // rejected on its own: `updateSessionRules` applies atomically, so it takes down
     // every other rule with it, including the limits.
+    /*
+     * `requireCapturing` and `isCaseSensitive` are not decoration — they are the whole
+     * assertion.
+     *
+     * This guard asked `isRegexSupported({ regex })` and reported all six packs fine
+     * while Chrome rejected two of them at install with `memoryLimitExceeded`. A pack
+     * rule is a REDIRECT, so its compiled program has to retain capture groups for
+     * `regexSubstitution`, and that is what pushes a pattern over RE2's 2 KB budget.
+     * Checking without the flag compiles something the extension never installs.
+     *
+     * The cost of the miss was total: Chrome applies a session rule set atomically, so
+     * one oversized pattern meant zero optimizer rules installed and Data Saver doing
+     * nothing at all, on every browser, silently. These options must stay in step with
+     * how `rules/session.ts` actually publishes the rule.
+     */
     const regexSupport = await dashboard.evaluate(async (patterns) => {
       const results = [];
       for (const [id, regex] of patterns) {
-        const outcome = await chrome.declarativeNetRequest.isRegexSupported({ regex });
+        const outcome = await chrome.declarativeNetRequest.isRegexSupported({
+          regex,
+          isCaseSensitive: true,
+          requireCapturing: true,
+        });
         results.push([id, outcome.isSupported === true, outcome.reason ?? '']);
       }
       return results;
@@ -2227,13 +2255,19 @@ async function main() {
       narrowAdvanced.columns === 1,
       `the impact cards stack to one column at 390px (${narrowAdvanced.columns})`,
     );
+    // Asserted as a property rather than as a fixed list, for the same reason as the
+    // impact check earlier in this run: the features are rendered by iterating FEATURES
+    // and grouped by visibility, so the order follows the grouping and the count follows
+    // how many features carry an impact figure. Pinning either makes this fail the next
+    // time a feature is added, which is a red line for something that is not a defect.
+    // What has to hold at 390px is that every meter still agrees with its label and that
+    // none of them has been pushed off the side of the screen.
+    const FILL_AT_WIDTH = { High: 3, Medium: 2, Low: 1 };
     check(
-      JSON.stringify(narrowAdvanced.meters) ===
-        JSON.stringify([
-          { label: 'High', filled: 3, onScreen: true },
-          { label: 'Medium', filled: 2, onScreen: true },
-          { label: 'Low', filled: 1, onScreen: true },
-        ]),
+      narrowAdvanced.meters.length > 0 &&
+        narrowAdvanced.meters.every(
+          (entry) => FILL_AT_WIDTH[entry.label] === entry.filled && entry.onScreen,
+        ),
       `the impact meters survive a phone width (${JSON.stringify(narrowAdvanced.meters)})`,
     );
 

@@ -150,8 +150,21 @@ export const PACKS: readonly Pack[] = [
      * can only produce a smaller or equal image. `resize` and `crop` frame exactly, and
      * moving one of their dimensions re-crops the picture instead of shrinking it.
      */
+    /*
+     * The tolerated list is three parameters, not five, and the reason is RE2 rather
+     * than Photon.
+     *
+     * A redirect rule keeps its capture groups, so Chrome compiles this pattern with
+     * `requireCapturing` — and at five alternatives across two starred runs it came to
+     * more than the 2 KB of RE2 program a DNR rule is allowed. Chrome then rejects the
+     * WHOLE session rule set atomically, so the cost of one pattern being slightly too
+     * clever was every optimizer rule silently failing to install. `zoom` and `h` are
+     * the two dropped; a URL carrying either is now left alone, which costs bytes and
+     * nothing else. Measured with `isRegexSupported({requireCapturing: true})`, which is
+     * the only form that reports what installing will actually do.
+     */
     regexFilter:
-      "^(https://i[0-2]\\.wp\\.com/[^?]+\\.(?:jpe?g|png|webp)\\?(?:(?:ssl|quality|strip|zoom|h)=[^&]*&)*(?:w|fit)=)\\d{4,}((?:(?:%2C|,)\\d+)?(?:&(?:ssl|quality|strip|zoom|h)=[^&]*)*)$",
+      "^(https://i[0-2]\\.wp\\.com/[^?]+\\.(?:jpe?g|png|webp)\\?(?:(?:ssl|quality|strip)=[^&]*&)*(?:w|fit)=)\\d{4,}((?:(?:%2C|,)\\d+)?(?:&(?:ssl|quality|strip)=[^&]*)*)$",
     regexSubstitution: `\\1${TARGET_WIDTH}\\2`,
     resourceTypes: ["image"],
     expectedRatio: 0.35,
@@ -194,8 +207,24 @@ export const PACKS: readonly Pack[] = [
      * width alone re-crops it. Same RE2 constraint as Photon: "no crop" has to be
      * written as "only these".
      */
+    /*
+     * Only `v=` may precede `width=`, and the trailing list is four parameters rather
+     * than five — both for RE2's budget, not for Shopify's sake.
+     *
+     * This host is tighter than Photon's: `cdn.shopify.com/s/files/` and `width` are
+     * longer than `i0.wp.com/` and `w`, so even a three-parameter leading run does not
+     * fit inside the 2 KB a redirect rule's compiled program is allowed. Measured, not
+     * guessed — five trailing parameters is over, four is under. `?v=…&width=…` is the
+     * order Liquid's `image_url` emits, so the common case is covered; a query leading
+     * with `height` or `format`, or carrying `pad_color`, is simply left alone.
+     *
+     * Narrowing under-matches, which costs bytes. Widening cost the entire rule set:
+     * Chrome rejects a session rule set atomically, so when this pattern was slightly
+     * too generous NOTHING installed and Data Saver did nothing at all, silently, in
+     * every browser. That is the asymmetry to keep in mind before adding a parameter.
+     */
     regexFilter:
-      "^(https://cdn\\.shopify\\.com/s/files/[^?]+\\.(?:jpe?g|png|webp)\\?(?:(?:v|height|format|quality|pad_color)=[^&]*&)*width=)\\d{4,}((?:&(?:v|height|format|quality|pad_color)=[^&]*)*)$",
+      "^(https://cdn\\.shopify\\.com/s/files/[^?]+\\.(?:jpe?g|png|webp)\\?(?:v=[^&]*&)*width=)\\d{4,}((?:&(?:v|height|format|quality)=[^&]*)*)$",
     regexSubstitution: `\\1${TARGET_WIDTH}\\2`,
     resourceTypes: ["image"],
     expectedRatio: 0.35,
