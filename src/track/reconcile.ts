@@ -19,6 +19,14 @@
  * the page reports the timing under the URL it originally asked for, so a
  * redirected chunked response settles by expiry rather than by measurement.
  * Chasing it would mean tracking every redirect chain to save a rounding error.
+ *
+ * One convention runs through all of it: **every size here is header-inclusive.**
+ * `transferSize` is header-inclusive by definition, and `sizeModel` is trained on
+ * header-inclusive figures from both commit paths — `settleTiming` below and
+ * `priceCompleted` in `requests.ts`, which observes `headerDown + body`. So the
+ * model's estimate is already a whole wire size and nothing may add a header block
+ * to it. `commitEstimate` used to, and every estimated request was inflated by one
+ * halved header block.
  */
 
 import { ledger, type CommitEntry } from "./ledger";
@@ -44,10 +52,22 @@ interface Pending {
   matchKey: string;
   /** Everything except the body size, which is what we are waiting for. */
   entry: CommitEntry;
-  /** Bytes of response headers already counted in `entry.down`. */
+  /**
+   * Bytes of response headers, holding `entry.down` up while the request waits.
+   *
+   * Not an addend. Both commit paths overwrite `entry.down` with a
+   * header-inclusive figure — see the convention in the module header — so this
+   * survives only as the floor under `commitEstimate`.
+   */
   headerBytes: number;
-  /** What to charge if nothing ever reports a size. */
+  /** What to charge if nothing ever reports a size. Header-inclusive. */
   estimate: number;
+  /**
+   * When it was parked, on the same wall clock `expirePending` is given.
+   *
+   * A copy of `entry.at`, not a reference to it: a backwards clock step rebases
+   * this, and `entry.at` is the timestamp the ledger files the row under.
+   */
   at: number;
   settled: boolean;
 }
@@ -82,6 +102,20 @@ let live = 0;
 /** The timer that commits parked requests when no more traffic is coming. */
 let sweep: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * The largest `now` any sweep has been handed.
+ *
+ * The TTL is measured against `Date.now()`, which is wall clock and can step
+ * backwards: an NTP correction, a manual change, a laptop resuming with a stale
+ * RTC. Then `now - pending.at` is negative for every parked entry, the age test is
+ * never true again, and the only things that can still drain the queue are
+ * `forgetTab`, `drainPending` and the cap — none of which is guaranteed to arrive
+ * for a request parked as the last thing a page does. There is no monotonic clock
+ * that survives a service-worker teardown, so the guard is to notice the step and
+ * rebase the ages onto the new reading.
+ */
+let lastSweepNow = 0;
+
 /** Drops the fragment: it is never sent, so it can only break a match. */
 export function matchableUrl(url: string): string {
   const hash = url.indexOf("#");
@@ -95,8 +129,10 @@ function matchKeyFor(tabId: number, url: string): string {
 /**
  * Parks a request whose body size is unknown.
  *
- * `entry.down` should already hold the response header bytes; the body is added
- * on settlement or on expiry.
+ * `entry.down` should already hold the response header bytes, so a request torn
+ * down before it can be committed is at least not worth zero. Both commit paths
+ * then *replace* that figure with a header-inclusive one rather than adding to it
+ * — see the convention in the module header.
  */
 export function addPending(
   entry: CommitEntry,
@@ -172,12 +208,29 @@ function unpark(pending: Pending): void {
   }
 }
 
-/** Commits a parked request with the size model's guess, and says so. */
+/**
+ * Commits a parked request with the size model's guess, and says so.
+ *
+ * The estimate *replaces* `entry.down`; it is not added to the header bytes. The
+ * model is trained on header-inclusive sizes at both of its inputs, so its output
+ * is a whole wire size — adding a header block to it charged the same headers
+ * twice and inflated every estimated request by one halved header block.
+ *
+ * The measured header block is kept as a floor. A model mean can sit below it on a
+ * host that serves tiny bodies, and pricing a request under what was watched
+ * crossing the wire is exactly the under-report `HEADER_WIRE_FACTOR` is
+ * deliberately pessimistic to avoid.
+ *
+ * `estimatedDown` is then the whole figure, including the part that came from real
+ * headers. That over-states the uncertainty by a few hundred bytes, which is the
+ * safe direction: the alternative is a request claiming a measurement it does not
+ * have.
+ */
 function commitEstimate(pending: Pending): void {
   unpark(pending);
   const entry = pending.entry;
-  entry.down = pending.headerBytes + pending.estimate;
-  entry.estimatedDown = pending.estimate;
+  entry.down = Math.max(pending.estimate, pending.headerBytes);
+  entry.estimatedDown = entry.down;
   ledger.record(entry);
 }
 
@@ -211,6 +264,19 @@ export function settleTiming(tabId: number, url: string, transferSize: number): 
 }
 
 /**
+ * Moves every parked entry's age onto a clock that has jumped backwards.
+ *
+ * The TTL is a duration, so subtracting the step from each `at` preserves the age
+ * each entry had a moment ago — an entry parked six seconds ago is still six
+ * seconds old. Only `Pending.at` is touched: `entry.at` is the timestamp the
+ * ledger keys the row by, and moving that would file the request in the wrong
+ * hour of the day chart.
+ */
+function rebaseAges(skew: number): void {
+  for (const pending of queue) pending.at -= skew;
+}
+
+/**
  * Commits requests that waited long enough, using the estimate.
  *
  * Also called with a `force` count when the queue is over its cap, in which case
@@ -218,6 +284,9 @@ export function settleTiming(tabId: number, url: string, transferSize: number): 
  * is worse than a measurement and much better than a missing request.
  */
 export function expirePending(now: number, force = 0): void {
+  if (now < lastSweepNow) rebaseAges(lastSweepNow - now);
+  lastSweepNow = now;
+
   let expired = 0;
   while (queue.length > 0) {
     const pending = queue[0];

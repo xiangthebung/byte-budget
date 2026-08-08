@@ -31,6 +31,17 @@ const SOURCE_ORDER: readonly RuleSource[] = ["limit", "optimize"];
 export interface RuleCondition {
   resourceTypes: ResourceType[];
   regexFilter?: string;
+  /**
+   * Whether `regexFilter` is matched case-sensitively. Chrome's default is `false`.
+   *
+   * Any rule that carries a pattern should state this rather than inherit it, because
+   * the extension keeps a second copy of every pattern in JavaScript and `RegExp`
+   * defaults the other way. Chrome matching case-insensitively while `packForRedirect`
+   * matches case-sensitively means Chrome performs rewrites the extension cannot
+   * recognise afterwards — the saving happens and is never counted, and no test that
+   * exercises one engine can see it.
+   */
+  isUrlFilterCaseSensitive?: boolean;
   initiatorDomains?: string[];
   excludedInitiatorDomains?: string[];
   requestDomains?: string[];

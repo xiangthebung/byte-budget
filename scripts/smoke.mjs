@@ -53,7 +53,12 @@ const PAGE = `<!doctype html>
  *
  * - A Wikimedia-shaped thumbnail URL, so a real pack pattern is tested against a real
  *   host. Playwright fulfils it, and what it is *asked for* is the observable.
- * - A beacon, which the server either receives or does not.
+ * - Two beacons. One first-party, which the server either receives or does not; one to a
+ *   known analytics host, which Playwright intercepts. `blockBeacons` is scoped by
+ *   destination, so the pair is the assertion: the analytics beacon must be refused and
+ *   the first-party one must survive. A test that only checked the first would pass just
+ *   as well against a rule that blocked every beacon on the web, which is what this used
+ *   to do — and `sendBeacon` is how a page flushes unsaved editor state on `pagehide`.
  * - An image far below the fold, which should not be fetched during the initial load.
  * - A `link rel=prefetch`, likewise.
  */
@@ -69,7 +74,10 @@ const OPTIMIZE_PAGE = `<!doctype html>
 <img id="wiki" src="${WIKI_LARGE}" alt="" width="200">
 <div style="height:6000px"></div>
 <img id="below" src="/fixture.png" alt="" width="200">
-<script>navigator.sendBeacon('/beacon', 'x');</script>
+<script>
+navigator.sendBeacon('/beacon', 'x');
+navigator.sendBeacon('https://www.google-analytics.com/collect', 'x');
+</script>
 </body></html>`;
 
 /**
@@ -1124,6 +1132,16 @@ async function main() {
       });
     });
 
+    // The analytics beacon's witness. `blockBeacons` refuses by destination, so what
+    // matters is whether this handler is ever reached — a refused request never leaves
+    // Chrome, so an empty list is the pass. The first-party `/beacon` is watched by the
+    // server's own hit log, and the two together prove the scoping in both directions.
+    const analyticsAsked = [];
+    await context.route('https://www.google-analytics.com/**', async (route) => {
+      analyticsAsked.push(route.request().url());
+      await route.fulfill({ status: 204, body: '' });
+    });
+
     // `dropHints` is off by default because a page may be prefetching something you are
      // about to want. Turned on here so it can be tested at all.
     const enabled = await ask({
@@ -1150,6 +1168,7 @@ async function main() {
     await ask({ type: 'SET_SITE_OPTIMIZE', site: '127.0.0.1', optimize: false });
     resetHits();
     wikiAsked.length = 0;
+    analyticsAsked.length = 0;
     await page.goto(`${origin}/optimized`, { waitUntil: 'load' });
     await page.waitForTimeout(3500);
     console.log('  control load asked for:', JSON.stringify(wikiAsked));
@@ -1158,8 +1177,8 @@ async function main() {
       'an unoptimized load fetches the original variant',
     );
     check(
-      hits.includes('/beacon'),
-      `and keeps its beacons (hits: ${hits.join(' ')})`,
+      hits.includes('/beacon') && analyticsAsked.length > 0,
+      `and keeps both its beacons (hits: ${hits.join(' ')}, analytics: ${analyticsAsked.length})`,
     );
     check(
       saveDataByPath.get('/optimized') !== 'on',
@@ -1190,11 +1209,13 @@ async function main() {
 
     resetHits();
     wikiAsked.length = 0;
+    analyticsAsked.length = 0;
     await page.goto(`${origin}/optimized`, { waitUntil: 'load' });
     await page.waitForTimeout(6000);
 
     console.log('  wikimedia asked for:', JSON.stringify(wikiAsked));
     console.log('  server hits while optimizing:', JSON.stringify(hits));
+    console.log('  analytics beacons that escaped:', JSON.stringify(analyticsAsked));
 
     check(
       wikiAsked.length > 0 && wikiAsked.every((url) => url.includes('/800px-')),
@@ -1209,7 +1230,14 @@ async function main() {
       saveDataByPath.get('/optimized') === 'on',
       `the document carried Save-Data: on (${saveDataByPath.get('/optimized')})`,
     );
-    check(!hits.includes('/beacon'), `the beacon was refused (hits: ${hits.join(' ')})`);
+    check(
+      analyticsAsked.length === 0,
+      `the analytics beacon was refused (escaped: ${analyticsAsked.length})`,
+    );
+    check(
+      hits.includes('/beacon'),
+      `and the page's own beacon still went (hits: ${hits.join(' ')})`,
+    );
 
     /**
      * Reported, not asserted — and that demotion is the finding, not a concession.

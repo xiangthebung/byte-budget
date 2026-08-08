@@ -10,7 +10,7 @@
 
 import { bucketRange, getAll, STORES } from "../core/db";
 import type { SavingsReport } from "../core/messages";
-import { dayKey, dayKeysInRange, startOfDay } from "../core/period";
+import { addDays, dayKey, dayKeysInRange } from "../core/period";
 import { getSettings } from "../core/settings";
 import type { UsageRow } from "../core/types";
 import { getOptimizeSettings } from "./features";
@@ -19,7 +19,10 @@ import { baselineCount, visitDeltas } from "./savings";
 export async function savingsReport(days: number): Promise<SavingsReport> {
   const to = dayKey();
   const span = Math.max(1, days);
-  const from = shiftDay(to, -(span - 1));
+  // `addDays` from `core/period`, not a fourth local copy of "shift YYYY-MM-DD by N".
+  // There were four; this one was a verbatim duplicate of the one in `track/stats.ts`,
+  // and the tested implementation is the one in `core/period.ts`.
+  const from = addDays(to, -(span - 1));
 
   const rows = await getAll<UsageRow>(STORES.daily, bucketRange(from, to));
   let saved = 0;
@@ -36,6 +39,9 @@ export async function savingsReport(days: number): Promise<SavingsReport> {
   }
 
   const deltas = await visitDeltas([...sites], span);
+  // Only sites whose saving can be told apart from zero appear in `deltas` at all, so
+  // this is a sum over differences that survived their own confidence interval — not
+  // over every site that happened to have samples on both sides.
   const deltaTotal = deltas.reduce((total, delta) => total + delta.savedTotal, 0);
 
   return {
@@ -51,12 +57,6 @@ export async function savingsReport(days: number): Promise<SavingsReport> {
     settings: await getSettings(),
     optimize: await getOptimizeSettings(),
   };
-}
-
-function shiftDay(day: string, offset: number): string {
-  const date = startOfDay(day);
-  date.setDate(date.getDate() + offset);
-  return dayKey(date);
 }
 
 /** Exported for the dashboard's chart, which wants the same window. */

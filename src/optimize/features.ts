@@ -61,7 +61,7 @@ export const FEATURES: readonly FeatureInfo[] = [
     id: "blockBeacons",
     label: "Drop analytics beacons",
     description:
-      "Refuses fire-and-forget tracking pings. They are small individually and constant in aggregate, and nothing on the page waits for them.",
+      "Refuses fire-and-forget pings to known analytics services. Small individually, constant in aggregate. Beacons to the site itself are left alone — a page also uses them to save your work as you leave it.",
     visibility: "invisible",
     defaultOn: true,
   },

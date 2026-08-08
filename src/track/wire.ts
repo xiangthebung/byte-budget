@@ -117,6 +117,20 @@ export interface AttributionDetails {
 }
 
 /**
+ * The site of whatever asked for a request, read from its `initiator`.
+ *
+ * `""` when there is nothing to read, which is the whole reason `#background`
+ * exists: a browser-internal fetch carries no initiator at all, and an opaque
+ * origin — a sandboxed frame, a `data:` document — stringifies to the literal
+ * `"null"`, which `hostFromUrl` rejects along with every other non-http(s) scheme.
+ */
+function initiatorSite(initiator: string | undefined): string {
+  if (initiator === undefined) return "";
+  const host = hostFromUrl(initiator);
+  return host ? siteKeyFromHost(host) : "";
+}
+
+/**
  * Which site a request's bytes belong to.
  *
  * A top-level document is resolved from its own URL rather than from the tab,
@@ -125,10 +139,18 @@ export interface AttributionDetails {
  * against each other. Reading the URL removes the race instead of losing to it
  * half the time.
  *
- * A subresource on a tab nobody has seen commit anything goes to `#background`
- * rather than to its own host. Charging `fonts.gstatic.com` as a website someone
- * visited would be a plausible-looking invention, and the reserved bucket is
- * visible in the UI rather than silent.
+ * When no tab can name the site, `initiator` decides. That is *not* the same as
+ * charging the request to its own host: `initiator` is the origin of the document
+ * that asked, so a font from `fonts.gstatic.com` still lands on the page's row,
+ * and naming `fonts.gstatic.com` as a website someone visited would remain the
+ * plausible-looking invention it always was. The case this catches is a site whose
+ * service worker re-issues its fetches — `tabId` is -1, the initiator is the page
+ * origin — and those bytes used to go to `#background`, where they missed the site
+ * row, missed `addTabBytes`, and reached the governor under a key no per-site
+ * budget can ever match.
+ *
+ * The tab wins over the initiator where both are known: the tab record is the
+ * committed top-level page, while an initiator can be a subframe's origin.
  */
 export function attributeSite(
   details: AttributionDetails,
@@ -140,7 +162,8 @@ export function attributeSite(
     return host ? siteKeyFromHost(host) : BACKGROUND_SITE;
   }
   if (details.tabId >= 0) {
-    return lookupTabSite(details.tabId) ?? BACKGROUND_SITE;
+    const tabSite = lookupTabSite(details.tabId);
+    if (tabSite) return tabSite;
   }
-  return BACKGROUND_SITE;
+  return initiatorSite(details.initiator) || BACKGROUND_SITE;
 }

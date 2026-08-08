@@ -7,6 +7,12 @@
  * being yanked around by one outlier — because this number is what a blocked
  * request will later be credited as having saved, and an outlier-driven mean would
  * turn one 40 MB video segment into a fictional saving on every blocked thumbnail.
+ *
+ * That applies to the first sample as much as the fortieth: a cold key used to take
+ * whatever arrived at face value, so a HEAD probe or an error page defined the key
+ * outright. The clamp tests below pin that, and pin the other half of it — that an
+ * ordinary first sample is still adopted exactly, or the model would just be the
+ * defaults with extra steps.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -30,6 +36,65 @@ test("one observation is taken at face value", () => {
   model.observe("example.com", "image", 12_345);
   assert.equal(model.estimate("example.com", "image"), 12_345);
   assert.ok(model.confidence("example.com", "image") > 0);
+});
+
+test("an ordinary first sample is adopted exactly, across types", () => {
+  // The band around the default has to be wide enough that every size a real host
+  // actually serves passes through untouched. If any of these moved, the clamp is
+  // too tight and the model has been replaced by its own fallbacks.
+  const model = new SizeModel();
+  model.observe("example.com", "image", 4_000);
+  model.observe("example.com", "script", 310_000);
+  model.observe("cdn.example.com", "media", 6_500_000);
+  model.observe("api.example.com", "xmlhttprequest", 500);
+  assert.equal(model.estimate("example.com", "image"), 4_000);
+  assert.equal(model.estimate("example.com", "script"), 310_000);
+  assert.equal(model.estimate("cdn.example.com", "media"), 6_500_000);
+  assert.equal(model.estimate("api.example.com", "xmlhttprequest"), 500);
+});
+
+test("one unrepresentative first sample cannot define a cold key", () => {
+  // A HEAD probe against a large file books its declared Content-Length and is
+  // trained on. Before the clamp this set the mean outright, and that mean then
+  // priced every blocked request and every cache hit on the host — which is the
+  // estimated half of the savings figure and all of the cache-avoided column.
+  //
+  // The bounds are deliberately loose: what must hold is that the first sample is
+  // held to the neighbourhood of the per-type prior, not any particular ratio.
+  const probed = new SizeModel();
+  probed.observe("files.example.com", "other", 60_000_000);
+  const other = probed.estimate("files.example.com", "other");
+  assert.ok(other > DEFAULT_SIZES.other, "the sample is still allowed to move the key");
+  assert.ok(
+    other < DEFAULT_SIZES.other * 100,
+    `one 60 MB probe defined a cold key at ${other} bytes`,
+  );
+
+  // And downwards: a 302 or an error page must not price every blocked segment on
+  // a video host at a few hundred bytes.
+  const errored = new SizeModel();
+  errored.observe("cdn.example.com", "media", 512);
+  const media = errored.estimate("cdn.example.com", "media");
+  assert.ok(media < DEFAULT_SIZES.media, "the sample is still allowed to move the key");
+  assert.ok(media > DEFAULT_SIZES.media / 100, `one error page defined a cold key at ${media}`);
+});
+
+test("the clamp delays a genuinely heavy host, it does not cap it", () => {
+  // The prior is an order of magnitude, not a verdict. A host that really does
+  // serve 40 MB segments has to arrive there, or the clamp would understate every
+  // saving on the heaviest sites — the ones a metered user most needs counted.
+  const model = new SizeModel();
+  for (let index = 0; index < 12; index++) model.observe("video.example.com", "media", 40_000_000);
+  const after = model.estimate("video.example.com", "media");
+  assert.ok(after > 30_000_000, `expected the mean to reach the real size, got ${after}`);
+});
+
+test("a zero prior leaves the first sample alone", () => {
+  // `websocket` is 0 on purpose, so there is no order of magnitude to clamp
+  // against; a zero-width band would pin the key at zero for ever.
+  const model = new SizeModel();
+  model.observe("ws.example.com", "websocket", 1_200);
+  assert.equal(model.estimate("ws.example.com", "websocket"), 1_200);
 });
 
 test("the mean settles towards what a host actually serves", () => {

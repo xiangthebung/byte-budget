@@ -188,18 +188,50 @@ test("no holdout before there is anything to compare against", () => {
   assert.equal(decision.reason, "too-few-optimized");
 });
 
-test("the first controls are taken deterministically, then sampled", () => {
+test("the bootstrap control is drawn from across the day, not always the first load", () => {
   const site = "sampled.example";
   for (let index = 0; index < 5; index++) noteVisitOutcome(site, true);
   assert.deepEqual(holdoutStats(site), { optimized: 5, control: 0 });
 
-  // Below the minimum sample count, waiting for a 10% coin would leave the figure
-  // unavailable for weeks on a site visited twice a day.
-  const first = decideHoldout(site, on(), new Date(2026, 6, 31), never);
+  // Below the minimum sample count the draw is "choose one of four uniformly from a
+  // stream": a quarter at the first eligible load of the day, a third at the second, a
+  // half at the third, certainty at the fourth. A coin under every threshold takes the
+  // first load.
+  const first = decideHoldout(site, on(), new Date(2026, 6, 31), always);
   assert.equal(first.hold, true);
   assert.equal(first.reason, "needs-control");
+});
 
-  // Three controls in, on different days, and it drops to the configured rate.
+test("a control not drawn early is certain by the fourth load of the day", () => {
+  // This is the property that replaced taking the first eligible load outright. That
+  // version made a site's first three controls its first-of-day loads on three
+  // different days -- cold HTTP cache, cold service worker, an authentication
+  // bootstrap -- so the control arm was heavy for reasons the optimizer had nothing to
+  // do with, and the comparison reported the shape of the day as a saving. Spreading
+  // the draw costs a day or two longer to the first figure and buys a control group
+  // that is comparable to the treatment group.
+  const site = "spread.example";
+  for (let index = 0; index < 5; index++) noteVisitOutcome(site, true);
+  const today = new Date(2026, 6, 31);
+
+  // 0.9 clears none of 1/4, 1/3 or 1/2, so the first three loads stay optimized.
+  const late = () => 0.9;
+  assert.equal(decideHoldout(site, on(), today, late).reason, "not-sampled");
+  assert.equal(decideHoldout(site, on(), today, late).reason, "not-sampled");
+  assert.equal(decideHoldout(site, on(), today, late).reason, "not-sampled");
+
+  // The fourth is certain, which is what stops a site visited twice a day from never
+  // producing a control at all -- the reason the deterministic version existed.
+  const fourth = decideHoldout(site, on(), today, late);
+  assert.equal(fourth.hold, true);
+  assert.equal(fourth.reason, "needs-control");
+});
+
+test("once there are enough controls the configured rate takes over", () => {
+  const site = "rate.example";
+  for (let index = 0; index < 5; index++) noteVisitOutcome(site, true);
+
+  // Three controls in, on different days, and the bootstrap stops applying.
   noteVisitOutcome(site, false, new Date(2026, 6, 20).getTime());
   noteVisitOutcome(site, false, new Date(2026, 6, 21).getTime());
   noteVisitOutcome(site, false, new Date(2026, 6, 22).getTime());

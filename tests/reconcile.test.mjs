@@ -15,7 +15,9 @@
  * - a measurement beats an estimate, and an estimate is labelled as one;
  * - a request is committed exactly once;
  * - the cap is measured against requests still waiting, not against the ones
- *   already dealt with.
+ *   already dealt with;
+ * - sizes are header-inclusive on both commit paths, so no request is charged for
+ *   its headers twice.
  *
  * The ledger and the size model are stubbed on their singletons rather than
  * injected. They are singletons in the source because the worker has exactly one of
@@ -123,7 +125,12 @@ test("a request nobody measured is committed with the estimate, and says so", (t
 
   expirePending(parkedAt + 8000);
   assert.deepEqual(committed, [entry]);
-  assert.equal(entry.down, 50_300, "header bytes plus the estimated body");
+  // The estimate *replaces* the header bytes rather than being added to them. The
+  // size model is trained on header-inclusive figures at both of its inputs —
+  // `transferSize` below, and `headerDown + body` in `requests.ts` — so its output
+  // is a whole wire size. Adding 300 back on top charged the same header block
+  // twice on every estimated request.
+  assert.equal(entry.down, 50_000, "header-inclusive, not headers plus a body estimate");
   assert.equal(
     entry.estimatedDown,
     50_000,
@@ -132,6 +139,52 @@ test("a request nobody measured is committed with the estimate, and says so", (t
   // A guess is not an observation, and feeding it back would train the model on
   // its own output.
   assert.deepEqual(observed, []);
+});
+
+test("an estimate below the measured header block is floored, not shrunk", (t) => {
+  t.after(reset);
+  reset();
+
+  // The headers are the one part of a parked request that was actually counted, and
+  // a model mean can sit under them on a host that serves tiny bodies. Pricing the
+  // request below what was watched crossing the wire is the under-report the
+  // halving factor is deliberately pessimistic to avoid.
+  const entry = park({ headers: 900, estimate: 200 });
+  drainPending();
+
+  assert.equal(entry.down, 900);
+  // Reported as estimated in full, including the part that came from real headers:
+  // over-stating the uncertainty by a few hundred bytes is the safe direction, and
+  // the alternative is a request claiming a measurement it does not have.
+  assert.equal(entry.estimatedDown, 900);
+});
+
+test("a clock that steps backwards does not park a request forever", (t) => {
+  t.after(reset);
+  reset();
+
+  // The TTL is measured against `Date.now()`, which is wall clock: an NTP
+  // correction, a manual change, or a laptop resuming with a stale RTC moves it
+  // backwards. `now - at` then goes negative for every parked entry, the age test
+  // is never true again, and the only things left that can drain the queue are a
+  // tab closing, a teardown, and the cap — none of which is guaranteed to arrive
+  // for a request parked as the last thing a page does.
+  const entry = park({ headers: 300, estimate: 50_000 });
+  const parkedAt = entry.at;
+
+  expirePending(parkedAt + 5000);
+  assert.equal(pendingCount(), 1, "five seconds is not the eight-second wait");
+
+  // The clock jumps back an hour. The entry is five seconds old and must still be
+  // five seconds old — the step is not a reason to commit it early either.
+  expirePending(parkedAt - 3_600_000);
+  assert.equal(pendingCount(), 1, "rebased, not expired");
+  assert.equal(committed.length, 0);
+
+  // Three more seconds on the new clock takes it past the TTL.
+  expirePending(parkedAt - 3_600_000 + 3100);
+  assert.deepEqual(committed, [entry], "aged from the new reading rather than stranded");
+  assert.equal(pendingCount(), 0);
 });
 
 test("a settled request is never committed twice", (t) => {

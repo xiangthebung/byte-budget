@@ -4,7 +4,8 @@
  * The arithmetic exists because Chrome does not report a response size, so this is
  * where a wrong number would come from. Two properties matter more than the exact
  * figures: an absent `Content-Length` must be distinguishable from a zero-length
- * body, and attribution must never invent a website nobody visited.
+ * body, and attribution must name the site that *asked* for a request — never the
+ * host that served it, which would be a website nobody visited.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -87,6 +88,10 @@ test("response header bytes fall back to a plausible status line", () => {
 });
 
 test("statuses and methods that cannot carry a body are not parked", () => {
+  // `priceCompleted` consults this *before* `Content-Length`. It used to be the
+  // other way round, and a HEAD declares the size of the body it is deliberately
+  // not sending — so one HEAD against a 60 MB file booked 60 MB of traffic and, on
+  // a cold key, became the mean pricing every blocked request on that host.
   assert.equal(bodyImpossible(204, "GET"), true);
   assert.equal(bodyImpossible(205, "GET"), true);
   assert.equal(bodyImpossible(304, "GET"), true);
@@ -115,15 +120,80 @@ test("a subresource is attributed to the tab's site", () => {
   assert.equal(site, "youtube.com");
 });
 
+test("a tabless request is attributed to the origin that asked for it", () => {
+  // A site's service worker re-issuing its page's fetches: `tabId` is -1, and the
+  // initiator is the page origin. These used to land in `#background`, where they
+  // missed the site row, missed `addTabBytes`, and reached the governor under a key
+  // no per-site budget can match — so a site could sit over its cap indefinitely by
+  // routing through its worker.
+  assert.equal(
+    attributeSite(
+      {
+        tabId: -1,
+        type: "xmlhttprequest",
+        url: "https://api.someone-else.net/x",
+        initiator: "https://www.shop.example.co.uk",
+      },
+      () => "a.com",
+    ),
+    "example.co.uk",
+  );
+
+  // The same fallback for a tab nobody has seen commit anything yet.
+  assert.equal(
+    attributeSite(
+      { tabId: 9, type: "image", url: "https://cdn.someone-else.net/a.png", initiator: "https://news.bbc.co.uk" },
+      () => undefined,
+    ),
+    "bbc.co.uk",
+  );
+});
+
+test("a known tab outranks the initiator", () => {
+  // The tab record is the committed top-level page; an initiator can be a
+  // subframe's origin, and a subframe's bytes are part of what the page costs.
+  assert.equal(
+    attributeSite(
+      {
+        tabId: 7,
+        type: "script",
+        url: "https://cdn.someone-else.net/a.js",
+        initiator: "https://ads.example.org",
+      },
+      () => "youtube.com",
+    ),
+    "youtube.com",
+  );
+});
+
 test("attribution never invents a site nobody visited", () => {
-  // Unknown tab: the request's own host would be a plausible-looking lie.
+  // Unknown tab and nothing that asked: the request's own host would be a
+  // plausible-looking lie.
   assert.equal(
     attributeSite({ tabId: 9, type: "font", url: "https://fonts.gstatic.com/f.woff2" }, () => undefined),
     "#background",
   );
-  // No tab at all: a service worker, a prefetch, or the browser itself.
+  // No tab and no initiator: the browser itself, or a prefetch it decided on. This
+  // is the case the fallback above must not swallow.
   assert.equal(
     attributeSite({ tabId: -1, type: "xmlhttprequest", url: "https://api.example.com/x" }, () => "a.com"),
+    "#background",
+  );
+  // An opaque origin — a sandboxed frame, a `data:` document — stringifies to the
+  // literal "null", which names no site.
+  assert.equal(
+    attributeSite(
+      { tabId: -1, type: "image", url: "https://cdn.example.com/a.png", initiator: "null" },
+      () => "a.com",
+    ),
+    "#background",
+  );
+  // Neither does a non-http(s) initiator.
+  assert.equal(
+    attributeSite(
+      { tabId: -1, type: "other", url: "https://example.com/x", initiator: "chrome://newtab" },
+      () => "a.com",
+    ),
     "#background",
   );
   // Another extension's traffic is its own bucket, not the page's.

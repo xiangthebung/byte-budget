@@ -38,20 +38,91 @@
    * Deferring an image the reader is one flick away from is a worse trade than the
    * bytes are worth: it arrives late and visibly. Two screens of margin means normal
    * scrolling never waits.
+   *
+   * Read once rather than per element, because it is also an `IntersectionObserver`
+   * `rootMargin`, which is fixed at construction. Rebuilding the observers on every
+   * resize would cost more than the precision is worth; two screens of slack absorbs
+   * the difference between the viewport this page opened at and the one it ends at.
    */
-  const NEAR_VIEWPORT_PX = () => Math.max(1200, innerHeight * 2);
+  const NEAR_VIEWPORT_PX = Math.max(1200, innerHeight * 2);
 
-  function isFarBelow(element: Element): boolean {
-    const rect = element.getBoundingClientRect();
-    // A zero-height element has not been laid out yet; treat it as unknown rather than
-    // as offscreen, or a whole page of not-yet-sized images would be deferred.
-    if (rect.height === 0 && rect.width === 0) return false;
-    return rect.top > NEAR_VIEWPORT_PX();
+  /* ---------------------------------------------------------------- *
+   * Geometry
+   * ---------------------------------------------------------------- */
+
+  /**
+   * Every geometry question the optimizers ask, answered from the frame the browser
+   * was going to lay out anyway.
+   *
+   * Calling `getBoundingClientRect()` from a sweep that has just written `loading`,
+   * `preload` and `sizes` forces a synchronous layout, once per pass, on every page —
+   * which was this script's entire measurable cost. `entry.boundingClientRect` is the
+   * same number without the interleaved write-then-read, and the observer re-delivers
+   * it when it changes, which is what removed the need to re-sweep the document.
+   *
+   * Two observers rather than one because the two jobs finish at different moments: an
+   * image is done being measured as soon as it has been steered or has committed to a
+   * source, while a deferral candidate is done as soon as it has a box to judge.
+   */
+  const rootMargin = `${NEAR_VIEWPORT_PX}px 0px`;
+  const sizeObserver = new IntersectionObserver(onSized, { rootMargin });
+  const deferObserver = new IntersectionObserver(onPlaced, { rootMargin });
+
+  function watchSize(image: HTMLImageElement): void {
+    if (!sizedImages.has(image)) sizeObserver.observe(image);
+  }
+
+  function watchDefer(element: Element): void {
+    deferObserver.observe(element);
+  }
+
+  function onSized(entries: IntersectionObserverEntry[]): void {
+    for (const entry of entries) {
+      const image = entry.target;
+      if (!(image instanceof HTMLImageElement)) {
+        sizeObserver.unobserve(entry.target);
+        continue;
+      }
+      if (trimSrcset(image, entry.boundingClientRect.width)) sizeObserver.unobserve(image);
+    }
+  }
+
+  function onPlaced(entries: IntersectionObserverEntry[]): void {
+    for (const entry of entries) {
+      const rect = entry.boundingClientRect;
+      // A zero-area box has not been laid out yet; treat it as unknown rather than as
+      // offscreen, or a whole page of not-yet-sized images would be deferred. Stay
+      // observed: the notification that arrives with a box is the one that decides.
+      if (rect.width === 0 && rect.height === 0) continue;
+
+      const target = entry.target;
+      deferObserver.unobserve(target);
+      // `top` alone, as it was when this read `getBoundingClientRect()` directly.
+      // `isIntersecting` would also catch what is above the fold — already fetched, so
+      // deferring it does nothing — and what is off to the side, which is usually a
+      // carousel slide one swipe rather than one scroll away.
+      if (rect.top <= NEAR_VIEWPORT_PX) continue;
+
+      if (target instanceof HTMLMediaElement) tameMedia(target);
+      else if (target instanceof HTMLImageElement || target instanceof HTMLIFrameElement) {
+        lazyOffscreen(target);
+      }
+    }
   }
 
   /* ---------------------------------------------------------------- *
    * trimSrcset
    * ---------------------------------------------------------------- */
+
+  /**
+   * Which images have already been steered.
+   *
+   * A `WeakSet` in the isolated world, not a `data-` attribute on the element. The flag
+   * used to live in the page's own DOM, where any page could render
+   * `data-byte-budget-sized="1"` on every image and switch this feature off for its
+   * whole site with nothing anywhere reporting that it had happened.
+   */
+  const sizedImages = new WeakSet<HTMLImageElement>();
 
   /**
    * Rewrites `sizes` so the browser picks a candidate for the space the image
@@ -62,15 +133,27 @@
    * responsive image with its options deleted cannot recover. Setting `sizes` to the
    * measured width steers the same selection algorithm at a smaller answer, and the
    * page can still override it.
+   *
+   * `width` comes from an observer entry rather than a fresh rect read, and the return
+   * value says whether this image has been settled or should keep being measured.
    */
-  function trimSrcset(image: HTMLImageElement): void {
-    if (!image.srcset || image.dataset.byteBudgetSized === "1") return;
-    const width = Math.round(image.getBoundingClientRect().width || image.width);
-    if (width <= 0) return;
+  function trimSrcset(image: HTMLImageElement, width: number): boolean {
+    if (sizedImages.has(image) || !image.srcset) return true;
+    // Writing `sizes` re-runs source selection. On an image that has already chosen, a
+    // newly selected candidate that is not in the memory cache starts a SECOND
+    // transfer — so a feature whose whole point is fetching less would fetch the large
+    // one and then the small one as well. Only an image that has not committed yet can
+    // be steered, which in practice means the page's own `loading="lazy"` images below
+    // the fold. This guard is also why there is no second full sweep on `load`.
+    if (image.complete || image.currentSrc) return true;
     // Descriptor-based srcsets (`2x`) are chosen by DPR alone and ignore `sizes`.
-    if (!/\d+w(?:\s*,|\s*$)/.test(image.srcset)) return;
-    image.dataset.byteBudgetSized = "1";
-    image.sizes = `${width}px`;
+    if (!/\d+w(?:\s*,|\s*$)/.test(image.srcset)) return true;
+    const measured = Math.round(width || image.width);
+    // Not laid out yet rather than invisible; keep it observed and decide later.
+    if (measured <= 0) return false;
+    sizedImages.add(image);
+    image.sizes = `${measured}px`;
+    return true;
   }
 
   /* ---------------------------------------------------------------- *
@@ -78,7 +161,7 @@
    * ---------------------------------------------------------------- */
 
   function lazyOffscreen(element: HTMLImageElement | HTMLIFrameElement): void {
-    if (element.loading === "lazy" || !isFarBelow(element)) return;
+    if (element.loading === "lazy") return;
     element.loading = "lazy";
     if (element instanceof HTMLImageElement) element.decoding = "async";
   }
@@ -95,7 +178,6 @@
    */
   function tameMedia(media: HTMLMediaElement): void {
     if (!media.paused || media.currentTime > 0) return;
-    if (!isFarBelow(media)) return;
     if (media.preload !== "none") media.preload = "none";
     if (media.autoplay) media.autoplay = false;
   }
@@ -113,8 +195,33 @@
     onMediaClick: EventListener;
   }
 
-  const gatedMedia = new Map<HTMLMediaElement, MediaGateState>();
+  /**
+   * A `WeakMap`, so a gated element that the page later discards takes its captured
+   * sources and its button with it instead of being pinned for the life of the tab.
+   * Nothing iterates this; every use is a lookup by element.
+   */
+  const gatedMedia = new WeakMap<HTMLMediaElement, MediaGateState>();
   const allowedMedia = new WeakSet<HTMLMediaElement>();
+
+  /** URL schemes that name something inside this document rather than something to fetch. */
+  const SYNTHETIC_SRC = /^(?:blob|data|mediastream):/i;
+
+  /**
+   * Whether the element's sources are handles rather than addresses.
+   *
+   * `srcObject` is the same question in its other spelling, and is checked beside every
+   * call to this.
+   */
+  function hasSyntheticSource(media: HTMLMediaElement): boolean {
+    const src = media.getAttribute("src");
+    if (src !== null && SYNTHETIC_SRC.test(src.trim())) return true;
+    if (media.currentSrc !== "" && SYNTHETIC_SRC.test(media.currentSrc)) return true;
+    for (const source of media.querySelectorAll<HTMLSourceElement>("source[src]")) {
+      const value = source.getAttribute("src");
+      if (value !== null && SYNTHETIC_SRC.test(value.trim())) return true;
+    }
+    return false;
+  }
 
   function restoreAttribute(element: Element, name: string, value: string | null): void {
     if (value === null) element.removeAttribute(name);
@@ -194,16 +301,24 @@
     allowedMedia.add(media);
     gatedMedia.delete(media);
     media.removeEventListener("click", state.onMediaClick, true);
-    restoreAttribute(media, "src", state.src);
+    // Put back only what is still missing. A player that attached its own source while
+    // the gate was up owns the element now, and writing the captured string over it
+    // would hand it a URL that no longer resolves to anything.
+    if (media.getAttribute("src") === null) restoreAttribute(media, "src", state.src);
     for (const [source, src] of state.sources) {
-      if (source.isConnected) source.setAttribute("src", src);
+      if (source.isConnected && source.getAttribute("src") === null) {
+        source.setAttribute("src", src);
+      }
     }
     restoreAttribute(media, "preload", state.preload);
     restoreAttribute(media, "autoplay", state.autoplay);
     state.host.remove();
 
     try {
-      media.load();
+      // `load()` resets the element onto the sources just restored. Skipped when the
+      // page attached a MediaSource in the meantime, because there `load()` tears the
+      // stream down and the player is given no way to find out.
+      if (!media.srcObject && !hasSyntheticSource(media)) media.load();
       void media.play().catch(() => {
         // Autoplay policy or the page may refuse play. Sources and native controls are
         // restored, so the reader can still use the site's own play control.
@@ -214,7 +329,19 @@
   }
 
   function gateMedia(media: HTMLMediaElement): void {
-    if (allowedMedia.has(media) || media.srcObject || !media.paused || media.currentTime > 0) return;
+    if (allowedMedia.has(media) || !media.paused || media.currentTime > 0) return;
+    // `srcObject` and a `blob:`/`data:`/`mediastream:` `src` are one situation in two
+    // spellings: a handle to an object in this document, not an address that can be
+    // asked for again. Every MSE player — hls.js, dash.js, Shaka, video.js — assigns
+    // `URL.createObjectURL(mediaSource)` to `video.src`, which reflects into the
+    // attribute while the element is still paused at currentTime 0, so it arrives here
+    // looking exactly like a gateable video. Taking the attribute away and calling
+    // `load()` transitions the MediaSource to `closed`; handing the string back later
+    // restores a dead handle, and "Load video" produces a permanently broken player
+    // rather than a paused one. The try/catch below cannot save it, because `load()`
+    // succeeds — destructively. There is nothing to hold here in any case: the transfer
+    // belongs to the player's own fetches, which no page-side gate can reach.
+    if (media.srcObject || hasSyntheticSource(media)) return;
 
     const existing = gatedMedia.get(media);
     if (existing) {
@@ -278,30 +405,42 @@
    * Sweeping
    * ---------------------------------------------------------------- */
 
+  /**
+   * Runs `fn` over `root` itself and every match beneath it.
+   *
+   * The incremental path passes one added element, never the document. Re-querying the
+   * whole document on every mutation is what made this script cost a full-page
+   * `querySelectorAll` per frame on a feed that never stops appending — and an added
+   * node is not returned by its own `querySelectorAll`, which is what the `matches`
+   * line is for.
+   */
+  function each<T extends Element>(
+    root: ParentNode,
+    selector: string,
+    fn: (element: T) => void,
+  ): void {
+    if (root instanceof Element && root.matches(selector)) fn(root as T);
+    for (const element of root.querySelectorAll(selector)) fn(element as T);
+  }
+
   function apply(root: ParentNode): void {
     if (active.has("dropHints")) {
-      for (const link of root.querySelectorAll<HTMLLinkElement>("link[rel]")) dropHint(link);
+      each<HTMLLinkElement>(root, "link[rel]", dropHint);
     }
     if (active.has("trimSrcset")) {
-      for (const image of root.querySelectorAll<HTMLImageElement>("img[srcset]")) {
-        trimSrcset(image);
-      }
+      each<HTMLImageElement>(root, "img[srcset]", watchSize);
     }
     if (active.has("lazyOffscreen")) {
-      for (const node of root.querySelectorAll<HTMLImageElement | HTMLIFrameElement>(
+      each<HTMLImageElement | HTMLIFrameElement>(
+        root,
         "img:not([loading]), iframe:not([loading])",
-      )) {
-        lazyOffscreen(node);
-      }
+        watchDefer,
+      );
     }
     if (active.has("clickToLoadMedia")) {
-      for (const media of root.querySelectorAll<HTMLMediaElement>("video, audio")) {
-        gateMedia(media);
-      }
+      each<HTMLMediaElement>(root, "video, audio", gateMedia);
     } else if (active.has("tameMedia")) {
-      for (const media of root.querySelectorAll<HTMLMediaElement>("video, audio")) {
-        tameMedia(media);
-      }
+      each<HTMLMediaElement>(root, "video, audio", watchDefer);
     }
   }
 
@@ -309,31 +448,31 @@
     if (started || active.size === 0) return;
     started = true;
 
+    // One full-document pass, because the parser has already inserted whatever it got
+    // through while the worker was answering. There is deliberately no second pass on
+    // `load`: re-sweeping a finished document is how `trimSrcset` came to write `sizes`
+    // on images that had already completed, which re-runs source selection and can pay
+    // for the same picture twice. Layout that is not final yet belongs to the observers
+    // above, not to another sweep.
     apply(document);
 
-    // Modern apps add and retarget media after the initial parse. Media sources are
-    // held in the mutation callback so they do not get a full animation frame to
-    // begin loading; the less time-sensitive optimizers still share one batched pass.
-    let queued = false;
-    const queueSweep = (): void => {
-      if (queued) return;
-      queued = true;
-      requestAnimationFrame(() => {
-        queued = false;
-        apply(document);
-      });
-    };
+    // Modern apps add and retarget media after the initial parse. This runs in the
+    // mutation callback rather than a batched animation frame because every one of
+    // these decisions expires within a microtask or two: a `<link rel=preload>` is
+    // acted on the moment it lands, an `<img srcset>` picks its candidate in the
+    // microtask after insertion, and a media element left holding its source for a
+    // frame has already begun fetching it. What keeps that affordable is the scope —
+    // the added subtree, not the document.
     const observer = new MutationObserver((mutations) => {
-      let needsSweep = false;
       for (const mutation of mutations) {
-        if (mutation.type === "childList") needsSweep = true;
-        if (!active.has("clickToLoadMedia")) continue;
-
         if (mutation.type === "attributes") {
-          if (mutation.target instanceof HTMLMediaElement) {
-            gateMedia(mutation.target);
-          } else if (mutation.target instanceof HTMLSourceElement) {
-            const media = mutation.target.closest("video, audio");
+          // Only clickToLoadMedia asks for attribute records, and only for the three
+          // that can hand a media element a new source.
+          const target = mutation.target;
+          if (target instanceof HTMLMediaElement) {
+            gateMedia(target);
+          } else if (target instanceof HTMLSourceElement) {
+            const media = target.closest("video, audio");
             if (media instanceof HTMLMediaElement) gateMedia(media);
           }
           continue;
@@ -341,17 +480,16 @@
 
         for (const added of mutation.addedNodes) {
           if (!(added instanceof Element)) continue;
-          if (added instanceof HTMLMediaElement) gateMedia(added);
-          if (added instanceof HTMLSourceElement) {
+          apply(added);
+          if (active.has("clickToLoadMedia") && added instanceof HTMLSourceElement) {
+            // A `<source>` appended to a media element that is already in the document:
+            // the element to gate is above the added node, so no sweep rooted at the
+            // added node can reach it.
             const media = added.closest("video, audio");
             if (media instanceof HTMLMediaElement) gateMedia(media);
           }
-          for (const media of added.querySelectorAll<HTMLMediaElement>("video, audio")) {
-            gateMedia(media);
-          }
         }
       }
-      if (needsSweep) queueSweep();
     });
     observer.observe(document.documentElement, {
       childList: true,
@@ -359,10 +497,6 @@
       attributes: active.has("clickToLoadMedia"),
       attributeFilter: active.has("clickToLoadMedia") ? ["src", "preload", "autoplay"] : undefined,
     });
-
-    // `srcset` and offscreen decisions depend on layout, which is not final at
-    // document_start. One more pass once it is.
-    addEventListener("load", () => apply(document), { once: true });
   }
 
   try {

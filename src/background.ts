@@ -61,7 +61,7 @@ import { ruleCounts } from "./rules/session";
 import { sizeModel } from "./track/estimate";
 import { ledger, pruneOldRows } from "./track/ledger";
 import { drainPending, expirePending, forgetTab, settleTiming } from "./track/reconcile";
-import { registerRequestListeners } from "./track/requests";
+import { registerRequestListeners, sweepUploads } from "./track/requests";
 import { siteKeyFromUrl } from "./core/sites";
 import {
   closeTab,
@@ -297,6 +297,10 @@ async function maintenance(): Promise<void> {
   // And what keeps the holdout counts honest: they are read synchronously when a
   // navigation starts, so they cannot be fetched on demand.
   await refreshHoldoutStats();
+  // The upload mirror is the one store nothing else revisits. A large upload that is
+  // cancelled, or whose tab dies mid-body, leaves an entry no completion event will
+  // ever claim — bounded by the browser session, but only because this sweeps it.
+  await sweepUploads();
   await updateBadge();
 }
 

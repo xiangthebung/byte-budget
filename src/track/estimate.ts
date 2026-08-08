@@ -14,11 +14,12 @@
  * follow within a few dozen samples, not average the two forever.
  */
 
-import { getAll, put, putMany, remove, STORES } from "../core/db";
+import { getAll, put, putMany, removeMany, STORES } from "../core/db";
 import type { ResourceType, SizeSample } from "../core/types";
 
 /**
- * Fallbacks for a `host|type` never seen before.
+ * Fallbacks for a `host|type` never seen before, and the band a cold key's first
+ * sample is held to — see `FIRST_SAMPLE_RATIO`.
  *
  * Order-of-magnitude figures, not measurements, and chosen to be unsurprising
  * rather than flattering: `media` is deliberately not the size of a whole video,
@@ -57,11 +58,37 @@ const MAX_WEIGHT = 40;
  */
 const OUTLIER_RATIO = 8;
 
+/**
+ * How far a cold key's first sample may sit from its per-type default.
+ *
+ * A cold key used to take its first sample at face value, which meant one
+ * unrepresentative response defined the key for good: a HEAD probe against a 60 MB
+ * file (`priceCompleted` trains on the declared length), a 302, an error page. That
+ * one number then priced every blocked request and every cache hit on the host —
+ * the estimated half of the savings figure and the whole "cache avoided" column.
+ *
+ * Wider than `OUTLIER_RATIO` because there is nothing observed to disagree with
+ * yet: the default is an order-of-magnitude prior, not a measurement, so a host
+ * that genuinely serves 1 MB images against a 45 kB `image` default has to be
+ * believed. It is only the first sample that is held back, and only to the edge of
+ * the band — three or four real samples walk the mean the rest of the way.
+ */
+const FIRST_SAMPLE_RATIO = 32;
+
 /** Keys kept on disk. Beyond this, the least recently useful are dropped. */
 const MAX_KEYS = 5000;
 
 export function modelKey(host: string, type: ResourceType): string {
   return `${host}|${type}`;
+}
+
+/** The mean a key is born with: the sample, held to the prior's neighbourhood. */
+function firstMean(type: ResourceType, bytes: number): number {
+  const prior = DEFAULT_SIZES[type];
+  // `websocket` is deliberately 0, and a zero prior gives a zero-width band that
+  // would pin the key at zero for ever. No prior means nothing to clamp against.
+  if (prior <= 0) return bytes;
+  return Math.min(Math.max(bytes, prior / FIRST_SAMPLE_RATIO), prior * FIRST_SAMPLE_RATIO);
 }
 
 export class SizeModel {
@@ -121,7 +148,7 @@ export class SizeModel {
     const now = Date.now();
 
     if (!existing || existing.count <= 0) {
-      this.samples.set(key, { key, mean: bytes, count: 1, updatedAt: now });
+      this.samples.set(key, { key, mean: firstMean(type, bytes), count: 1, updatedAt: now });
       this.dirty.add(key);
       return;
     }
@@ -165,14 +192,32 @@ export class SizeModel {
    */
   async prune(): Promise<void> {
     await this.load();
-    if (this.samples.size <= MAX_KEYS) return;
-    const ordered = [...this.samples.values()].sort((a, b) => a.updatedAt - b.updatedAt);
-    const excess = ordered.slice(0, this.samples.size - MAX_KEYS);
-    for (const sample of excess) {
+    const excess = this.samples.size - MAX_KEYS;
+    if (excess <= 0) return;
+
+    // Selection, not a sort. A prune drops the few keys that crossed the ceiling
+    // since the last one, so ordering all 5,000 to take the oldest three is work
+    // the worker does on an alarm for nothing. One pass holds the `excess` least
+    // recently updated rows, ascending, and every key newer than the worst of them
+    // — nearly all of them — costs one comparison.
+    const doomed: SizeSample[] = [];
+    for (const sample of this.samples.values()) {
+      const worst = doomed[doomed.length - 1];
+      if (doomed.length >= excess && worst && sample.updatedAt >= worst.updatedAt) continue;
+      const at = doomed.findIndex((candidate) => candidate.updatedAt > sample.updatedAt);
+      doomed.splice(at < 0 ? doomed.length : at, 0, sample);
+      if (doomed.length > excess) doomed.pop();
+    }
+
+    const keys: string[] = [];
+    for (const sample of doomed) {
       this.samples.delete(sample.key);
       this.dirty.delete(sample.key);
-      await remove(STORES.sizeModel, sample.key);
+      keys.push(sample.key);
     }
+    // One transaction for the batch: this loop used to await `remove` per key, so
+    // dropping n keys was n separate commits.
+    await removeMany(STORES.sizeModel, keys);
   }
 
   /**

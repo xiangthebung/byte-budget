@@ -230,6 +230,16 @@ export interface VisitDeltaView {
   optimizedMean: number;
   controlMean: number;
   savedPerVisit: number;
+  /**
+   * Half-width of the 95% interval around `savedPerVisit`, in bytes.
+   *
+   * Carried to the UI so the figure can be shown as the range it is. Page weights are
+   * heavy-tailed, so a difference of means over a few dozen loads can be large and mean
+   * nothing; `savings.ts` already suppresses a row whose interval straddles zero, and
+   * printing the spread is what stops the survivors reading as more precise than they
+   * are. A number this product cannot stand behind is a number it should not show.
+   */
+  savedPerVisitSpread: number;
   savedTotal: number;
 }
 

@@ -33,63 +33,113 @@ export type StoreName = (typeof STORES)[keyof typeof STORES];
 
 let connection: Promise<IDBDatabase> | null = null;
 
-function upgrade(db: IDBDatabase): void {
-  if (!db.objectStoreNames.contains(STORES.daily)) {
-    const daily = db.createObjectStore(STORES.daily, { keyPath: "key" });
-    // Compound so "this site, over this range" is one cursor rather than a scan
-    // of every site's rows followed by a filter.
-    daily.createIndex("bySiteBucket", ["site", "bucket"]);
-    daily.createIndex("byBucket", "bucket");
+/**
+ * The schema, as a version ladder.
+ *
+ * `oldVersion` is 0 for a profile that has never opened this database, so a fresh
+ * install runs every step in order; a profile that skipped releases does the same.
+ *
+ * The rule for every future step, and the reason the ladder exists at one version
+ * rather than being retrofitted at two: each step is additive and idempotent, and
+ * never rewrites a store in place. The whole upgrade runs inside one
+ * version-change transaction that blocks every other connection in the profile, so
+ * a step that walks existing rows turns a browser restart into a stall
+ * proportional to how much the user has recorded — and a half-applied rewrite has
+ * no version to roll back to. Add a store, add an index, backfill lazily on read.
+ * (A step that needs the existing rows can reach them through the request's
+ * `transaction`; pass it in when the first such step arrives.)
+ */
+function upgrade(db: IDBDatabase, oldVersion: number): void {
+  if (oldVersion < 1) {
+    if (!db.objectStoreNames.contains(STORES.daily)) {
+      const daily = db.createObjectStore(STORES.daily, { keyPath: "key" });
+      // Compound so "this site, over this range" is one cursor rather than a scan
+      // of every site's rows followed by a filter.
+      daily.createIndex("bySiteBucket", ["site", "bucket"]);
+      daily.createIndex("byBucket", "bucket");
+    }
+    if (!db.objectStoreNames.contains(STORES.hourly)) {
+      const hourly = db.createObjectStore(STORES.hourly, { keyPath: "key" });
+      hourly.createIndex("bySiteBucket", ["site", "bucket"]);
+    }
+    if (!db.objectStoreNames.contains(STORES.hosts)) {
+      const hosts = db.createObjectStore(STORES.hosts, { keyPath: "key" });
+      hosts.createIndex("bySiteBucket", ["site", "bucket"]);
+    }
+    if (!db.objectStoreNames.contains(STORES.visits)) {
+      const visits = db.createObjectStore(STORES.visits, { keyPath: "id" });
+      visits.createIndex("bySiteStart", ["site", "startedAt"]);
+      visits.createIndex("byStart", "startedAt");
+    }
+    if (!db.objectStoreNames.contains(STORES.sizeModel)) {
+      const model = db.createObjectStore(STORES.sizeModel, { keyPath: "key" });
+      model.createIndex("byUpdated", "updatedAt");
+    }
+    if (!db.objectStoreNames.contains(STORES.baselines)) {
+      const baselines = db.createObjectStore(STORES.baselines, { keyPath: "url" });
+      baselines.createIndex("byUpdated", "updatedAt");
+    }
+    if (!db.objectStoreNames.contains(STORES.meta)) {
+      db.createObjectStore(STORES.meta, { keyPath: "key" });
+    }
   }
-  if (!db.objectStoreNames.contains(STORES.hourly)) {
-    const hourly = db.createObjectStore(STORES.hourly, { keyPath: "key" });
-    hourly.createIndex("bySiteBucket", ["site", "bucket"]);
-  }
-  if (!db.objectStoreNames.contains(STORES.hosts)) {
-    const hosts = db.createObjectStore(STORES.hosts, { keyPath: "key" });
-    hosts.createIndex("bySiteBucket", ["site", "bucket"]);
-  }
-  if (!db.objectStoreNames.contains(STORES.visits)) {
-    const visits = db.createObjectStore(STORES.visits, { keyPath: "id" });
-    visits.createIndex("bySiteStart", ["site", "startedAt"]);
-    visits.createIndex("byStart", "startedAt");
-  }
-  if (!db.objectStoreNames.contains(STORES.sizeModel)) {
-    const model = db.createObjectStore(STORES.sizeModel, { keyPath: "key" });
-    model.createIndex("byUpdated", "updatedAt");
-  }
-  if (!db.objectStoreNames.contains(STORES.baselines)) {
-    const baselines = db.createObjectStore(STORES.baselines, { keyPath: "url" });
-    baselines.createIndex("byUpdated", "updatedAt");
-  }
-  if (!db.objectStoreNames.contains(STORES.meta)) {
-    db.createObjectStore(STORES.meta, { keyPath: "key" });
-  }
+}
+
+/**
+ * Drops the cached connection, but only if it is still the one that failed.
+ *
+ * A late `onclose` from a handle that has already been superseded would otherwise
+ * throw away a live connection and make every caller reopen for nothing.
+ */
+function forget(opening: Promise<IDBDatabase>): void {
+  if (connection === opening) connection = null;
 }
 
 export function openDb(): Promise<IDBDatabase> {
   if (connection) return connection;
-  connection = new Promise<IDBDatabase>((resolve, reject) => {
+  const opening = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => upgrade(request.result);
+    let blocked = false;
+    request.onupgradeneeded = (event) => upgrade(request.result, event.oldVersion);
+    // An upgrade held up by an older connection elsewhere in the profile fires
+    // neither `onsuccess` nor `onerror`. Without this handler the promise never
+    // settles, and because it is cached every later call awaits the same dead
+    // promise: the extension stops writing, permanently, with nothing logged.
+    // It cannot fire at DB_VERSION 1 — it arms the moment anyone bumps the
+    // version, which is exactly when nobody will be looking for it.
+    request.onblocked = () => {
+      blocked = true;
+      forget(opening);
+      reject(new Error("The usage database is open at an older version elsewhere."));
+    };
     request.onsuccess = () => {
       const db = request.result;
+      if (blocked) {
+        // The block cleared after we had already rejected. Nothing can adopt this
+        // handle now, and leaving it open is itself what blocks the next upgrade,
+        // so close it and let the retry the cleared cache allows open a fresh one.
+        db.close();
+        return;
+      }
       // A newer version opened elsewhere closes this handle; drop the cache so
       // the next call reopens instead of using a dead connection.
-      db.onclose = () => {
-        connection = null;
-      };
+      db.onclose = () => forget(opening);
+      // And get out of the way of that upgrade rather than being the connection
+      // that fires `onblocked` for it.
       db.onversionchange = () => {
         db.close();
-        connection = null;
+        forget(opening);
       };
       resolve(db);
     };
     request.onerror = () => {
-      connection = null;
+      // Clearing the cache is what makes the failure retryable: a cached rejected
+      // promise would re-reject for the whole life of the service worker.
+      forget(opening);
       reject(request.error ?? new Error("Could not open the usage database."));
     };
   });
+  connection = opening;
   return connection;
 }
 
@@ -177,6 +227,21 @@ export async function putMany(store: StoreName, values: readonly unknown[]): Pro
 export async function remove(store: StoreName, key: IDBValidKey | IDBKeyRange): Promise<void> {
   await runTransaction(store, "readwrite", (transaction) => {
     transaction.objectStore(store).delete(key);
+  });
+}
+
+/**
+ * Deletes a batch of keys in one transaction.
+ *
+ * The mirror of `putMany`, and it exists for the same reason: the prune paths used
+ * to await `remove` per row, so dropping n keys cost n separate readwrite
+ * transactions — n commits, on an alarm, in a worker that is trying to go idle.
+ */
+export async function removeMany(store: StoreName, keys: readonly IDBValidKey[]): Promise<void> {
+  if (keys.length === 0) return;
+  await runTransaction(store, "readwrite", (transaction) => {
+    const objectStore = transaction.objectStore(store);
+    for (const key of keys) objectStore.delete(key);
   });
 }
 

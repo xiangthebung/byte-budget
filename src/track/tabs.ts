@@ -14,9 +14,9 @@
  * low" rather than like a crash.
  */
 
-import { put, STORES } from "../core/db";
+import { put, putMany, STORES } from "../core/db";
 import { originFromUrl, siteKeyFromUrl } from "../core/sites";
-import type { Visit } from "../core/types";
+import { visitReason, type Visit, type VisitReason } from "../core/types";
 
 const SESSION_KEY = "tabs";
 
@@ -34,6 +34,8 @@ export interface TabRecord {
   requests: number;
   /** Phase 3: were optimizers active for this load. */
   optimized: boolean;
+  /** Which arm of the optimizer comparison this load belongs to. */
+  reason: VisitReason;
   saved: number;
   /** Set when the stored visit row is behind these counters. */
   dirty: boolean;
@@ -64,16 +66,34 @@ let persistQueued = false;
 /**
  * Hooks, so this module stays ignorant of optimization.
  *
- * A visit has to record whether optimizers were active for it, because that flag is
- * what the whole savings comparison rests on. But "was this load optimized" is a
- * question for `optimize/`, and importing it here — when it already reads visits to
- * decide holdouts — would be a cycle. So the answer is injected.
+ * A visit has to record which arm of the savings comparison it belongs to, because
+ * that is what the whole comparison rests on. But "was this load optimized, and if
+ * not, why not" is a question for `optimize/`, and importing it here — when it
+ * already reads visits to decide holdouts — would be a cycle. So the answer is
+ * injected.
  */
-let optimizedResolver: ((site: string, tabId: number) => boolean) | null = null;
+let optimizedResolver: ((site: string, tabId: number) => boolean | VisitReason) | null = null;
 let visitObserver: ((site: string, optimized: boolean, at: number) => void) | null = null;
 
-export function setOptimizedResolver(fn: (site: string, tabId: number) => boolean): void {
+export function setOptimizedResolver(
+  fn: (site: string, tabId: number) => boolean | VisitReason,
+): void {
   optimizedResolver = fn;
+}
+
+/**
+ * The arm this load belongs to, from whatever the injected resolver can say.
+ *
+ * A resolver that still answers with a bare boolean is honoured, but its `false`
+ * reads as `unknown` and never as a control. A boolean cannot distinguish a holdout
+ * from an excluded site from a settings snapshot that had not resolved yet, and
+ * filing those as controls is the contamination `VisitReason` exists to stop — so
+ * the load is kept out of both arms rather than guessed into one.
+ */
+function resolveReason(site: string, tabId: number): VisitReason {
+  const answer = optimizedResolver?.(site, tabId);
+  if (typeof answer === "string") return answer;
+  return answer === true ? "optimized" : "unknown";
 }
 
 export function setVisitObserver(fn: (site: string, optimized: boolean, at: number) => void): void {
@@ -85,6 +105,10 @@ function newVisitId(): string {
 }
 
 function makeRecord(tabId: number, site: string, origin: string): TabRecord {
+  // Resolved once, at the start of the load, and not revisited. A load that was
+  // optimized for its first half and not its second belongs on neither side of the
+  // comparison, so the answer is fixed when the page load is.
+  const reason = resolveReason(site, tabId);
   return {
     tabId,
     site,
@@ -94,10 +118,8 @@ function makeRecord(tabId: number, site: string, origin: string): TabRecord {
     down: 0,
     up: 0,
     requests: 0,
-    // Resolved once, at the start of the load, and not revisited. A load that was
-    // optimized for its first half and not its second belongs on neither side of the
-    // comparison, so the flag is fixed when the page load is.
-    optimized: optimizedResolver ? optimizedResolver(site, tabId) : false,
+    optimized: reason === "optimized",
+    reason,
     saved: 0,
     dirty: false,
     stored: false,
@@ -129,6 +151,7 @@ function visitFrom(record: TabRecord, endedAt?: number): Visit {
     up: record.up,
     requests: record.requests,
     optimized: record.optimized,
+    reason: record.reason,
     saved: record.saved,
   };
 }
@@ -150,7 +173,13 @@ export function ensureTabsReady(): Promise<void> {
       const stored = await chrome.storage.session.get(SESSION_KEY);
       const records = stored[SESSION_KEY] as TabRecord[] | undefined;
       for (const record of records ?? []) {
-        if (record && typeof record.tabId === "number") tabs.set(record.tabId, record);
+        if (!record || typeof record.tabId !== "number") continue;
+        // A record mirrored by a build that predates `reason` restores without it,
+        // whatever the type says. Derived here rather than left undefined, so a tab
+        // that was open across an extension update finishes its visit in neither arm
+        // instead of being written out as a control.
+        record.reason = visitReason(record);
+        tabs.set(record.tabId, record);
       }
     } catch {
       // A missing session store is not worth failing startup over; the query
@@ -312,9 +341,12 @@ export async function persistOpenVisits(): Promise<void> {
     record.dirty = false;
     record.stored = true;
   }
-  await Promise.all([
-    ...open.map((record) => put(STORES.visits, visitFrom(record))),
-    ...late.map((record) => put(STORES.visits, visitFrom(record, record.endedAt))),
+  // One transaction, not one per row. This runs on the ledger's two-second flush, and
+  // a window of a dozen active tabs opened a dozen IndexedDB transactions every two
+  // seconds for rows that all live in the same store.
+  await putMany(STORES.visits, [
+    ...open.map((record) => visitFrom(record)),
+    ...late.map((record) => visitFrom(record, record.endedAt)),
   ]);
   for (const record of unannounced) {
     visitObserver?.(record.site, record.optimized, record.startedAt);

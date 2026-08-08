@@ -5,6 +5,10 @@
  * measured", and every aggregate in the extension is built by repeatedly adding
  * deltas into a total. If addition dropped a field, or the share could read as a
  * confident 0% on an empty period, the disclosure would be worse than none.
+ *
+ * `visitReason` is the other one. It decides which page loads may be compared with
+ * which, and the whole "measured saving" claim is that subtraction. A load put in the
+ * wrong arm does not produce an error; it produces a number, which is worse.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -18,6 +22,8 @@ import {
   RESOURCE_TYPES,
   RESOURCE_TYPE_LABELS,
   totalBytes,
+  VISIT_REASONS,
+  visitReason,
 } from "../src/core/types.ts";
 
 test("adding totals carries every field", () => {
@@ -80,4 +86,44 @@ test("reserved site keys cannot collide with a hostname", () => {
   assert.equal(isReservedSite("#background"), true);
   assert.equal(isReservedSite("#extensions"), true);
   assert.equal(isReservedSite("example.com"), false);
+});
+
+test("the two arms of the savings comparison are named apart from the rest", () => {
+  // `savings.ts` counts `holdout` as the control and `optimized` as the treatment, by
+  // name. Renaming or dropping either silently empties an arm, and an empty arm makes
+  // `visitDelta` return null rather than fail — the figure just quietly stops existing.
+  assert.ok(VISIT_REASONS.includes("optimized"));
+  assert.ok(VISIT_REASONS.includes("holdout"));
+  // The other three exist precisely so that "not optimized" cannot be read as a
+  // control. They must stay distinct from both arms.
+  for (const reason of ["disabled", "excluded", "unknown"]) {
+    assert.ok(VISIT_REASONS.includes(reason), `${reason} is not a reason`);
+    assert.notEqual(reason, "optimized");
+    assert.notEqual(reason, "holdout");
+  }
+  assert.equal(new Set(VISIT_REASONS).size, VISIT_REASONS.length);
+});
+
+test("a visit written before the reason field existed joins neither arm", () => {
+  // This is the defect the field was added for: every load recorded before Data Saver
+  // was switched on carries `optimized: false`, and reading that as a control made the
+  // first "measured" saving a before-versus-after-install figure.
+  assert.equal(visitReason({ optimized: false }), "unknown");
+  assert.notEqual(visitReason({ optimized: false }), "holdout");
+  assert.notEqual(visitReason({ optimized: false }), "disabled");
+});
+
+test("a legacy optimized visit is still treatment", () => {
+  // The old flag could only be true when the optimizers were on and the load was not a
+  // holdout, so that direction is unambiguous and the rows stay usable without a
+  // migration. Only the false case lost information.
+  assert.equal(visitReason({ optimized: true }), "optimized");
+});
+
+test("an explicit reason wins over the flag beside it", () => {
+  assert.equal(visitReason({ optimized: false, reason: "holdout" }), "holdout");
+  assert.equal(visitReason({ optimized: false, reason: "excluded" }), "excluded");
+  // A held-out load is deliberately unoptimized, so the flag disagreeing with the
+  // reason is the normal case rather than a corrupt row.
+  assert.equal(visitReason({ optimized: true, reason: "holdout" }), "holdout");
 });

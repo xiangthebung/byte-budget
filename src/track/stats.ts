@@ -47,7 +47,7 @@ import type {
   StorageReport,
   VisitStats,
 } from "../core/messages";
-import { ledger, type Delta } from "./ledger";
+import { ledger, type Delta, type FlushError } from "./ledger";
 
 function emptyDelta(): Delta {
   return { ...emptyTotals(), byType: {} };
@@ -107,7 +107,20 @@ function sitesFrom(bySite: Map<string, Delta>): SiteUsage[] {
 }
 
 /**
- * Hour buckets across a range, starting no earlier than `from` if given.
+ * Hours the "Over time" chart shows at most.
+ *
+ * Two places have to agree on this: the bucket list is clamped to the days these can
+ * come from, and `trimLeadingEmpty` keeps this many. Raising one alone either draws
+ * bars with no data behind them or goes back to expanding the whole session range.
+ */
+const HOUR_BUCKETS_SHOWN = 24;
+
+/** Calendar days `HOUR_BUCKETS_SHOWN` hours can span when they end at 23:00. */
+const HOUR_BUCKET_DAYS = Math.ceil(HOUR_BUCKETS_SHOWN / 24) + 1;
+
+/**
+ * Hour buckets across a range, starting no earlier than `from` if given and never
+ * running past the hour it is now.
  *
  * The session period is the awkward one: its totals come from
  * `chrome.storage.session`, which Chrome empties when the browser closes, while its
@@ -121,10 +134,20 @@ function sitesFrom(bySite: Map<string, Delta>): SiteUsage[] {
  * with its own heading.
  */
 function hourBuckets(range: DayRange, from: number | null): string[] {
-  const all = dayKeysInRange(range.from, range.to).flatMap((day) => hourKeysInDay(day));
-  if (from === null) return all;
-  const first = hourKeyFromMs(from);
-  return all.filter((bucket) => bucket >= first);
+  // The day range is clamped before it is expanded, not after. `session` runs from the
+  // day the browser started, which on a machine that is never shut down is months ago:
+  // every one of those days became twenty-four keys, on every poll, so that all but
+  // the last day of them could be thrown away again.
+  const earliest = shiftDay(range.to, -(HOUR_BUCKET_DAYS - 1));
+  const days = dayKeysInRange(range.from > earliest ? range.from : earliest, range.to);
+  const first = from === null ? null : hourKeyFromMs(from);
+  // Nothing past the current hour. The bucket list is what the chart draws ticks for,
+  // so an unfiltered "today" put bars for 22:00 and 23:00 on the panel at nine in the
+  // evening — hours that have not happened, drawn as if they had cost nothing.
+  const now = hourKeyFromMs(Date.now());
+  return days
+    .flatMap((day) => hourKeysInDay(day))
+    .filter((bucket) => bucket <= now && (first === null || bucket >= first));
 }
 
 /** One point per bucket, with empty buckets filled in so a chart has no gaps. */
@@ -155,6 +178,14 @@ export async function overview(period: Period, settings: Settings): Promise<Over
   const session = await ledger.sessionUsage();
   const range = await resolveRange(period, settings);
 
+  // One read of the daily store, shared by the totals and the series. They asked for
+  // the identical range and issued it twice, and `overview` is what the popup's
+  // two-second poll calls — thirty duplicate full-range reads a minute while it is open.
+  const dailyRows =
+    period === "session"
+      ? []
+      : await getAll<UsageRow>(STORES.daily, bucketRange(range.from, range.to));
+
   let totals: UsageTotals;
   let byType: TypeBytes;
   let sites: SiteUsage[];
@@ -172,8 +203,7 @@ export async function overview(period: Period, settings: Settings): Promise<Over
     }
     sites = sitesFrom(bySite);
   } else {
-    const rows = await getAll<UsageRow>(STORES.daily, bucketRange(range.from, range.to));
-    const aggregated = accumulate(rows);
+    const aggregated = accumulate(dailyRows);
     totals = aggregated.totals;
     byType = aggregated.byType;
     sites = sitesFrom(aggregated.bySite);
@@ -190,8 +220,11 @@ export async function overview(period: Period, settings: Settings): Promise<Over
         STORES.hourly,
         IDBKeyRange.bound(`${range.from}T00|`, `${range.to}T23|\uffff`),
       )
-    : await getAll<UsageRow>(STORES.daily, bucketRange(range.from, range.to));
-  const series = trimLeadingEmpty(seriesFrom(seriesRows, buckets), hourly ? 24 : buckets.length);
+    : dailyRows;
+  const series = trimLeadingEmpty(
+    seriesFrom(seriesRows, buckets),
+    hourly ? HOUR_BUCKETS_SHOWN : buckets.length,
+  );
 
   const tab = await currentTab();
   const currentTotals = tab.site
@@ -347,7 +380,19 @@ function shiftDay(day: string, offset: number): string {
   return dayKey(date);
 }
 
-export async function storageReport(): Promise<StorageReport> {
+/**
+ * What is on disk, and whether the numbers behind it are complete.
+ *
+ * `lastFlushError` rides alongside `StorageReport` rather than inside it because the
+ * shared type in `core/messages.ts` does not name the field yet. It belongs here all
+ * the same: a rejected write leaves every total quietly behind the traffic it claims
+ * to measure, and this is the only report in the extension whose job is to say what
+ * the storage layer is actually doing. Fold it into `StorageReport` when that file
+ * next changes.
+ */
+export async function storageReport(): Promise<
+  StorageReport & { lastFlushError: FlushError | null }
+> {
   const [dailyRows, hourlyRows, hostRows, visitRows, sizeModelRows] = await Promise.all([
     countRows(STORES.daily),
     countRows(STORES.hourly),
@@ -364,7 +409,15 @@ export async function storageReport(): Promise<StorageReport> {
     bytesUsed = null;
   }
 
-  return { dailyRows, hourlyRows, hostRows, visitRows, sizeModelRows, bytesUsed };
+  return {
+    dailyRows,
+    hourlyRows,
+    hostRows,
+    visitRows,
+    sizeModelRows,
+    bytesUsed,
+    lastFlushError: ledger.lastFlushError(),
+  };
 }
 
 /* ------------------------------------------------------------------ *
@@ -384,9 +437,38 @@ const CSV_COLUMNS = [
   "blocked_requests",
 ] as const;
 
+/**
+ * One CSV cell: quoted where the format needs it, and defused where a spreadsheet
+ * would otherwise run it.
+ *
+ * A leading `=`, `+`, `-`, `@`, tab or carriage return makes Excel, LibreOffice and
+ * Sheets evaluate the cell as a formula, and they do it inside a quoted field as
+ * readily as outside one — so quoting is not the guard, and adding the characters to
+ * the quote test would not have helped. The `site` column is a hostname straight from
+ * the URL parser, which accepts `=` and `+` in an http host (`new URL("http://=cmd/")`
+ * parses and yields `=cmd`), so a page someone merely visited can plant the payload
+ * and the export carries it to their spreadsheet. A leading apostrophe is the
+ * cross-spreadsheet "this cell is text".
+ */
 function csvCell(value: string | number): string {
-  const text = String(value);
+  // Numbers are formatted by this module and cannot be a formula; prefixing one would
+  // turn a byte count into text in the sheet, which is the opposite of the point.
+  if (typeof value === "number") return String(value);
+  const text = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
   return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+/**
+ * A byte figure at the export boundary.
+ *
+ * The size model's output is a running mean, so `saved`, `estimatedDown` and
+ * `cacheAvoided` are genuinely fractional in the store — and `1234.5600000000002` in
+ * the one artefact anybody opens reads as a broken tool, whatever the number means.
+ * Rounded here rather than on write: the stored value is what was actually computed,
+ * and rounding every accumulation would drift.
+ */
+function csvBytes(value: number): number {
+  return Math.round(value);
 }
 
 /**
@@ -407,35 +489,36 @@ export async function exportData(
   const stamp = to.replace(/-/g, "");
 
   if (format === "json") {
+    // Unindented, and the values unrounded. Two deliberate and opposite choices: at
+    // 400 days this is roughly forty thousand rows, and the pretty-printing was the
+    // majority of a string that then gets structured-cloned across the message bus and
+    // wrapped in a Blob — while the numbers stay exactly as stored, because this is the
+    // machine-readable copy and the CSV is the one a person reads.
     return {
       filename: `byte-budget-${stamp}.json`,
       mimeType: "application/json",
-      body: JSON.stringify(
-        {
-          generatedAt: new Date().toISOString(),
-          from,
-          to,
-          note:
-            "down_bytes and up_bytes include an approximation of HTTP header " +
-            "overhead. estimated_down_bytes is the part of down_bytes that no " +
-            "measurement covered.",
-          rows: rows.map((row) => ({
-            date: row.bucket,
-            site: row.site,
-            down: row.down,
-            up: row.up,
-            requests: row.requests,
-            estimatedDown: row.estimatedDown,
-            cacheHits: row.cacheHits,
-            cacheAvoided: row.cacheAvoided,
-            saved: row.saved,
-            blocked: row.blocked,
-            byType: row.byType,
-          })),
-        },
-        null,
-        2,
-      ),
+      body: JSON.stringify({
+        generatedAt: new Date().toISOString(),
+        from,
+        to,
+        note:
+          "down_bytes and up_bytes include an approximation of HTTP header " +
+          "overhead. estimated_down_bytes is the part of down_bytes that no " +
+          "measurement covered.",
+        rows: rows.map((row) => ({
+          date: row.bucket,
+          site: row.site,
+          down: row.down,
+          up: row.up,
+          requests: row.requests,
+          estimatedDown: row.estimatedDown,
+          cacheHits: row.cacheHits,
+          cacheAvoided: row.cacheAvoided,
+          saved: row.saved,
+          blocked: row.blocked,
+          byType: row.byType,
+        })),
+      }),
     };
   }
 
@@ -445,13 +528,13 @@ export async function exportData(
       [
         row.bucket,
         row.site,
-        row.down,
-        row.up,
+        csvBytes(row.down),
+        csvBytes(row.up),
         row.requests,
-        row.estimatedDown,
+        csvBytes(row.estimatedDown),
         row.cacheHits,
-        Math.round(row.cacheAvoided),
-        row.saved,
+        csvBytes(row.cacheAvoided),
+        csvBytes(row.saved),
         row.blocked,
       ]
         .map(csvCell)

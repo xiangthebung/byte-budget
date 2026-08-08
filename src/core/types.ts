@@ -239,6 +239,23 @@ export interface HostRow {
 }
 
 /**
+ * Which arm of the optimizer comparison a page load belongs to.
+ *
+ * A bare boolean cannot answer this, and the cases it collapses are not
+ * interchangeable. Every load from before Data Saver was switched on, every load on
+ * an excluded site, and every load whose optimizer settings had not resolved yet are
+ * all "not optimized" — and none of them is a control. Counted as one, switching Data
+ * Saver on today makes the previous thirty days the control group, so the first
+ * "measured" saving anyone sees is really before-versus-after-install.
+ *
+ * Only `holdout` is a control and only `optimized` is treatment. The other three
+ * belong to neither and must be counted in neither.
+ */
+export const VISIT_REASONS = ["optimized", "holdout", "disabled", "excluded", "unknown"] as const;
+
+export type VisitReason = (typeof VISIT_REASONS)[number];
+
+/**
  * One top-level page load.
  *
  * Deliberately holds no path and no query string — only the origin. Per-visit
@@ -257,9 +274,33 @@ export interface Visit {
   down: number;
   up: number;
   requests: number;
-  /** Phase 3: whether optimizers were active for this load. */
+  /**
+   * Phase 3: whether optimizers were active for this load.
+   *
+   * Kept alongside `reason` rather than replaced by it. It is the only thing rows
+   * written before `reason` existed carry, so dropping it would make them
+   * unreadable instead of merely coarse — and an added optional field needs no
+   * schema migration, which a replacement would.
+   */
   optimized: boolean;
+  /** Absent on rows written before the field existed; use `visitReason`. */
+  reason?: VisitReason;
   saved: number;
+}
+
+/**
+ * The arm a stored visit belongs to, including rows written before `reason` existed.
+ *
+ * `optimized: true` maps straight across: the build that wrote it could only set that
+ * when the optimizers were on and the load was not a holdout. `optimized: false`
+ * cannot be mapped, because that build could not tell a holdout from an excluded site
+ * from an unresolved settings snapshot — so it reads as `unknown` and lands in neither
+ * arm. Reading it as `holdout` or `disabled` is precisely the contamination this
+ * field was added to close.
+ */
+export function visitReason(visit: Readonly<Pick<Visit, "optimized" | "reason">>): VisitReason {
+  if (visit.reason) return visit.reason;
+  return visit.optimized ? "optimized" : "unknown";
 }
 
 /**

@@ -60,6 +60,21 @@ function addDelta(into: Delta, from: Readonly<Delta>): Delta {
   return into;
 }
 
+/** One host's contribution to one site on one day, before it has a key. */
+type HostDelta = Omit<HostRow, "key" | "bucket" | "site" | "host">;
+
+/**
+ * A flush whose writes did not all land.
+ *
+ * Kept rather than only logged, because the console of a service worker is not a
+ * surface anyone opens. A total that is quietly behind the traffic it claims to
+ * measure is the one failure this extension cannot admit to any other way.
+ */
+export interface FlushError {
+  at: number;
+  message: string;
+}
+
 /** One finished request, priced and attributed, ready to be counted. */
 export interface CommitEntry {
   /** When the request finished. Decides which day and hour it lands in. */
@@ -107,9 +122,12 @@ interface SessionStore {
 class Ledger {
   private daily = new Map<string, Delta>();
   private hourly = new Map<string, Delta>();
-  private hosts = new Map<string, Omit<HostRow, "key" | "bucket" | "site" | "host">>();
+  private hosts = new Map<string, HostDelta>();
   private session: SessionStore | null = null;
   private sessionLoading: Promise<SessionStore> | null = null;
+  /** Set when the session mirror on disk is behind `session`. See `writeSession`. */
+  private sessionDirty = false;
+  private flushError: FlushError | null = null;
   /** Bumped by `resetSession`, so a read already in flight knows it is stale. */
   private sessionEpoch = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -218,6 +236,7 @@ class Ledger {
    * merged in when it arrives, rather than dropped.
    */
   private sessionAdd(site: string, delta: Delta): void {
+    this.sessionDirty = true;
     if (!this.session) {
       void this.loadSession().then((session) => {
         addDelta(this.sessionSite(session, site), delta);
@@ -293,7 +312,21 @@ class Ledger {
     this.daily = new Map();
     this.hourly = new Map();
     this.hosts = new Map();
+    // The emptied session has to reach disk even though no traffic dirtied it, or the
+    // mirror keeps the numbers the user just deleted and the next worker restart
+    // reads them straight back.
+    this.sessionDirty = true;
     await this.writeSession();
+  }
+
+  /**
+   * The last flush that did not fully land, or `null` if everything is written.
+   *
+   * Read by `storageReport()`. A failed write leaves the totals behind the traffic,
+   * and the only honest thing a measurement tool can do about that is say so.
+   */
+  lastFlushError(): FlushError | null {
+    return this.flushError;
   }
 
   private flushSoon(): void {
@@ -347,9 +380,11 @@ class Ledger {
       console.error("Byte Budget: pre-flush hook failed", error);
     }
 
-    // Swap the buffers out before the first await. Anything recorded during the
-    // write lands in the fresh maps and is written by the next flush, so no
-    // request is counted twice and none is dropped.
+    // Swap the buffers out before the first await. Anything recorded during the write
+    // lands in the fresh maps and is written by the next flush, so no request is
+    // counted twice. Nothing is dropped either — but that is the fold-back below
+    // earning it, not the swap: until that existed, a rejected transaction took these
+    // maps out of scope with it and the bytes were simply gone.
     const daily = this.daily;
     const hourly = this.hourly;
     const hosts = this.hosts;
@@ -357,33 +392,116 @@ class Ledger {
     this.hourly = new Map();
     this.hosts = new Map();
 
-    const tasks: Promise<unknown>[] = [];
-    if (daily.size > 0) tasks.push(mergeUsageRows(STORES.daily, daily));
-    if (hourly.size > 0) tasks.push(mergeUsageRows(STORES.hourly, hourly));
-    if (hosts.size > 0) tasks.push(mergeHostRows(hosts));
-    tasks.push(this.writeSession());
-    tasks.push(persistOpenVisits());
-    tasks.push(sizeModel.flush());
-    tasks.push(flushBaselines());
-
-    const results = await Promise.allSettled(tasks);
-    const failure = results.find((result) => result.status === "rejected");
-    if (failure && failure.status === "rejected") {
-      // Surfaced rather than swallowed: a failing write means the numbers are
-      // wrong, and the worker's console is where that should be visible.
-      console.error("Byte Budget: flush failed", failure.reason);
+    // Every write is paired with the buffer it drains, so a rejection can put those
+    // rows back. Without the pairing the swapped-out maps simply went out of scope on
+    // an aborted transaction and the bytes were gone, with the only trace in a console
+    // nobody opens. Only the maps whose *own* write failed are folded back — fold back
+    // on any failure and a partial success counts the landed rows twice.
+    const writes: { run: Promise<unknown>; restore: (() => void) | null }[] = [];
+    if (daily.size > 0) {
+      writes.push({
+        run: mergeUsageRows(STORES.daily, daily),
+        restore: () => foldDeltas(this.daily, daily),
+      });
     }
+    if (hourly.size > 0) {
+      writes.push({
+        run: mergeUsageRows(STORES.hourly, hourly),
+        restore: () => foldDeltas(this.hourly, hourly),
+      });
+    }
+    if (hosts.size > 0) {
+      writes.push({ run: mergeHostRows(hosts), restore: () => foldHosts(this.hosts, hosts) });
+    }
+    writes.push({ run: this.writeSession(), restore: null });
+    writes.push({ run: persistOpenVisits(), restore: null });
+    writes.push({ run: sizeModel.flush(), restore: null });
+    writes.push({ run: flushBaselines(), restore: null });
+
+    const results = await Promise.allSettled(writes.map((write) => write.run));
+    let firstReason: unknown;
+    let failed = false;
+    let recovered = false;
+    results.forEach((result, index) => {
+      if (result.status !== "rejected") return;
+      if (!failed) firstReason = result.reason;
+      failed = true;
+      const restore = writes[index]?.restore;
+      if (!restore) return;
+      restore();
+      recovered = true;
+    });
+
+    if (!failed) {
+      this.flushError = null;
+      return;
+    }
+    this.flushError = { at: Date.now(), message: describeFailure(firstReason) };
+    // Still logged, and now also readable through `storageReport()`.
+    console.error("Byte Budget: flush failed", firstReason);
+    // Only when something was actually folded back. Rescheduling on a write that owns
+    // no buffer — the session mirror, the size model — would spin a flush every two
+    // seconds for as long as that write kept failing, with nothing to retry.
+    if (recovered) this.flushSoon();
   }
 
+  /**
+   * Mirrors the session total, but only when it has moved.
+   *
+   * The flush runs every two seconds while traffic is flowing and this used to
+   * rewrite the whole snapshot each time, including on the flushes triggered by a
+   * read rather than by a request.
+   */
   private async writeSession(): Promise<void> {
-    if (!this.session) return;
+    if (!this.session || !this.sessionDirty) return;
+    // Cleared before the await, not after: a delta recorded while the write is in
+    // flight has to leave the mirror marked stale, and clearing afterwards would
+    // erase that mark and strand it until the next request arrived.
+    this.sessionDirty = false;
     try {
       await chrome.storage.session.set({ [SESSION_KEY]: this.session });
     } catch {
       // Session storage is capped. Dropping the mirror costs the session total
       // after the next worker restart and nothing else, so it is not worth
-      // failing the whole flush over.
+      // failing the whole flush over — but it stays marked, so the next flush retries.
+      this.sessionDirty = true;
     }
+  }
+}
+
+function describeFailure(reason: unknown): string {
+  if (reason instanceof Error && reason.message) return reason.message;
+  return String(reason ?? "The usage database refused the write.");
+}
+
+/**
+ * Puts a failed write's rows back into the live buffer.
+ *
+ * Added into whatever accumulated during the write rather than replacing it. The
+ * fresh buffer can already hold a row for the same key — requests do not stop
+ * arriving while a transaction runs — and overwriting would drop exactly the bytes
+ * that were recorded while the failure was being discovered.
+ */
+function foldDeltas(into: Map<string, Delta>, from: Map<string, Delta>): void {
+  for (const [key, delta] of from) {
+    const existing = into.get(key);
+    if (existing) addDelta(existing, delta);
+    else into.set(key, delta);
+  }
+}
+
+function foldHosts(into: Map<string, HostDelta>, from: Map<string, HostDelta>): void {
+  for (const [key, row] of from) {
+    const existing = into.get(key);
+    if (!existing) {
+      into.set(key, row);
+      continue;
+    }
+    existing.down += row.down;
+    existing.up += row.up;
+    existing.requests += row.requests;
+    existing.blocked += row.blocked;
+    existing.saved += row.saved;
   }
 }
 
@@ -424,9 +542,7 @@ function mergeUsageRows(
   });
 }
 
-function mergeHostRows(
-  deltas: Map<string, Omit<HostRow, "key" | "bucket" | "site" | "host">>,
-): Promise<void> {
+function mergeHostRows(deltas: Map<string, HostDelta>): Promise<void> {
   return runTransaction(STORES.hosts, "readwrite", (transaction) => {
     const objectStore = transaction.objectStore(STORES.hosts);
     for (const [key, delta] of deltas) {
