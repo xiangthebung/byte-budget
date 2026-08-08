@@ -23,14 +23,35 @@
   --border-strong: #c9d7d8;
   --text: #16262c;
   --text-soft: #486067;
-  --text-muted: #6d8087;
+  /*
+   * Was #6d8087, which measured 4.13:1 on `--surface`, 3.79:1 on `--bg`, 3.71:1 on
+   * `--surface-2` and 3.46:1 on `--surface-3` — every one under AA, and nothing
+   * carrying this token is large enough for the 3:1 exemption: the chart ticks are
+   * 9px, `.site-share` 10px, the hints, notes and save status 11px.
+   *
+   * This value clears 4.5:1 on every background token in the palette — 5.70 / 5.23
+   * / 5.12 / 4.78, and no lower than 4.86 on the four tinted surfaces — so the rule
+   * is "muted is legible anywhere" rather than "legible on the three surfaces
+   * someone checked". #5a6f76 was the obvious stop and reaches only 4.43 on
+   * `--surface-3`, which `.host-tag` and the paused state chip both sit on.
+   * The cost is that the step down from `--text-soft` is now 1.17:1 where it was
+   * 1.62:1, so the hierarchy leans on size and weight more than on colour. That is
+   * the right way round: subordinate text that cannot be read is not a hierarchy.
+   * Dark was never the problem (6.11:1 on `--surface`) and is unchanged.
+   */
+  --text-muted: #556a71;
   --accent: #0f6a62;
   --accent-hover: #0b524c;
   --accent-soft: #e2f0ee;
   --accent-contrast: #ffffff;
   --saved: #17784b;
   --saved-soft: #e6f4ec;
-  --estimate: #a95d10;
+  /* 5.09:1 on --estimate-soft, 5.70 on white, 5.24 on --bg, 5.12 on --surface-2. The
+     previous #a95d10 measured 4.40 on --estimate-soft, which is where it is actually
+     used and where it failed AA at 11px. Every figure this colour carries is one the
+     product is admitting is modelled rather than measured, so it is the last thing that
+     should be hard to read. */
+  --estimate: #9c5406;
   --estimate-soft: #fdf0e2;
   --danger: #b6382f;
   --danger-soft: #fdeeec;
@@ -194,9 +215,27 @@ ol {
   display: none !important;
 }
 
+/*
+ * One ring for everything focusable, so a control cannot be added without one.
+ *
+ * It is a box-shadow rather than an outline because several of these sit inside
+ * rounded containers where an outline squares off the corners — which is also why
+ * `forced-colors` has to put the outline back at the end of this file: box-shadow
+ * is not painted in that mode, and a rule that suppresses the UA outline without
+ * drawing anything in its place leaves high-contrast users with no focus at all.
+ */
 :focus-visible {
   outline: none;
   box-shadow: var(--focus);
+}
+
+/* Focusable, but nothing in their own rules would show it. */
+.chart-bar:focus-visible {
+  border-radius: var(--radius-sm);
+}
+
+.site-row:focus-visible {
+  background: var(--surface-2);
 }
 
 .live-region {
@@ -294,6 +333,18 @@ ol {
   box-shadow: var(--shadow-card);
 }
 
+/*
+ * The checked segment sets its own box-shadow, which outranks the `:focus-visible`
+ * rule above on specificity — and with a roving tabindex the checked segment is
+ * exactly the one that takes focus when the group is tabbed into. So the only
+ * keyboard-reachable control in the group was the one with no focus ring. Both
+ * shadows, in that order: the lift stays, the ring goes outside it.
+ */
+.segmented button[aria-checked="true"]:focus-visible,
+.segmented button[aria-selected="true"]:focus-visible {
+  box-shadow: var(--shadow-card), var(--focus);
+}
+
 /* ------------------------------------------------------------------ *
  * Panels
  * ------------------------------------------------------------------ */
@@ -343,9 +394,23 @@ ol {
  * measured 772 kB. `grid-template-rows: minmax(0, 1fr) auto` inside a fixed-height
  * row gives the track a real number of pixels before the fill is laid out.
  */
+.chart-figure {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+/*
+ * Centred because the bars are capped at 46px: a four-bucket chart otherwise sat
+ * against the left edge of a 400px card with the baseline stopping under it, which
+ * reads as a chart that failed rather than as a short series. `barChart` pads the
+ * axis out to a minimum column count for the same reason; the two fixes are for
+ * the same defect from opposite ends and neither is sufficient alone.
+ */
 .chart {
   display: flex;
   align-items: stretch;
+  justify-content: center;
   gap: 2px;
   height: 76px;
 }
@@ -410,6 +475,52 @@ button.chart-bar:hover .chart-bar-fill {
   height: 12px;
   font-size: 9px;
   color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/*
+ * The key for the two-tone bar, drawn only when something is in the second band.
+ * A legend for a colour that is not on screen teaches the reader to look for one
+ * that is not there.
+ */
+.chart-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.chart-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.chart-key-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.chart-key-swatch[data-tone="overlay"] {
+  background: var(--saved);
+}
+
+/*
+ * The bar chart's data for a screen reader.
+ *
+ * Its own class rather than the `.sr-only` in dashboard.css, because the chart is
+ * shared with the popup and popup.css does not have that class. Not `.live-region`
+ * either: this is a table that is read on demand, not a region that announces.
+ */
+.chart-table {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 
@@ -578,4 +689,85 @@ button.chart-bar:hover .chart-bar-fill {
   padding: 6px 2px;
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ *
+ * User preferences
+ *
+ * All three blocks are last in the file on purpose: they have to outrank the theme
+ * blocks above, and app.css is `@import`ed first by both surface stylesheets, so
+ * anything that must also reach popup.css and dashboard.css says so with
+ * `!important` rather than relying on order it does not have.
+ * ------------------------------------------------------------------ */
+
+/*
+ * The content script gets this right on its own entrance animation and nothing
+ * else in the extension honoured it. The `*` reaches `html { scroll-behavior:
+ * smooth }` in dashboard.css, which is the one declaration here that a later
+ * stylesheet owns.
+ *
+ * It does not reach `scrollIntoView({behavior: "smooth"})`, which is a scripted
+ * argument, not a style: that call has to read `matchMedia` itself.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * Every theme selector above is an attribute selector, so a bare `:root` here
+ * would lose to them and the whole block would silently do nothing outside the
+ * default theme. Each selector in the list carries its own specificity, and each
+ * matches the block it has to beat.
+ */
+@media (prefers-contrast: more) {
+  :root,
+  :root[data-theme="light"],
+  :root[data-theme="dark"],
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    /* The weakest text tier stops being a tier: at 9-11px it is the first thing to
+       go, and this preference is a request to stop being subtle. */
+    --text-muted: var(--text-soft);
+    --border: var(--border-strong);
+    --bar-track: var(--border-strong);
+    --focus: 0 0 0 3px var(--text);
+    /* Hue is the only thing separating one chart segment from the next, and a
+       washed-out hue separates nothing. */
+    --swatch-sat: 72%;
+  }
+
+  .chart-bar-track {
+    box-shadow: inset 0 -1px 0 var(--text-soft);
+  }
+}
+
+/*
+ * In forced-colors mode the browser throws away background-color, so every bar,
+ * segment and swatch in the extension would be painted Canvas — a chart of
+ * invisible data. Opting the data marks out is the sanctioned escape hatch; they
+ * are the only elements here whose colour carries meaning rather than decoration.
+ *
+ * The focus ring has to come back as a real outline for the same reason: the
+ * box-shadow above is not painted either.
+ */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  .chart-bar-fill,
+  .chart-bar-overlay,
+  .stack-segment,
+  .stack-swatch,
+  .chart-key-swatch,
+  .site-bar-fill {
+    forced-color-adjust: none;
+  }
 }

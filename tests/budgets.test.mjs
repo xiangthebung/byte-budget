@@ -5,6 +5,12 @@
  * the two things worth pinning are that it engages *before* the boundary rather than
  * after it, and that the band it uses to do so never grows large enough to swallow
  * the budget it is protecting.
+ *
+ * Two later properties join them, and both reach into `src/limit/rules.ts` because
+ * that is where they become observable: a budget over `ALL_SITES` refuses requests
+ * everywhere without a second mechanism, and a total and a per-site limit biting at
+ * once compose rather than compete. And a window key has to be able to *change*, or
+ * the grant filed under it never expires — which is what a session budget did.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -14,6 +20,7 @@ import {
   BUDGET_PERIOD_LABELS,
   BUDGET_SHAPES,
   BUDGET_SHAPE_LABELS,
+  grantFor,
   guardBytes,
   isSnoozed,
   periodDaysFor,
@@ -22,6 +29,9 @@ import {
   PROGRESSIVE_THRESHOLDS,
   tierFor,
 } from "../src/limit/budgets.ts";
+import { enforcementRules } from "../src/limit/rules.ts";
+import { blockedTypes } from "../src/limit/tiers.ts";
+import { ALL_SITES } from "../src/core/types.ts";
 
 const budget = (bytes, extra = {}) => ({
   site: "example.com",
@@ -100,7 +110,14 @@ test("window keys identify the window, and change when it rolls", () => {
   const friday = new Date(2026, 6, 31, 14, 0);
   const saturday = new Date(2026, 7, 1, 0, 30);
 
-  assert.equal(periodKeyFor("session", 1, friday), "session");
+  // A session window is identified by when the browser session began rather than by
+  // the clock, so its key changes on a restart and at no other time.
+  assert.equal(periodKeyFor("session", 1, friday, 1_700_000_000_000), "session:1700000000000");
+  assert.equal(
+    periodKeyFor("session", 1, saturday, 1_700_000_000_000),
+    periodKeyFor("session", 1, friday, 1_700_000_000_000),
+    "midnight does not end a browser session",
+  );
   assert.equal(periodKeyFor("day", 1, friday), "2026-07-31");
   assert.notEqual(periodKeyFor("day", 1, friday), periodKeyFor("day", 1, saturday));
 
@@ -139,6 +156,96 @@ test("a snooze expires", () => {
   assert.equal(isSnoozed(budget(1000, { snoozedUntil: now + 60_000 }), now), true);
   assert.equal(isSnoozed(budget(1000, { snoozedUntil: now - 1 }), now), false);
   assert.equal(isSnoozed(budget(1000), now), false);
+});
+
+test("a session grant belongs to the session it was made in", () => {
+  const friday = new Date(2026, 6, 31, 14, 0);
+  const first = periodKeyFor("session", 1, friday, 1_000);
+  const second = periodKeyFor("session", 1, friday, 2_000);
+  assert.notEqual(first, second, "a new browser session has to be a new window");
+
+  const session = budget(100_000_000, { period: "session" });
+  // "+25 MB", twice, inside one session: the second grant reads the first and adds to
+  // it, which is what makes two taps mean fifty megabytes rather than twenty-five.
+  const once = {
+    ...session,
+    grantedBytes: grantFor(session, first) + 25_000_000,
+    grantedFor: first,
+  };
+  const twice = { ...once, grantedBytes: grantFor(once, first) + 25_000_000, grantedFor: first };
+  assert.equal(allowanceOf(twice, first), 150_000_000, "two grants in one session add up");
+
+  // And the session after it starts from the budget again. While the key was the
+  // constant "session" nothing here could ever stop matching, so the carried grant was
+  // read back on every browser start and every later grant added to it — an allowance
+  // that only grew, and a limit that quietly stopped being one.
+  assert.equal(allowanceOf(twice, second), 100_000_000);
+  assert.equal(grantFor(twice, second), 0, "the grant does not follow the restart");
+});
+
+test("a budget over everything walks the same ladder, scoped to nothing", () => {
+  // 10 GB a month, so the guard band is at its 4 MB ceiling and the thresholds land
+  // where the fractions say.
+  const plan = budget(10_000_000_000, { site: ALL_SITES, period: "month" });
+  assert.equal(tierFor(plan, 5_000_000_000, 10_000_000_000), "off");
+  assert.equal(tierFor(plan, 6_000_000_000, 10_000_000_000), "trim");
+  assert.equal(tierFor(plan, 8_500_000_000, 10_000_000_000), "lean");
+  assert.equal(tierFor(plan, 10_000_000_000, 10_000_000_000), "strict");
+
+  for (const tier of ["trim", "lean", "strict"]) {
+    // Tabs are passed in and deliberately ignored: a rule scoped to the tabs the
+    // extension happens to know about would be a total limit with holes in it.
+    const rules = enforcementRules([{ site: ALL_SITES, tier, tabIds: [7, 9] }]);
+    assert.equal(rules.length, 1, `${tier} should be one unscoped rule`);
+    const [rule] = rules;
+    assert.equal(rule.action.type, "block");
+    assert.deepEqual(rule.condition.resourceTypes, blockedTypes(tier));
+    assert.equal(rule.condition.initiatorDomains, undefined, "a total limit names no domain");
+    assert.equal(rule.condition.tabIds, undefined, "and no tab");
+  }
+
+  assert.deepEqual(enforcementRules([{ site: ALL_SITES, tier: "off", tabIds: [] }]), []);
+  // The sentinel is the one reserved key a rule can be built from. The buckets are not
+  // domains, and `initiatorDomains: ["#background"]` is rejected by Chrome — which
+  // fails the install atomically and takes every real site's rules down with it.
+  assert.deepEqual(enforcementRules([{ site: "#background", tier: "strict", tabIds: [1] }]), []);
+});
+
+test("a total limit and a per-site limit compose instead of competing", () => {
+  const rules = enforcementRules([
+    { site: ALL_SITES, tier: "trim", tabIds: [] },
+    { site: "example.com", tier: "strict", tabIds: [7] },
+  ]);
+
+  // Every rule is a block, and all of them sit at one priority. Chrome refuses a
+  // request that any block rule matches, so two rule sets over the same traffic cannot
+  // disagree: the effect is the union of the two type sets. And because each tier's
+  // set is a prefix of the same shed order, that union is exactly the stricter tier —
+  // there is nothing here that needs to arbitrate, which is the point.
+  assert.ok(rules.every((rule) => rule.action.type === "block"));
+  assert.equal(new Set(rules.map((rule) => rule.priority)).size, 1, "one priority");
+
+  const ids = rules.map((rule) => rule.id);
+  assert.equal(new Set(ids).size, ids.length, "duplicate rule id");
+
+  const everywhere = rules.find((rule) => !rule.condition.initiatorDomains);
+  const onSite = rules.filter((rule) => rule.condition.initiatorDomains?.[0] === "example.com");
+  assert.equal(onSite.length, 2, "tab-scoped and origin-scoped, as for any other site");
+
+  const union = new Set([
+    ...everywhere.condition.resourceTypes,
+    ...onSite[0].condition.resourceTypes,
+  ]);
+  assert.deepEqual([...union].sort(), [...blockedTypes("strict")].sort());
+
+  // The other way round: a gentler per-site limit cannot loosen the total one, because
+  // no rule here allows anything.
+  const reversed = enforcementRules([
+    { site: ALL_SITES, tier: "strict", tabIds: [] },
+    { site: "example.com", tier: "trim", tabIds: [] },
+  ]);
+  const unscoped = reversed.find((rule) => !rule.condition.initiatorDomains);
+  assert.deepEqual(unscoped.condition.resourceTypes, blockedTypes("strict"));
 });
 
 test("every period and shape has a label, and the thresholds descend", () => {

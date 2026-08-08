@@ -8,7 +8,12 @@
  * where a byte count belongs.
  */
 
-import { DEFAULT_SETTINGS, RETENTION_OPTIONS, type Settings } from "./types";
+import {
+  DEFAULT_SETTINGS,
+  MAX_CYCLE_START_DAY,
+  RETENTION_OPTIONS,
+  type Settings,
+} from "./types";
 
 const SETTINGS_KEY = "settings";
 
@@ -25,6 +30,33 @@ function pickNumber(value: unknown, allowed: readonly number[], fallback: number
 
 function pickBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
+}
+
+/**
+ * The plan size, or `null` for "no plan set".
+ *
+ * Zero, negative and non-finite all become `null` rather than a plan of that size.
+ * A plan of zero bytes is 100% spent before the first request, so it would light up
+ * every over-budget surface in the product for someone whose only mistake was
+ * clearing the field — and `NaN` would reach the formatter and print `NaN`, which is
+ * the failure the whole of this file exists to prevent.
+ */
+function pickPlanBytes(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  return Math.round(value);
+}
+
+/**
+ * The day of the month a plan resets on: 0 for the calendar month, else 1..28.
+ *
+ * Out of range falls back rather than clamping, because the values outside it are
+ * the ones with no honest answer — there is no 31st of February, so a cycle anchored
+ * there resets on a different date in different months, and a reset date that moves
+ * is worse than one the user can see is wrong and fix.
+ */
+function pickCycleStartDay(value: unknown, fallback: number): number {
+  if (typeof value !== "number" || !Number.isInteger(value)) return fallback;
+  return value >= 0 && value <= MAX_CYCLE_START_DAY ? value : fallback;
 }
 
 /**
@@ -55,6 +87,8 @@ function normalize(value: Partial<Settings> | undefined): Settings {
     ),
     badge: pick(value?.badge, ["off", "session", "today"], DEFAULT_SETTINGS.badge),
     trackHosts: pickBoolean(value?.trackHosts, DEFAULT_SETTINGS.trackHosts),
+    planBytes: pickPlanBytes(value?.planBytes),
+    cycleStartDay: pickCycleStartDay(value?.cycleStartDay, DEFAULT_SETTINGS.cycleStartDay),
   };
 }
 

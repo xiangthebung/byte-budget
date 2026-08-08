@@ -96,9 +96,20 @@ export const RESOURCE_TYPE_LABELS: Record<ResourceType, string> = {
 export const BACKGROUND_SITE = "#background";
 export const EXTENSION_SITE = "#extensions";
 
+/**
+ * The budget key meaning "everything", rather than one site.
+ *
+ * Unlike the other two reserved keys this one is never attributed to: no stored row
+ * ever carries it. It is a `Budget.site` and nothing else, so a reader that sums the
+ * daily rows cannot meet it and count the same bytes twice. The `#` prefix is what
+ * keeps it out of the hostname keyspace, exactly as it does for the buckets.
+ */
+export const ALL_SITES = "#all";
+
 export const RESERVED_SITE_LABELS: Record<string, string> = {
   [BACKGROUND_SITE]: "Background & other",
   [EXTENSION_SITE]: "Extensions",
+  [ALL_SITES]: "Everything",
 };
 
 export function isReservedSite(site: string): boolean {
@@ -352,9 +363,35 @@ export interface Settings {
   badge: "off" | "session" | "today";
   /** Record per-host breakdowns. Off makes the drill-down poorer and the DB smaller. */
   trackHosts: boolean;
+  /**
+   * The size of the data plan these numbers are reconciled against, in bytes.
+   *
+   * `null` means no plan is set, and that is not the same as a plan of zero. A zero
+   * would be 100% spent before the first request and would put every surface into
+   * "over your limit" for someone who has simply never answered the question, so the
+   * two states are kept apart here rather than argued about at each call site.
+   */
+  planBytes: number | null;
+  /**
+   * Day of the month the plan resets. 1..28, or 0 for the calendar month.
+   *
+   * Most carrier cycles do not reset on the 1st, and a "30 days" figure anchored
+   * there is never the figure on the bill — which is the number this whole product
+   * exists to predict.
+   */
+  cycleStartDay: number;
 }
 
 export const RETENTION_OPTIONS = [30, 90, 400, 0] as const;
+
+/**
+ * The largest day of the month a billing cycle may start on.
+ *
+ * 28 rather than 31, because every month has a 28th. A cycle anchored above it would
+ * have to be clamped in short months, which means the reset date moves — and the
+ * reset date is the one value here a person checks against a paper bill.
+ */
+export const MAX_CYCLE_START_DAY = 28;
 
 export const DEFAULT_SETTINGS: Settings = {
   theme: "auto",
@@ -365,4 +402,6 @@ export const DEFAULT_SETTINGS: Settings = {
   retentionDays: 400,
   badge: "off",
   trackHosts: true,
+  planBytes: null,
+  cycleStartDay: 0,
 };

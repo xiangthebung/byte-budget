@@ -9,11 +9,20 @@
  * The day arithmetic is tested across a daylight-saving boundary because that is
  * where a naive "divide milliseconds by 86400000" is off by an hour and rounds a
  * seven-day week down to six.
+ *
+ * The cycle tests at the bottom are held to a higher standard than the rest, because
+ * they are the only numbers here a person checks against a paper bill. A period the
+ * user is browsing can be a day out and cost nothing; a cycle that is a day out
+ * reports last month's usage as this month's, which is the failure this product is
+ * supposed to be the cure for.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
   addDays,
+  cycleElapsed,
+  cycleRange,
+  cycleResetsAt,
   dayKey,
   dayKeysInRange,
   dayOfBucket,
@@ -23,12 +32,17 @@ import {
   hourKeysInDay,
   periodRange,
   retentionCutoff,
+  startOfCycle,
   startOfDay,
   startOfMonth,
   startOfWeek,
 } from "../src/core/period.ts";
 
 const SETTINGS = { weekMode: "rolling", monthMode: "calendar", weekStart: 1 };
+
+/** A carrier cycle that resets on the 15th, and one that follows the calendar month. */
+const MID_MONTH = { cycleStartDay: 15 };
+const CALENDAR = { cycleStartDay: 0 };
 
 test("keys are fixed width and sort chronologically as text", () => {
   const early = dayKey(new Date(2026, 0, 5));
@@ -137,4 +151,132 @@ test("retention keeps exactly the number of days asked for", () => {
   assert.equal(retentionCutoff(30, now), "2026-07-02");
   assert.equal(daysBetween(retentionCutoff(30, now), "2026-07-31") + 1, 30);
   assert.equal(retentionCutoff(0, now), null, "zero means keep everything");
+});
+
+test("a cycle starts on its anchor day, this month or last", () => {
+  // On and after the anchor, the running cycle is this month's.
+  assert.equal(dayKey(startOfCycle(MID_MONTH, new Date(2026, 6, 20, 9, 0))), "2026-07-15");
+  assert.equal(dayKey(startOfCycle(MID_MONTH, new Date(2026, 6, 15, 9, 0))), "2026-07-15");
+  // Before it, the cycle the user is *in* began last month. This is the whole defect:
+  // anchoring to the 1st puts these two days in different months than the bill does.
+  assert.equal(dayKey(startOfCycle(MID_MONTH, new Date(2026, 6, 14, 23, 0))), "2026-06-15");
+  assert.equal(dayKey(startOfCycle(MID_MONTH, new Date(2026, 6, 1, 0, 30))), "2026-06-15");
+
+  const start = startOfCycle(MID_MONTH, new Date(2026, 6, 20, 9, 0));
+  assert.equal(start.getHours(), 0, "a cycle begins at local midnight, not at 'now'");
+  assert.equal(start.getMinutes(), 0);
+  assert.equal(start.getSeconds() + start.getMilliseconds(), 0);
+});
+
+test("a cycle wraps from December into January", () => {
+  const january = new Date(2026, 0, 10, 12, 0);
+  assert.equal(dayKey(startOfCycle(MID_MONTH, january)), "2025-12-15", "and back a year");
+  assert.equal(dayKey(new Date(cycleResetsAt(MID_MONTH, january))), "2026-01-15");
+  assert.deepEqual(cycleRange(MID_MONTH, january), { from: "2025-12-15", to: "2026-01-10" });
+  assert.deepEqual(cycleElapsed(MID_MONTH, january), { elapsedDays: 27, totalDays: 31 });
+
+  const december = new Date(2025, 11, 20, 12, 0);
+  assert.equal(dayKey(startOfCycle(MID_MONTH, december)), "2025-12-15");
+  assert.equal(dayKey(new Date(cycleResetsAt(MID_MONTH, december))), "2026-01-15");
+});
+
+test("no cycle can be anchored to a day that some month lacks", () => {
+  // 28 is the largest anchor allowed, and the largest one every month has.
+  const february = new Date(2026, 1, 28, 12, 0);
+  assert.equal(dayKey(startOfCycle({ cycleStartDay: 28 }, february)), "2026-02-28");
+  assert.equal(cycleElapsed({ cycleStartDay: 28 }, february).totalDays, 28, "Feb 28 to Mar 28");
+  assert.equal(cycleElapsed({ cycleStartDay: 28 }, new Date(2024, 1, 28, 12, 0)).totalDays, 29);
+
+  // A stored 31 is clamped to the 28th rather than rolling into the next month, which
+  // is what a bare `new Date(y, m, 31)` would do in February — silently, and one
+  // month at a time.
+  assert.equal(dayKey(startOfCycle({ cycleStartDay: 31 }, february)), "2026-02-28");
+  assert.equal(dayKey(startOfCycle({ cycleStartDay: 31 }, new Date(2026, 1, 20))), "2026-01-28");
+
+  // 0 means the calendar month, which is the same reset date as 1.
+  const endOfJuly = new Date(2026, 6, 31, 14, 0);
+  assert.equal(dayKey(startOfCycle(CALENDAR, endOfJuly)), "2026-07-01");
+  assert.equal(dayKey(startOfCycle({ cycleStartDay: 1 }, endOfJuly)), "2026-07-01");
+
+  // Anything else is junk that arrived over sync from a build we do not know. It must
+  // fall back, not throw: this runs inside the popup's first paint.
+  for (const anchor of [-3, 0.5, Number.NaN, Number.POSITIVE_INFINITY, 99]) {
+    const day = dayKey(startOfCycle({ cycleStartDay: anchor }, endOfJuly));
+    assert.match(day, /^\d{4}-\d{2}-(01|28)$/, `anchor ${anchor} produced ${day}`);
+  }
+});
+
+test("the calendar-month cycle is the month, however long the month is", () => {
+  const endOfJuly = new Date(2026, 6, 31, 14, 0);
+  assert.deepEqual(cycleRange(CALENDAR, endOfJuly), { from: "2026-07-01", to: "2026-07-31" });
+  assert.deepEqual(cycleElapsed(CALENDAR, endOfJuly), { elapsedDays: 31, totalDays: 31 });
+  assert.equal(dayKey(new Date(cycleResetsAt(CALENDAR, endOfJuly))), "2026-08-01");
+  assert.equal(cycleElapsed(CALENDAR, new Date(2026, 1, 10, 12, 0)).totalDays, 28);
+  assert.equal(cycleElapsed(CALENDAR, new Date(2024, 1, 10, 12, 0)).totalDays, 29, "leap year");
+});
+
+test("the reset day itself is day 1 of the new cycle, from its first millisecond", () => {
+  const midnight = new Date(2026, 6, 15, 0, 0, 0, 0);
+  const lastMoment = new Date(2026, 6, 14, 23, 59, 59, 999);
+
+  // Pinned deliberately: a projection divides by `elapsedDays`, so day 0 would be a
+  // division by zero on every reset morning.
+  assert.deepEqual(cycleElapsed(MID_MONTH, midnight), { elapsedDays: 1, totalDays: 31 });
+  assert.deepEqual(cycleRange(MID_MONTH, midnight), { from: "2026-07-15", to: "2026-07-15" });
+
+  // One millisecond earlier is the last day of the previous cycle, entire.
+  const ending = cycleElapsed(MID_MONTH, lastMoment);
+  assert.deepEqual(ending, { elapsedDays: 30, totalDays: 30 }, "Jun 15 to Jul 15 is 30 days");
+  assert.equal(dayKey(startOfCycle(MID_MONTH, lastMoment)), "2026-06-15");
+
+  // The two agree on the instant they hand over: no gap, no day in both.
+  assert.equal(cycleResetsAt(MID_MONTH, lastMoment), midnight.getTime());
+  assert.equal(cycleResetsAt(MID_MONTH, lastMoment), startOfCycle(MID_MONTH, midnight).getTime());
+  assert.ok(cycleResetsAt(MID_MONTH, midnight) > midnight.getTime(), "reset is always ahead");
+});
+
+test("a cycle spanning a daylight-saving change is still whole days", () => {
+  // Both of these contain a 23- or 25-hour day in most northern zones. A cycle length
+  // of 30.96 rounds to the wrong number of days remaining, which is the figure the
+  // pace verdict is built on.
+  const spring = new Date(2026, 2, 20, 12, 0);
+  assert.deepEqual(cycleRange(MID_MONTH, spring), { from: "2026-03-15", to: "2026-03-20" });
+  assert.deepEqual(cycleElapsed(MID_MONTH, spring), { elapsedDays: 6, totalDays: 31 });
+
+  const autumn = new Date(2026, 10, 5, 12, 0);
+  assert.deepEqual(cycleElapsed(MID_MONTH, autumn), { elapsedDays: 22, totalDays: 31 });
+  assert.equal(dayKey(new Date(cycleResetsAt(MID_MONTH, autumn))), "2026-11-15");
+});
+
+test("every day belongs to exactly one cycle, and they run consecutively", () => {
+  // Walked a day at a time over more than a year, because the interesting failures are
+  // the ones at the seams: a day counted in two cycles or in none is a day of usage
+  // that appears twice on the dashboard or vanishes from it.
+  let previous = null;
+  for (let offset = 0; offset < 400; offset++) {
+    const day = new Date(2025, 10, 1 + offset, 12, 0);
+    const from = dayKey(startOfCycle(MID_MONTH, day));
+    const { elapsedDays, totalDays } = cycleElapsed(MID_MONTH, day);
+    const range = cycleRange(MID_MONTH, day);
+
+    assert.equal(range.from, from);
+    assert.equal(range.to, dayKey(day));
+    assert.equal(elapsedDays, daysBetween(range.from, range.to) + 1);
+    assert.ok(elapsedDays >= 1, `${dayKey(day)} is day ${elapsedDays}`);
+    assert.ok(elapsedDays <= totalDays, `${dayKey(day)} is day ${elapsedDays} of ${totalDays}`);
+    assert.ok(totalDays >= 28 && totalDays <= 31, `${from} runs ${totalDays} days`);
+    assert.ok(cycleResetsAt(MID_MONTH, day) > day.getTime());
+
+    if (previous) {
+      if (from === previous.from) {
+        assert.equal(elapsedDays, previous.elapsedDays + 1, `${dayKey(day)} skipped a day`);
+      } else {
+        assert.equal(elapsedDays, 1, `${dayKey(day)} should open a cycle`);
+        assert.equal(previous.elapsedDays, previous.totalDays, `${previous.from} ended short`);
+        assert.equal(day.getDate(), 15, "cycles turn over on the anchor date and no other");
+        assert.equal(previous.resetsAt, startOfCycle(MID_MONTH, day).getTime());
+      }
+    }
+    previous = { from, elapsedDays, totalDays, resetsAt: cycleResetsAt(MID_MONTH, day) };
+  }
 });

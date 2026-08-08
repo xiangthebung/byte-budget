@@ -103,7 +103,7 @@ body {
   font-weight: 600;
 }
 
-.tabs button[aria-selected="true"] {
+.tabs button[aria-checked="true"] {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-card);

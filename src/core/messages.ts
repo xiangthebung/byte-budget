@@ -8,9 +8,12 @@
  * show a total that is five seconds stale while traffic is flowing.
  */
 
+import type { AlertSettings } from "../limit/alerts";
 import type { Budget, BudgetPeriod, BudgetShape } from "../limit/budgets";
 import type { Tier } from "../limit/tiers";
 import type { OptimizeSettings, PageFeatureId } from "../optimize/features";
+import type { FlushError } from "../track/ledger";
+import type { Projection } from "./forecast";
 import type {
   Period,
   ResourceType,
@@ -55,7 +58,36 @@ export interface OverviewPayload {
   current: CurrentTab;
   /** Bytes per day across the period, for the popup sparkline. Empty for `session`. */
   series: SeriesPoint[];
+  /**
+   * The window of the same length immediately before this one.
+   *
+   * Measured, on exactly the same basis as `totals`, so the two can be subtracted:
+   * "18% less than the previous 30 days". Behaviour change is the point of a budgeting
+   * tool, and a tool that cannot show change cannot show that it worked.
+   */
+  previousTotals: UsageTotals;
+  /**
+   * Where the current cycle is heading, or `null` when no plan is set or there are too
+   * few days to say anything.
+   *
+   * The one modelled figure on this payload, and it must be shown as one: label it a
+   * projection and print `basis` beside it rather than summarising it away. Never add it
+   * to, or subtract it from, `totals` — merging a modelled number into a measured one is
+   * the mistake this codebase is organised to make impossible.
+   */
+  projection: Projection | null;
   settings: Settings;
+  /**
+   * When the worker composed this payload, epoch ms.
+   *
+   * On the payload so a surface can say how old what it is showing is. The popup polls
+   * every two seconds and keeps the last payload on screen while a poll is in flight or
+   * has failed — and a worker torn down after an idle gap makes a failed poll ordinary
+   * rather than exceptional. So: compare with `Date.now()` on render, and past roughly
+   * ten seconds print `formatAgo(generatedAt)` instead of presenting the figures as
+   * live. A number that is quietly a minute old is exactly what a measurement tool
+   * cannot show without saying so.
+   */
   generatedAt: number;
   /** Wall-clock start of the browser session, for the `session` period. */
   sessionStartedAt: number;
@@ -97,8 +129,27 @@ export interface StorageReport {
   hostRows: number;
   visitRows: number;
   sizeModelRows: number;
+  /**
+   * Rows in the observed-baselines store.
+   *
+   * Optional so that a payload from a build whose `storageReport()` predates the field
+   * still typechecks and can be shown as "not reported". Defaulting it to 0 would be the
+   * worse failure: this is the one store retention pruning does not touch, it is capped
+   * by row count alone, and a disk panel claiming it is empty when it holds three
+   * thousand third-party image URLs would be wrong in the direction that matters.
+   */
+  baselineRows?: number;
   /** From `navigator.storage.estimate()`, when the browser offers it. */
   bytesUsed: number | null;
+  /**
+   * The last flush whose writes did not all land, or `null` when everything is written.
+   *
+   * Reported rather than only logged: a rejected write leaves every total quietly behind
+   * the traffic it claims to measure, and a service worker's console is not a surface
+   * anyone opens. This is the only report in the extension whose job is to say what the
+   * storage layer is actually doing, so it is the only place that admission fits.
+   */
+  lastFlushError: FlushError | null;
 }
 
 /* ------------------------------------------------------------------ *
@@ -131,6 +182,16 @@ export type ExtensionRequest =
   | { type: "GET_SERIES"; days: number }
   | { type: "GET_SETTINGS" }
   | { type: "SAVE_SETTINGS"; changes: Partial<Settings> }
+  /**
+   * Alert preferences are their own pair rather than fields on `Settings`.
+   *
+   * `Settings` is what every surface reads on every render and what `normalize()` has to
+   * validate field by field; two booleans that only the worker's alerting path consults
+   * do not belong in that hot, load-bearing shape. Keeping them apart also keeps the
+   * thing that can interrupt someone in one file with the rules that bound it.
+   */
+  | { type: "GET_ALERTS" }
+  | { type: "SAVE_ALERTS"; changes: Partial<AlertSettings> }
   | { type: "GET_STORAGE_REPORT" }
   | { type: "EXPORT"; format: "csv" | "json"; days: number }
   | { type: "CLEAR_DATA" }
@@ -207,10 +268,27 @@ export interface BudgetStatus {
 export interface SavingsReport {
   from: string;
   to: string;
-  /** Total credited, measured plus modelled. */
+  /**
+   * Total credited, measured plus modelled.
+   *
+   * Deliberately not the headline. It is the sum of two numbers with different
+   * standing, and a surface that renders only this one has merged them — which is the
+   * single thing README.md:133-141 says must never happen. Render `savedMeasured` and
+   * `savedModelled` as two figures; use this only where a single total is genuinely
+   * what is being asked for, and tilde it when it is.
+   */
   saved: number;
-  /** The part that came from observing the original variant. */
+  /** The part that came from observing the original variant. Arithmetic — show it untilded. */
   savedMeasured: number;
+  /**
+   * `saved` minus `savedMeasured`: the estimator's share of the credit.
+   *
+   * Precomputed rather than left as a subtraction for the UI, because a subtraction the
+   * caller has to remember is a subtraction one caller will forget — and the failure is
+   * silent, arriving as a modelled number wearing a measured number's confidence.
+   * Never show it without a tilde.
+   */
+  savedModelled: number;
   blocked: number;
   rewritten: number;
   /** Per-site page-load comparisons, where both sides have enough samples. */
@@ -269,35 +347,37 @@ export type ResponseFor<T extends ExtensionRequest> = T extends { type: "GET_OVE
         ? { settings: Settings }
         : T extends { type: "SAVE_SETTINGS" }
           ? { settings: Settings }
-          : T extends { type: "GET_STORAGE_REPORT" }
-            ? StorageReport
-            : T extends { type: "EXPORT" }
-              ? { filename: string; mimeType: string; body: string }
-              : T extends { type: "SET_ENFORCEMENT" }
-                ? { rules: number; enforcement: EnforcementState[] }
-                : T extends { type: "GET_ENFORCEMENT" }
-                  ? { enforcement: EnforcementState[] }
-                  : T extends {
-                        type:
-                          | "GET_BUDGETS"
-                          | "PUT_BUDGET"
-                          | "REMOVE_BUDGET"
-                          | "SNOOZE_BUDGET"
-                          | "RESUME_BUDGET"
-                          | "GRANT_BYTES";
-                      }
-                    ? { statuses: BudgetStatus[] }
-                    : T extends { type: "GET_TAB_NOTICE" }
-                      ? { notice: TabNotice | null }
-                      : T extends {
-                            type: "GET_OPTIMIZE" | "SAVE_OPTIMIZE" | "SET_SITE_OPTIMIZE";
-                          }
-                        ? { optimize: OptimizeSettings; rules: number }
-                        : T extends { type: "GET_SAVINGS" }
-                          ? SavingsReport
-                          : T extends { type: "GET_PAGE_FEATURES" }
-                            ? { features: PageFeatureId[] }
-                            : Record<string, never>;
+          : T extends { type: "GET_ALERTS" | "SAVE_ALERTS" }
+            ? { alerts: AlertSettings }
+            : T extends { type: "GET_STORAGE_REPORT" }
+              ? StorageReport
+              : T extends { type: "EXPORT" }
+                ? { filename: string; mimeType: string; body: string }
+                : T extends { type: "SET_ENFORCEMENT" }
+                  ? { rules: number; enforcement: EnforcementState[] }
+                  : T extends { type: "GET_ENFORCEMENT" }
+                    ? { enforcement: EnforcementState[] }
+                    : T extends {
+                          type:
+                            | "GET_BUDGETS"
+                            | "PUT_BUDGET"
+                            | "REMOVE_BUDGET"
+                            | "SNOOZE_BUDGET"
+                            | "RESUME_BUDGET"
+                            | "GRANT_BYTES";
+                        }
+                      ? { statuses: BudgetStatus[] }
+                      : T extends { type: "GET_TAB_NOTICE" }
+                        ? { notice: TabNotice | null }
+                        : T extends {
+                              type: "GET_OPTIMIZE" | "SAVE_OPTIMIZE" | "SET_SITE_OPTIMIZE";
+                            }
+                          ? { optimize: OptimizeSettings; rules: number }
+                          : T extends { type: "GET_SAVINGS" }
+                            ? SavingsReport
+                            : T extends { type: "GET_PAGE_FEATURES" }
+                              ? { features: PageFeatureId[] }
+                              : Record<string, never>;
 
 export type Envelope<T> = ({ ok: true } & T) | { ok: false; error: string };
 

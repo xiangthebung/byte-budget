@@ -14,14 +14,19 @@ import {
   getAllFromIndex,
   STORES,
 } from "../core/db";
+import { forecast, type Projection } from "../core/forecast";
 import {
   addDays,
+  cycleElapsed,
+  cycleRange,
   dayKey,
   dayKeysInRange,
+  daysBetween,
   describePeriod,
   hourKeyFromMs,
   hourKeysInDay,
   periodRange,
+  startOfCycle,
   startOfDay,
   type DayRange,
 } from "../core/period";
@@ -47,7 +52,7 @@ import type {
   StorageReport,
   VisitStats,
 } from "../core/messages";
-import { ledger, type Delta, type FlushError } from "./ledger";
+import { ledger, type Delta } from "./ledger";
 
 function emptyDelta(): Delta {
   return { ...emptyTotals(), byType: {} };
@@ -164,6 +169,44 @@ function seriesFrom(rows: readonly UsageRow[], buckets: readonly string[]): Seri
   return [...byBucket.values()];
 }
 
+/**
+ * The window immediately before this one, the same length.
+ *
+ * Same length is the whole requirement. A delta between windows of different sizes is
+ * a number that moves when the calendar does rather than when usage does, and "18%
+ * less than the previous 30 days" is the only sentence in the product that can show a
+ * budgeting tool worked.
+ */
+function previousRange(range: DayRange): DayRange {
+  const span = daysBetween(range.from, range.to) + 1;
+  return { from: addDays(range.from, -span), to: addDays(range.from, -1) };
+}
+
+/** The earliest of some day keys, ignoring the windows that were not asked for. */
+function earliestKey(...keys: (string | null)[]): string | null {
+  let earliest: string | null = null;
+  for (const key of keys) {
+    if (key !== null && (earliest === null || key < earliest)) earliest = key;
+  }
+  return earliest;
+}
+
+/**
+ * Bytes per day across every site, one entry per day in `days`, oldest first.
+ *
+ * Down plus up, because a carrier's plan counts both directions and this series exists
+ * to be projected against one.
+ */
+function bytesPerDay(rows: readonly UsageRow[], days: readonly string[]): number[] {
+  const byDay = new Map<string, number>(days.map((day) => [day, 0]));
+  for (const row of rows) {
+    const total = byDay.get(row.bucket);
+    if (total === undefined) continue;
+    byDay.set(row.bucket, total + row.down + row.up);
+  }
+  return [...byDay.values()];
+}
+
 async function currentTab(): Promise<{ site: string | null; origin: string | null }> {
   try {
     const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
@@ -178,13 +221,56 @@ export async function overview(period: Period, settings: Settings): Promise<Over
   const session = await ledger.sessionUsage();
   const range = await resolveRange(period, settings);
 
-  // One read of the daily store, shared by the totals and the series. They asked for
-  // the identical range and issued it twice, and `overview` is what the popup's
-  // two-second poll calls — thirty duplicate full-range reads a minute while it is open.
-  const dailyRows =
-    period === "session"
-      ? []
-      : await getAll<UsageRow>(STORES.daily, bucketRange(range.from, range.to));
+  // The window before this one, and the plan cycle. The cycle is deliberately not the
+  // selected period: a projection is a statement about the bill, so it covers the
+  // cycle whichever tab the popup is on. Scoping it to `period` would give a
+  // "projection" that changes meaning when someone taps "7 days".
+  const previous = period === "session" ? null : previousRange(range);
+  const cycle = settings.planBytes === null ? null : cycleRange(settings);
+
+  // One read of the daily store, covering every window on this payload that comes out
+  // of it: the selected period, the period before it, and the plan cycle. All three end
+  // today and they overlap, so one ranged read plus a partition is cheaper than three
+  // reads — and `overview` is what the popup's two-second poll calls, so a transaction
+  // saved here is thirty a minute. The totals and the series used to issue the
+  // identical range twice; that must not come back in a different shape.
+  const readFrom = earliestKey(
+    period === "session" ? null : range.from,
+    previous?.from ?? null,
+    cycle?.from ?? null,
+  );
+  const rows =
+    readFrom === null ? [] : await getAll<UsageRow>(STORES.daily, bucketRange(readFrom, range.to));
+
+  const dailyRows: UsageRow[] = [];
+  const previousRows: UsageRow[] = [];
+  const cycleRows: UsageRow[] = [];
+  for (const row of rows) {
+    if (row.bucket >= range.from) {
+      if (period !== "session") dailyRows.push(row);
+    } else if (previous !== null && row.bucket >= previous.from) {
+      previousRows.push(row);
+    }
+    if (cycle !== null && row.bucket >= cycle.from) cycleRows.push(row);
+  }
+
+  // Zero for `session`, and zero for a profile with no history that far back. Both read
+  // the same on the wire, so the surface has to suppress the comparison on a zero
+  // rather than print "100% less than nothing".
+  const previousTotals = emptyTotals();
+  for (const row of previousRows) addTotals(previousTotals, row);
+
+  let projection: Projection | null = null;
+  if (cycle !== null) {
+    const { elapsedDays, totalDays } = cycleElapsed(settings);
+    projection = forecast(
+      bytesPerDay(cycleRows, dayKeysInRange(cycle.from, cycle.to)),
+      elapsedDays,
+      totalDays,
+      settings.planBytes,
+      startOfCycle(settings).getTime(),
+    );
+  }
 
   let totals: UsageTotals;
   let byType: TypeBytes;
@@ -239,6 +325,8 @@ export async function overview(period: Period, settings: Settings): Promise<Over
     sites,
     current: { site: tab.site, origin: tab.origin, totals: currentTotals },
     series,
+    previousTotals,
+    projection,
     settings,
     generatedAt: Date.now(),
     sessionStartedAt: session.startedAt,
@@ -390,16 +478,20 @@ function shiftDay(day: string, offset: number): string {
  * the storage layer is actually doing. Fold it into `StorageReport` when that file
  * next changes.
  */
-export async function storageReport(): Promise<
-  StorageReport & { lastFlushError: FlushError | null }
-> {
-  const [dailyRows, hourlyRows, hostRows, visitRows, sizeModelRows] = await Promise.all([
-    countRows(STORES.daily),
-    countRows(STORES.hourly),
-    countRows(STORES.hosts),
-    countRows(STORES.visits),
-    countRows(STORES.sizeModel),
-  ]);
+export async function storageReport(): Promise<StorageReport> {
+  const [dailyRows, hourlyRows, hostRows, visitRows, sizeModelRows, baselineRows] =
+    await Promise.all([
+      countRows(STORES.daily),
+      countRows(STORES.hourly),
+      countRows(STORES.hosts),
+      countRows(STORES.visits),
+      countRows(STORES.sizeModel),
+      // Counted like the rest, and not omitted as "an internal cache". This is the one
+      // store retention pruning does not reach — it is capped by row count alone — so a
+      // disk panel that silently left it out would be understating the thing hardest to
+      // get rid of.
+      countRows(STORES.baselines),
+    ]);
 
   let bytesUsed: number | null = null;
   try {
@@ -415,6 +507,7 @@ export async function storageReport(): Promise<
     hostRows,
     visitRows,
     sizeModelRows,
+    baselineRows,
     bytesUsed,
     lastFlushError: ledger.lastFlushError(),
   };

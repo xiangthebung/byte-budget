@@ -8,7 +8,7 @@
  */
 
 import { addDays, dayKey, startOfMonth, startOfWeek } from "../core/period";
-import type { Settings } from "../core/types";
+import { ALL_SITES, type Settings } from "../core/types";
 import type { Tier } from "./tiers";
 
 export const BUDGET_PERIODS = ["session", "day", "week", "month"] as const;
@@ -37,6 +37,15 @@ export const BUDGET_SHAPE_LABELS: Record<BudgetShape, string> = {
 };
 
 export interface Budget {
+  /**
+   * The site the limit is on, or `ALL_SITES` for a limit over everything.
+   *
+   * `ALL_SITES` is the only reserved key a budget may carry, and it is not a
+   * convenience: "stop me at 10 GB across everything" is what a person on a metered
+   * plan actually asks for, and it is the only way the `#background` bucket — other
+   * extensions, service workers, browser services — can be held to a limit at all,
+   * since those requests have no origin to scope a per-site rule against.
+   */
   site: string;
   /** Bytes allowed per period, before any grant. */
   bytes: number;
@@ -89,9 +98,20 @@ export const PROGRESSIVE_THRESHOLDS: readonly { at: number; tier: Tier }[] = [
   { at: 0.6, tier: "trim" },
 ];
 
+/**
+ * The grant still standing for `periodKey`, in bytes.
+ *
+ * A grant is filed under the window it was made for, so it expires by no longer
+ * matching rather than by being cleaned up — nothing has to run at midnight for
+ * "+25 MB today" to stop applying tomorrow. Which makes the window key the whole of
+ * the mechanism, and a key that never changes a grant that never expires.
+ */
+export function grantFor(budget: Budget, periodKey: string): number {
+  return budget.grantedFor === periodKey ? Math.max(0, budget.grantedBytes ?? 0) : 0;
+}
+
 export function allowanceOf(budget: Budget, periodKey: string): number {
-  const granted = budget.grantedFor === periodKey ? (budget.grantedBytes ?? 0) : 0;
-  return Math.max(0, budget.bytes + granted);
+  return Math.max(0, budget.bytes + grantFor(budget, periodKey));
 }
 
 /**
@@ -111,16 +131,31 @@ export function tierFor(budget: Budget, used: number, allowance: number): Tier {
   return "off";
 }
 
-/** The period key a budget's current window is identified by. */
+/**
+ * The period key a budget's current window is identified by.
+ *
+ * `sessionStartedAt` is when the browser session began — `ledger` keeps the session
+ * total in `chrome.storage.session`, which Chrome clears when the browser closes, so
+ * its start time is what "this session" means to both. It is a parameter because
+ * this function has to stay pure and synchronous; the governor holds the value.
+ *
+ * The session key used to be the constant `"session"`, and a key that can never
+ * change is a window that can never roll: `refreshWindows` never reset the counter,
+ * and every grant found the previous one still filed under the same key and added to
+ * it, so a session budget's allowance only ever grew — across browser restarts,
+ * forever. Nothing could reach it while both `PUT_BUDGET` call sites hardcoded
+ * `"day"`; exposing period selection is what arms it.
+ */
 export function periodKeyFor(
   period: BudgetPeriod,
   weekStart: Settings["weekStart"],
   now: Date = new Date(),
+  sessionStartedAt = 0,
 ): string {
   const today = dayKey(now);
   switch (period) {
     case "session":
-      return "session";
+      return `session:${sessionStartedAt}`;
     case "day":
       return today;
     case "week":
@@ -315,6 +350,14 @@ export interface BudgetInput {
 }
 
 export async function putBudget(input: BudgetInput): Promise<Budget[]> {
+  // `ALL_SITES` is a budget; every other reserved key is a ledger bucket. No rule can
+  // be built from one — `rules.ts` skips them, and `initiatorDomains: ["#background"]`
+  // is a condition Chrome rejects, which fails the whole atomic install and takes
+  // every other site's rules with it. Saving one would create a limit that can never
+  // fire and a row that reads 0% forever.
+  if (input.site.startsWith("#") && input.site !== ALL_SITES) {
+    throw new Error("That is not a site a limit can be set on.");
+  }
   const budgets = await getBudgets();
   const existing = budgets.find((budget) => budget.site === input.site);
   if (!existing && budgets.length >= MAX_BUDGETS) {
@@ -365,9 +408,11 @@ export function grantBytes(site: string, bytes: number, periodKey: string): Prom
   return getBudgets().then((budgets) => {
     const existing = budgets.find((budget) => budget.site === site);
     if (!existing) throw new Error("There is no limit on that site.");
-    const carried = existing.grantedFor === periodKey ? (existing.grantedBytes ?? 0) : 0;
+    // Grants inside one window add up, because pressing "+25 MB" twice means 50 MB
+    // today. `grantFor` is the whole of what stops that accumulation crossing into
+    // the next window, so it is read here rather than the field being trusted.
     return patchBudget(site, {
-      grantedBytes: carried + Math.max(0, Math.round(bytes)),
+      grantedBytes: grantFor(existing, periodKey) + Math.max(0, Math.round(bytes)),
       grantedFor: periodKey,
     });
   });

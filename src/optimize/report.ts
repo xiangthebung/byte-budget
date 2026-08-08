@@ -16,6 +16,21 @@ import type { UsageRow } from "../core/types";
 import { getOptimizeSettings } from "./features";
 import { baselineCount, visitDeltas } from "./savings";
 
+/**
+ * The report, with the modelled half named instead of left to be subtracted.
+ *
+ * `saved` is both halves added together and `savedMeasured` is the part resting on an
+ * observed original size, so the modelled part was always derivable — and the shipped
+ * dashboard did not derive it. It rendered `saved` alone, one figure merging a
+ * subtraction of two real sizes with the estimator's opinion about requests that never
+ * happened, which is the merge README.md:133-141 exists to forbid. A UI cannot render
+ * one number by accident when both are handed to it under their own names.
+ *
+ * It rides alongside `SavingsReport` rather than inside it because `core/messages.ts`
+ * does not name the field yet — the same arrangement `track/stats.ts` uses for
+ * `lastFlushError`. Fold it into `SavingsReport` when that file next changes; until
+ * then a surface reading `GET_SAVINGS` has to name this type to see the field.
+ */
 export async function savingsReport(days: number): Promise<SavingsReport> {
   const to = dayKey();
   const span = Math.max(1, days);
@@ -49,8 +64,17 @@ export async function savingsReport(days: number): Promise<SavingsReport> {
     to,
     saved,
     savedMeasured,
+    // Clamped rather than trusted to be non-negative. `savedMeasured` is accumulated as
+    // a share of `saved` row by row, so the two can only disagree through a defect
+    // upstream — and the visible symptom of that would be a negative byte count in the
+    // "Estimated" tile, which reads as a broken tool rather than as the bug it is.
+    savedModelled: Math.max(0, saved - savedMeasured),
     blocked,
     rewritten,
+    // Passed through unmapped, which is what carries `savedPerVisitSpread` to the view:
+    // `VisitDelta` and `VisitDeltaView` are the same shape and the compiler checks it
+    // here, so a field added to one and forgotten in the other fails the build rather
+    // than silently arriving as `undefined` beside a "±" in the dashboard.
     deltas,
     deltaTotal,
     baselines: await baselineCount(),

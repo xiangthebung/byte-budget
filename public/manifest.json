@@ -21,6 +21,7 @@
     "declarativeNetRequest",
     "scripting",
     "alarms",
+    "notifications",
     "favicon"
   ],
   "host_permissions": ["http://*/*", "https://*/*"],

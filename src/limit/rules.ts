@@ -33,9 +33,23 @@
  * enforcement is keyed and re-scoped on, and because DNR has no condition for "the
  * tab's top-level site", which is the one thing that would let both properties hold
  * at once.
+ *
+ * One budget names no site: `ALL_SITES`, the limit over everything. Its rule carries
+ * `resourceTypes` and nothing else, which Chrome accepts and reads as "every request",
+ * so the same tier ladder applies globally with no second mechanism — and it is the
+ * only shape that can reach the `#background` bucket, whose requests have no initiator
+ * to scope against. Every other reserved key is still skipped.
+ *
+ * A total budget and a per-site budget can both be enforcing on the same request, and
+ * they cannot contradict each other: every rule here is a `block` at one priority, and
+ * DNR blocks a request that any block rule matches. So the effect is the union of the
+ * two tiers' refused types — and because each tier's set is a prefix of the same shed
+ * order, that union is exactly the stricter tier. Nothing here has to arbitrate. What
+ * does have to be arbitrated is the *banner*, in `governor.ts`: two limits biting at
+ * once must still produce one explanation, naming the one that is doing the cutting.
  */
 
-import type { ResourceType } from "../core/types";
+import { ALL_SITES, type ResourceType } from "../core/types";
 import { blockedTypes, type Tier } from "./tiers";
 
 export interface EnforcementEntry {
@@ -89,7 +103,25 @@ export function enforcementRules(entries: readonly EnforcementEntry[]): SessionR
 
   for (const entry of entries) {
     const resourceTypes = blockedTypes(entry.tier);
-    if (resourceTypes.length === 0 || !entry.site || entry.site.startsWith("#")) continue;
+    if (resourceTypes.length === 0 || !entry.site) continue;
+
+    if (entry.site === ALL_SITES) {
+      // No `initiatorDomains` and no `tabIds` on purpose: an unscoped condition is how
+      // a limit reaches traffic that has no site of its own, which is the half of a
+      // data plan a per-site rule can never see.
+      rules.push({
+        id: id++,
+        priority: PRIORITY,
+        action: { type: "block" },
+        condition: { resourceTypes },
+      });
+      continue;
+    }
+
+    // Every other reserved key is a ledger bucket rather than a domain, and
+    // `initiatorDomains: ["#background"]` is a condition Chrome rejects — which fails
+    // the install atomically and takes every real site's rules down with it.
+    if (entry.site.startsWith("#")) continue;
 
     if (entry.tabIds.length > 0) {
       rules.push({

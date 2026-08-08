@@ -17,6 +17,13 @@ import { getSettings, onSettingsChanged, saveSettings } from "./core/settings";
 import type { Envelope, ExtensionRequest } from "./core/messages";
 import { emptyTotals, type Settings, type UsageRow } from "./core/types";
 import {
+  checkAllowanceAlerts,
+  clearAlertHistory,
+  getAlertSettings,
+  isAlertNotification,
+  saveAlertSettings,
+} from "./limit/alerts";
+import {
   grantBytes,
   putBudget,
   removeBudget,
@@ -301,7 +308,59 @@ async function maintenance(): Promise<void> {
   // cancelled, or whose tab dies mid-body, leaves an entry no completion event will
   // ever claim — bounded by the browser session, but only because this sweeps it.
   await sweepUploads();
+  // After the rollover above, never before it: an alert composed against a window that
+  // has already reset would name a figure nothing on any surface agrees with.
+  await raiseAlerts();
   await updateBadge();
+}
+
+/**
+ * Offers every budget's live numbers to the alerting module.
+ *
+ * Not a timer of its own — it rides the maintenance alarm that already rolls the windows
+ * over — and not the whole story either. The low-latency call belongs inside
+ * `governor.syncEnforcement`, which computes the same share on the request path and can
+ * therefore speak within a second of a threshold rather than within a minute; this is
+ * what makes alerting reachable while that lands, and it stays useful afterwards because
+ * a window can roll over or a snooze expire with no traffic at all to notice it.
+ *
+ * `checkAllowanceAlerts` deduplicates per window, so the two paths cannot produce two
+ * copies of the same alert.
+ */
+async function raiseAlerts(): Promise<void> {
+  const statuses = await budgetStatuses();
+  if (statuses.length === 0) return;
+  const { units } = await getSettings();
+  await checkAllowanceAlerts(
+    statuses.map((status) => ({
+      site: status.budget.site,
+      used: status.used,
+      allowance: status.allowance,
+      periodKey: status.periodKey,
+      resetsAt: status.resetsAt,
+    })),
+    units,
+  );
+}
+
+/**
+ * Registered at the top level like every other listener in this file: a notification
+ * click can be the event that wakes the worker, and a listener added inside a promise
+ * callback is not there yet when the event that woke it is dispatched.
+ *
+ * Guarded because the namespace is absent in a build that does not declare the
+ * permission, and a throw at the top level of a service worker takes down every listener
+ * after it, not just this one.
+ */
+if (chrome.notifications) {
+  chrome.notifications.onClicked.addListener((id) => {
+    if (!isAlertNotification(id)) return;
+    // Cleared explicitly: Chrome leaves a clicked notification in the tray on some
+    // platforms, and an alert that stays on screen after it has been acted on reads as
+    // a second one.
+    void chrome.notifications.clear(id);
+    void chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+  });
 }
 
 async function prune(): Promise<void> {
@@ -442,6 +501,17 @@ async function handle(
       return { settings };
     }
 
+    case "GET_ALERTS":
+      return { alerts: await getAlertSettings() };
+
+    case "SAVE_ALERTS": {
+      // No rules to rebuild and nothing to re-evaluate: the next pass reads the
+      // preference, and the per-window record is deliberately untouched. Switching
+      // per-site alerts on at 95% should say so at 95%, not replay 75% and 90%.
+      const alerts = await saveAlertSettings(request.changes);
+      return { alerts };
+    }
+
     case "GET_STORAGE_REPORT": {
       await ledger.flush();
       return storageReport();
@@ -475,6 +545,12 @@ async function handle(
       // Rules outliving the usage they were derived from is the case where someone
       // deletes everything and the browser stays broken.
       await clearEnforcement();
+      // The record of which thresholds have already been announced goes with the usage
+      // it was derived from. `resetCounters` above has just put every window back to
+      // zero, so a kept record would mean climbing through 75% and 90% again in total
+      // silence — for the rest of the window, which on a monthly budget is up to a
+      // month. The alert preferences are settings and stay, like the budgets do.
+      await clearAlertHistory();
       await updateBadge();
       return {};
     }

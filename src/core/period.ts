@@ -8,7 +8,7 @@
  * it is what lets an IndexedDB range query stand in for a date comparison.
  */
 
-import type { Period, Settings } from "./types";
+import { MAX_CYCLE_START_DAY, type Period, type Settings } from "./types";
 
 function pad(value: number, width = 2): string {
   return String(value).padStart(width, "0");
@@ -18,6 +18,25 @@ export function dayKey(date: Date = new Date()): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
+/**
+ * Hour buckets are local wall-clock hours, and on the two daylight-saving days a
+ * year that loses information. It is stated here rather than fixed, because every
+ * fix costs more than the defect.
+ *
+ * On the fall-back day the repeated local hour yields one key for two real hours, so
+ * that bar of the hourly chart holds up to twice the traffic of its neighbours. On
+ * the spring-forward day the skipped local hour yields a key no request can carry,
+ * so that bar reads zero. Nothing is lost and nothing is double counted: the bytes
+ * land in the correct *day* either way, and only the `hourly` store is keyed this
+ * finely — the daily rows every total, budget and projection is built from are
+ * untouched. The damage is the shape of one chart, on one day, twice a year.
+ *
+ * The alternatives are worse. A UTC hour key stops agreeing with `dayKey`, so
+ * `dayOfBucket` would no longer name the day the person had and every hourly read
+ * would need a translation. Carrying the offset in the key breaks the fixed width
+ * that makes a lexicographic IndexedDB range equal to a date comparison, which is
+ * the one property this key format exists for.
+ */
 export function hourKey(date: Date = new Date()): string {
   return `${dayKey(date)}T${pad(date.getHours())}`;
 }
@@ -67,7 +86,8 @@ export function dayKeysInRange(from: string, to: string): string[] {
   return keys;
 }
 
-/** Every hour key in a day, `00` to `23`. */
+/** Every hour key in a day, `00` to `23` — including the two days a year that do
+ * not have 24 of them, for the reasons set out on `hourKey`. */
 export function hourKeysInDay(day: string): string[] {
   return Array.from({ length: 24 }, (_, hour) => `${day}T${pad(hour)}`);
 }
@@ -118,6 +138,99 @@ export function periodRange(
         ? { from: startOfMonth(today), to: today }
         : { from: addDays(today, -29), to: today };
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * The billing cycle
+ * ------------------------------------------------------------------ */
+
+/**
+ * The cycle functions below are the ones a person reconciles against a bill, which is
+ * why they are separate from `periodRange` rather than another case inside it. A
+ * period is a window the user chose to *look* at; a cycle is the window the carrier
+ * is counting, and it is the only one where being a day out changes the answer to
+ * "will I go over".
+ */
+
+/**
+ * The day of the month a cycle is anchored to, as a real 1..28.
+ *
+ * `0` (calendar month) and `1` name the same reset date, so they collapse into one
+ * anchor here rather than being special-cased by each function below. Anything else
+ * out of range is clamped into it rather than thrown on: this value arrives from
+ * `chrome.storage.sync`, where a newer build or a bad write can leave anything at
+ * all, and a cycle that quietly starts on the 1st is a wrong date the user can see
+ * and correct — where a throw takes down whichever surface asked, popup included.
+ */
+function cycleAnchor(settings: Pick<Settings, "cycleStartDay">): number {
+  const day = Math.trunc(settings.cycleStartDay);
+  if (!Number.isFinite(day) || day <= 0) return 1;
+  return Math.min(day, MAX_CYCLE_START_DAY);
+}
+
+/** Local midnight on the day the running billing cycle began. */
+export function startOfCycle(
+  settings: Pick<Settings, "cycleStartDay">,
+  now: Date = new Date(),
+): Date {
+  const anchor = cycleAnchor(settings);
+  // Before the anchor day, the cycle that is running started *last* month. Month -1
+  // is left to the Date constructor, which rolls it to December of the year before —
+  // the December-to-January wrap is the case a hand-written branch gets wrong.
+  const month = now.getMonth() - (now.getDate() >= anchor ? 0 : 1);
+  return new Date(now.getFullYear(), month, anchor, 0, 0, 0, 0);
+}
+
+/** Local midnight on the day the running cycle ends and the next one begins. */
+function startOfNextCycle(settings: Pick<Settings, "cycleStartDay">, now: Date): Date {
+  const start = startOfCycle(settings, now);
+  // Stepping a month from the cycle's own start, not from `now`: the anchor is never
+  // above 28, so this cannot overflow into the following month the way `+1 month` on
+  // a 31st does.
+  return new Date(start.getFullYear(), start.getMonth() + 1, start.getDate(), 0, 0, 0, 0);
+}
+
+/**
+ * The inclusive day range the running cycle covers *so far*.
+ *
+ * `to` is today rather than the reset date, matching `periodRange`: there are no rows
+ * for days that have not happened, and a range that ran to the end of the cycle would
+ * make every "days covered" figure count days the user has not lived through.
+ */
+export function cycleRange(
+  settings: Pick<Settings, "cycleStartDay">,
+  now: Date = new Date(),
+): DayRange {
+  return { from: dayKey(startOfCycle(settings, now)), to: dayKey(now) };
+}
+
+/** Epoch ms of the local midnight the running cycle rolls over at. */
+export function cycleResetsAt(
+  settings: Pick<Settings, "cycleStartDay">,
+  now: Date = new Date(),
+): number {
+  return startOfNextCycle(settings, now).getTime();
+}
+
+/**
+ * How far through the cycle we are, in whole days.
+ *
+ * The reset day itself is day 1, not day 0, and the tests pin it. A projection
+ * divides usage by `elapsedDays` to get a daily rate, so a zero on the morning of
+ * the reset is a division by zero dressed up as a forecast; and nobody reading a
+ * bill calls the first day of their cycle day 0. `elapsedDays` is therefore always
+ * 1..`totalDays`, and `totalDays` is 28..31 depending on the month the cycle
+ * started in.
+ */
+export function cycleElapsed(
+  settings: Pick<Settings, "cycleStartDay">,
+  now: Date = new Date(),
+): { elapsedDays: number; totalDays: number } {
+  const from = dayKey(startOfCycle(settings, now));
+  return {
+    elapsedDays: daysBetween(from, dayKey(now)) + 1,
+    totalDays: daysBetween(from, dayKey(startOfNextCycle(settings, now))),
+  };
 }
 
 const MONTH_DAY = new Intl.DateTimeFormat(undefined, {
