@@ -64,6 +64,11 @@ async function push(tabId: number, notice: TabNotice | null): Promise<boolean> {
  * listening. Injecting unconditionally would work — the script is idempotent — but
  * it would also mean running `executeScript` on every threshold crossing of every
  * limited site, which is a lot of noise for a banner that is already on screen.
+ *
+ * A successful injection is followed by a second `push`, so a freshly injected
+ * script and a long-lived one are told the state the same way. The banner used to
+ * pull it instead, off a `window` event that the *page* could dispatch — which let
+ * any site the user was over budget on drive GET_TAB_NOTICE in a loop.
  */
 export async function announce(
   tabIds: readonly number[],
@@ -78,6 +83,7 @@ export async function announce(
           target: { tabId },
           files: [runtimeFile("notice.js")],
         });
+        await push(tabId, notice);
       } catch {
         // A restricted origin, or the tab navigated away mid-flight. The limit is
         // still enforced; only the explanation is missing.

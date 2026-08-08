@@ -26,6 +26,7 @@ import {
   type BudgetShape,
 } from "./limit/budgets";
 import {
+  clearEnforcement,
   enforcementSnapshot,
   ensureEnforcementReady,
   refreshEnforcementTabs,
@@ -35,6 +36,7 @@ import {
   budgetStatuses,
   budgetsChanged,
   currentPeriodKey,
+  forgetAnnouncedTab,
   noteUsage,
   noticeForTab,
   refreshWindows,
@@ -101,7 +103,22 @@ function optimizeSettingsSnapshot() {
   return applied();
 }
 
-const optimizeReady = applyOptimize();
+/**
+ * Enforcement readiness first, and awaited.
+ *
+ * Both publishers go through `rules/session.ts`, whose `install()` removes every
+ * session rule Chrome holds before adding back the set it composes from module
+ * memory. On a cold worker that memory is empty, and with Data Saver shipping off
+ * `applyOptimize` composes nothing at all — so an unordered start has the worker's
+ * first act be deleting every limit rule and installing none. `ensureEnforcementReady`
+ * republishes what the restored decisions imply; awaiting it here is what stops the
+ * two racing.
+ *
+ * It is also loaded eagerly for its own sake: the `onErrorOccurred` handler has to
+ * decide whether a refused request was this extension's doing, and it should not have
+ * to wait to find out.
+ */
+const optimizeReady = ensureEnforcementReady().then(() => applyOptimize());
 void ensureHoldoutReady();
 
 /**
@@ -130,6 +147,11 @@ chrome.webNavigation.onCommitted.addListener((details) => {
   // showing, and treating it as a new page load would end the visit that the
   // subframe belongs to.
   if (details.frameId !== 0) return;
+  // The banner went with the old document, so whatever this tab was told no longer
+  // exists on screen. Forgetting it here is what lets a reload of an already-limited
+  // site be told again, instead of the tier looking unchanged and the new page being
+  // left to look broken on its own.
+  forgetAnnouncedTab(details.tabId);
   void noteNavigation(details.tabId, details.url).then(syncEnforcementTabs);
 });
 
@@ -137,6 +159,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   // Order matters: the parked requests are charged first, while the tab record
   // still exists to attribute them to.
   forgetTab(tabId);
+  forgetAnnouncedTab(tabId);
   if (setTabHoldout(tabId, false)) void applyOptimize();
   void closeTab(tabId).then(syncEnforcementTabs);
 });
@@ -153,11 +176,19 @@ function syncEnforcementTabs(): void {
   // Two steps, and the order matters. The rules are re-scoped first so a tab that
   // just navigated onto a limited site is covered immediately; the governor then
   // re-evaluates, which is what shows the banner in that tab.
-  void refreshEnforcementTabs(tabIdsForSite).then(() => syncEnforcement());
+  //
+  // Caught rather than left to `void`: a rejected rule install here would otherwise
+  // be an unhandled rejection, and the next navigation retries anyway.
+  void refreshEnforcementTabs(tabIdsForSite)
+    .then(() => syncEnforcement())
+    .catch((error: unknown) => {
+      console.error("Byte Budget: could not re-scope the limit rules", error);
+    });
 }
 
 chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
   forgetTab(removedTabId);
+  forgetAnnouncedTab(removedTabId);
   void closeTab(removedTabId);
   void ensureTabsReady().then(() => refreshTab(addedTabId));
 });
@@ -204,9 +235,43 @@ chrome.runtime.onSuspend.addListener(() => {
 });
 
 async function setUpAlarms(): Promise<void> {
-  await chrome.alarms.create(MAINTENANCE_ALARM, { periodInMinutes: 1 });
-  await chrome.alarms.create(PRUNE_ALARM, { periodInMinutes: 360 });
+  try {
+    await ensureAlarm(MAINTENANCE_ALARM, 1);
+    await ensureAlarm(PRUNE_ALARM, 360);
+  } catch (error) {
+    // Swallowed rather than rejected: all three callers are fire-and-forget, and an
+    // unhandled rejection in a worker's top level is a line nobody sees attached to a
+    // stack that says nothing.
+    console.error("Byte Budget: could not set up the alarms", error);
+  }
 }
+
+/**
+ * Creates an alarm only if it is missing.
+ *
+ * `alarms.create` on an existing name *replaces* it, which restarts its period. That
+ * is harmless from `onInstalled`/`onStartup`, which fire once, and not harmless from
+ * the top level: a worker that wakes more often than once a minute would push the
+ * maintenance alarm's next firing out on every wake, and the flush backstop, the
+ * budget rollover and the snooze expiry would simply never run.
+ */
+async function ensureAlarm(name: string, periodInMinutes: number): Promise<void> {
+  // Typed as always resolving to an `Alarm`; it resolves to `undefined` when there is
+  // no alarm by that name, which is the entire question being asked here.
+  const existing: chrome.alarms.Alarm | undefined = await chrome.alarms.get(name);
+  if (existing) return;
+  await chrome.alarms.create(name, { periodInMinutes });
+}
+
+/**
+ * Asserted here, not only from `onInstalled` and `onStartup`.
+ *
+ * Those two fire once per install and once per browser start; if an alarm is ever
+ * lost in between — and both calls were `void`ed with no catch, so a failure was
+ * silent — nothing recreates it until the browser is restarted, and the flush
+ * backstop, retention pruning, window rollover and snooze expiry go with it.
+ */
+void setUpAlarms();
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === MAINTENANCE_ALARM) void maintenance();
@@ -308,10 +373,6 @@ void getSettings().then((settings) => {
   void updateBadge(settings);
 });
 
-// Loaded eagerly: the `onErrorOccurred` handler has to decide whether a refused
-// request was this extension's doing, and it should not have to wait to find out.
-void ensureEnforcementReady();
-
 onSettingsChanged((settings) => {
   ledger.setTrackHosts(settings.trackHosts);
   void updateBadge(settings);
@@ -403,6 +464,13 @@ async function handle(
       // otherwise a site would stay limited on the strength of usage that no longer
       // exists anywhere.
       await resetCounters();
+      // After the governor, not before: it is what walks the budgeted sites back to
+      // `off` and withdraws their banners. This then drops anything it does not know
+      // about — a site whose budget was removed while it was being enforced, or an
+      // entry restored from the session mirror with no budget behind it any more.
+      // Rules outliving the usage they were derived from is the case where someone
+      // deletes everything and the browser stays broken.
+      await clearEnforcement();
       await updateBadge();
       return {};
     }
@@ -517,6 +585,22 @@ async function handle(
         optimizes(settings, site) &&
         !isHoldoutTab(tabId);
       return { features: enabled ? pageFeatures() : [] };
+    }
+
+    default: {
+      /**
+       * Reachable in the wild, not only in theory: `timing.js` and `notice.js` both
+       * survive an extension update in every tab that is already open, so a content
+       * script from the previous build can send a message this build has never heard
+       * of. Without this the switch fell out returning `undefined`, the listener
+       * spread that into `{ok: true}`, and the sender got a success envelope with
+       * every field missing — which fails somewhere else entirely, as a null read.
+       *
+       * The `never` binding is the other half: it makes adding a request type without
+       * handling it a compile error rather than a runtime one.
+       */
+      const unhandled: never = request;
+      throw new Error(`Unknown request: ${(unhandled as { type?: string }).type ?? "(none)"}`);
     }
   }
 }

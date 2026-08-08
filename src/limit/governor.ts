@@ -30,6 +30,7 @@ import {
   type Budget,
 } from "./budgets";
 import { enforcementFor, setEnforcement } from "./enforce";
+import type { Tier } from "./tiers";
 import { applyThrottleToTabs, clearAllThrottles } from "./throttle";
 
 interface Live {
@@ -72,17 +73,36 @@ export async function reloadBudgets(): Promise<void> {
     live.set(budget.site, { budget, periodKey, used: 0, primed: false });
   }
 
+  // Carried into `syncEnforcement` rather than just dropped. Once a site leaves
+  // `live` nothing iterates it again, so `setEnforcement(site, "off")` would never
+  // run — and the `initiatorDomains` half of an enforcement rule needs no open tab,
+  // so it would outlive the budget it came from and only die at browser restart.
+  // The Remove button is the escape hatch from a site that looks broken; pressing it
+  // has to actually unbreak it.
+  const dropped: string[] = [];
   for (const site of [...live.keys()]) {
-    if (!seen.has(site)) live.delete(site);
+    if (!seen.has(site)) {
+      live.delete(site);
+      dropped.push(site);
+    }
   }
 
   await Promise.all([...live.values()].filter((entry) => !entry.primed).map(prime));
-  await syncEnforcement();
+  await syncEnforcement(dropped);
 }
 
 function ensureReady(): Promise<void> {
-  if (!ready) ready = reloadBudgets();
-  return ready;
+  if (ready) return ready;
+  const attempt = reloadBudgets().catch((error: unknown) => {
+    // Clearing the memo is the whole point. `budgetStatuses`, `refreshWindows` and
+    // `currentPeriodKey` all await this, so one rejected rule install would otherwise
+    // make all three throw for the rest of the worker's life — for a failure whose
+    // retry was a minute away and would very likely have worked.
+    ready = null;
+    console.error("Byte Budget: could not load the budgets", error);
+  });
+  ready = attempt;
+  return attempt;
 }
 
 /** Reads the window's usage so far out of the ledger. */
@@ -135,38 +155,123 @@ export function noteUsage(site: string, bytes: number): void {
 }
 
 /**
+ * Which tabs have been told about a site's limit, and which tier they were told.
+ *
+ * The banner is not a manifest content script — it is in a page only because
+ * `announce` injected it there, so it dies with the document that carried it.
+ * Announcing only when the *tier* changed therefore explained the limit to exactly
+ * one document per site, ever: a reload, or a second tab, found the tier unchanged
+ * and got a page whose images and scripts are all refused with nothing on it saying
+ * why. That is precisely the "reads as a broken website" failure the banner exists
+ * to prevent, and `strict` is where it is worst.
+ *
+ * The tier is held alongside the tab set because a tier change makes every banner
+ * already on screen wrong rather than merely absent. Records are dropped when a site
+ * falls back to `off`, when its budget goes away, and — driven from `background.ts` —
+ * when a tab navigates or closes.
+ */
+const announced = new Map<string, { tier: Tier; tabIds: Set<number> }>();
+
+/**
+ * Forgets that a tab was told, so the next pass tells it again.
+ *
+ * Called on navigation as well as on close: a tab id survives a navigation, but the
+ * document that was carrying the banner does not.
+ */
+export function forgetAnnouncedTab(tabId: number): void {
+  if (announced.size === 0) return;
+  for (const record of announced.values()) record.tabIds.delete(tabId);
+}
+
+/**
+ * The tabs showing `site` that have not been told about `tier`, marked as told.
+ *
+ * Marked before the message goes out rather than after it succeeds. `announce`
+ * swallows its failures — a restricted origin cannot host the banner at all — and
+ * retrying one every sixty seconds forever would buy nothing. The record is cleared
+ * on the tab's next navigation, which is the only point at which it could work.
+ */
+function claimNotice(site: string, tier: Tier, tabIds: readonly number[]): number[] {
+  const record = announced.get(site);
+  if (!record || record.tier !== tier) {
+    announced.set(site, { tier, tabIds: new Set(tabIds) });
+    return [...tabIds];
+  }
+  const pending = tabIds.filter((tabId) => !record.tabIds.has(tabId));
+  for (const tabId of pending) record.tabIds.add(tabId);
+  return pending;
+}
+
+/**
  * Brings the installed rules in line with what the numbers say.
+ *
+ * `dropped` names sites that have just lost their budget: they are no longer in
+ * `live`, so nothing else will ever reach them again.
  *
  * Also drives the throttle channel's per-tab speed cap, which is a no-op in the
  * store build — that build has no `debugger` permission and no API that can pace a
  * request.
  */
-export async function syncEnforcement(): Promise<void> {
+export async function syncEnforcement(dropped: readonly string[] = []): Promise<void> {
   const units = settings?.units ?? "si";
-  for (const [site, entry] of live) {
-    const tabIds = tabIdsForSite(site);
-    const allowance = allowanceOf(entry.budget, entry.periodKey);
-    const wanted = isSnoozed(entry.budget) ? "off" : tierFor(entry.budget, entry.used, allowance);
 
-    if (wanted !== enforcementFor(site)) {
-      await setEnforcement(site, wanted, tabIds);
-      // The banner is updated from the same place the rules are, so it can never
-      // claim a limit that has just been lifted or miss one that has just landed.
-      const status: BudgetStatus = {
-        budget: entry.budget,
-        used: entry.used,
-        allowance,
-        share: allowance > 0 ? entry.used / allowance : 0,
-        tier: wanted,
-        wouldBe: tierFor(entry.budget, entry.used, allowance),
-        snoozed: isSnoozed(entry.budget),
-        periodKey: entry.periodKey,
-        resetsAt: periodResetsAt(entry.budget.period, settings?.weekStart ?? 1),
-      };
-      await announce(tabIds, noticeFor(status, units));
+  for (const site of dropped) {
+    try {
+      const tabIds = tabIdsForSite(site);
+      await setEnforcement(site, "off", []);
+      announced.delete(site);
+      await announce(tabIds, null);
+      await applyThrottleToTabs(site, null, tabIds);
+    } catch (error) {
+      console.error("Byte Budget: could not lift enforcement for", site, error);
     }
+  }
 
-    await applyThrottleToTabs(site, entry.budget.kbps ?? null, tabIds);
+  for (const [site, entry] of live) {
+    // Guarded per site. The loop used to be unguarded, so a single rejected rule
+    // install aborted it and every site after this one in iteration order went
+    // unevaluated — including sites that were over budget and enforcing nothing.
+    try {
+      const tabIds = tabIdsForSite(site);
+      const allowance = allowanceOf(entry.budget, entry.periodKey);
+      const wanted = isSnoozed(entry.budget)
+        ? "off"
+        : tierFor(entry.budget, entry.used, allowance);
+      const previous = enforcementFor(site);
+
+      if (wanted !== previous) await setEnforcement(site, wanted, tabIds);
+
+      if (wanted === "off") {
+        announced.delete(site);
+        // Withdrawn only on the transition. Pushing a null notice every pass would
+        // message every tab of every under-budget site once a minute, to remove a
+        // banner that is not there.
+        if (previous !== "off") await announce(tabIds, null);
+      } else {
+        const pending = claimNotice(site, wanted, tabIds);
+        if (pending.length > 0) {
+          // Composed from the same numbers that just installed the rules, so the
+          // banner can never claim a limit that has been lifted or miss one that has
+          // just landed.
+          const status: BudgetStatus = {
+            budget: entry.budget,
+            used: entry.used,
+            allowance,
+            share: allowance > 0 ? entry.used / allowance : 0,
+            tier: wanted,
+            wouldBe: tierFor(entry.budget, entry.used, allowance),
+            snoozed: isSnoozed(entry.budget),
+            periodKey: entry.periodKey,
+            resetsAt: periodResetsAt(entry.budget.period, settings?.weekStart ?? 1),
+          };
+          await announce(pending, noticeFor(status, units));
+        }
+      }
+
+      await applyThrottleToTabs(site, entry.budget.kbps ?? null, tabIds);
+    } catch (error) {
+      console.error("Byte Budget: could not enforce the budget for", site, error);
+    }
   }
 }
 
@@ -234,8 +339,14 @@ export async function currentPeriodKey(site: string): Promise<string> {
 
 /** Called after any change to the stored budgets. */
 export async function budgetsChanged(): Promise<void> {
-  ready = reloadBudgets();
-  await ready;
+  const attempt = reloadBudgets();
+  // The memo is what everything else awaits, and it must not be left holding a
+  // rejected promise; the caller is a user action and does get the failure, because
+  // "the limit was saved" and "the limit is being enforced" are different claims.
+  ready = attempt.catch(() => {
+    ready = null;
+  });
+  await attempt;
 }
 
 /** Called when all usage is deleted: the windows restart from zero. */

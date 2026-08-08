@@ -188,17 +188,75 @@ export function isSnoozed(budget: Budget, now = Date.now()): boolean {
  * Storage
  * ------------------------------------------------------------------ */
 
+/**
+ * Budgets live in `chrome.storage.local`, and this file used to argue the opposite.
+ *
+ * The old argument was that a limit set on one machine should apply on the others,
+ * because that is the whole point of a monthly data cap. It is a good argument and it
+ * loses to a simpler fact: every budget carries a `site`, so a synced list is a list
+ * of the domains someone cared enough about to cap — the most opinionated slice of a
+ * person's browsing there is — handed to Chrome sync, while PRIVACY_POLICY.md says
+ * that transfer "carries no browsing data".
+ *
+ * The trade, stated plainly so nobody reverses it by accident: cross-device limits are
+ * gone. Set a cap on the laptop and the desktop does not know about it. What is bought
+ * is that no site name leaves the profile. The loss is smaller than it reads, because
+ * the usage a budget is checked against never synced either — a synced 5 GB cap was
+ * always two independent 5 GB caps rather than one shared one.
+ */
 const BUDGETS_KEY = "budgets";
 
 /**
  * Cap on how many budgets can exist.
  *
- * `chrome.storage.sync` allows 8 kB per item and budgets share one item, so this is
- * a real ceiling rather than a nannying one. Sync rather than local because a limit
- * set on one machine should apply on the others — that is the whole point of a
- * monthly data cap.
+ * No longer a storage ceiling — `chrome.storage.local` has none worth speaking of at
+ * this size — but a cost one. Every budgeted site is a ranged index read each time the
+ * governor primes and a session rule each time it enforces, both per site, and both sit
+ * on the path a request waits behind.
  */
 export const MAX_BUDGETS = 30;
+
+let migration: Promise<void> | null = null;
+
+/**
+ * Moves a list left behind by a build that synced budgets into local storage, once.
+ *
+ * The ordering is the whole of it. Local is authoritative the moment it holds a value,
+ * *including an empty array*: `[]` is exactly what "I removed my last limit" looks
+ * like, and treating it as "nothing stored here yet" would let Chrome push the old
+ * synced copy back and resurrect every budget the user deleted. The sync key is dropped
+ * whether or not anything was adopted, because leaving it would leave the site names
+ * sitting in sync forever, which is the only reason this function exists.
+ */
+async function migrateFromSync(): Promise<void> {
+  const stored = await chrome.storage.sync.get(BUDGETS_KEY);
+  const inherited = stored[BUDGETS_KEY];
+  if (inherited === undefined) return;
+  const local = await chrome.storage.local.get(BUDGETS_KEY);
+  if (local[BUDGETS_KEY] === undefined && Array.isArray(inherited)) {
+    await chrome.storage.local.set({ [BUDGETS_KEY]: inherited });
+  }
+  await chrome.storage.sync.remove(BUDGETS_KEY);
+}
+
+/**
+ * Memoized per worker, and it clears the memo on failure rather than caching it.
+ *
+ * A cached rejection would make every later `getBudgets` throw, and `getBudgets` is
+ * what the governor primes from — one transient storage error at wake would leave the
+ * browser with no limits at all until the worker died, which is the failure mode
+ * `governor.ts` already has once and does not need twice. Retrying next wake costs one
+ * `sync.get` that returns nothing.
+ */
+function ensureMigrated(): Promise<void> {
+  if (!migration) {
+    migration = migrateFromSync().catch((error: unknown) => {
+      migration = null;
+      console.error("Byte Budget: could not move budgets out of sync storage", error);
+    });
+  }
+  return migration;
+}
 
 function normalize(value: unknown): Budget | null {
   if (!value || typeof value !== "object") return null;
@@ -226,7 +284,11 @@ function normalize(value: unknown): Budget | null {
 }
 
 export async function getBudgets(): Promise<Budget[]> {
-  const stored = await chrome.storage.sync.get(BUDGETS_KEY);
+  // Every read goes through the migration, not just the first one: this is the only
+  // entry point the writers share, so gating here is what makes "adopt, then clear"
+  // impossible to race with a `putBudget` that arrives during a cold start.
+  await ensureMigrated();
+  const stored = await chrome.storage.local.get(BUDGETS_KEY);
   const raw = stored[BUDGETS_KEY];
   if (!Array.isArray(raw)) return [];
   const bySite = new Map<string, Budget>();
@@ -240,7 +302,7 @@ export async function getBudgets(): Promise<Budget[]> {
 
 async function writeBudgets(budgets: readonly Budget[]): Promise<Budget[]> {
   const ordered = [...budgets].sort((a, b) => a.site.localeCompare(b.site));
-  await chrome.storage.sync.set({ [BUDGETS_KEY]: ordered });
+  await chrome.storage.local.set({ [BUDGETS_KEY]: ordered });
   return ordered;
 }
 

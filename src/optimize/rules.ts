@@ -19,11 +19,20 @@ import type { OptimizeSettings } from "./features";
 import { PACKS } from "./packs";
 
 /**
- * Priority for optimizer rules.
+ * Priority for optimizer rules, below the limiter's.
  *
- * Above the limiter's 1 only so header modification is not shadowed; the actions that
- * actually conflict resolve by type regardless — at any priority Chrome takes `block`
- * ahead of `redirect`, so a site over its budget is refused rather than rewritten.
+ * Chrome picks the highest-priority *matching* rule and only uses the action-type
+ * ordering (allow > allowAllRequests > block > redirect/upgrade) to break a tie
+ * within one priority — the reverse of what this comment used to claim. While the
+ * limiter sat at 1 and this at 2, the redirect did not lose to the block, it won: a
+ * site over a hard cap kept fetching images through the five pack CDNs. The limiter
+ * is 3 now and the only property that matters here is that this number stays under
+ * it, which `tests/rules.test.mjs` asserts.
+ *
+ * Every optimizer rule shares this one number on purpose. A `modifyHeaders` rule is
+ * skipped when a higher-priority rule redirects the same request, so splitting the
+ * packs and `Save-Data` across two priorities would drop the header from exactly the
+ * images a pack rewrites.
  */
 const PRIORITY = 2;
 

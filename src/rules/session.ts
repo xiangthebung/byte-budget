@@ -12,10 +12,13 @@
  * by `updateSessionRules` is a read-modify-write, and two of them interleaving would
  * lose rules.
  *
- * Ordering within the set matters and is fixed. Limits come first, and at equal
- * priority Chrome resolves `block` ahead of `redirect`, so a site that is over its
- * budget is refused rather than rewritten — which is the right answer: rewriting a
- * request that should not be sent at all still sends it.
+ * Ordering within the set is fixed, but it is about ids and nothing else: limits are
+ * numbered first, and that is the whole of what `SOURCE_ORDER` does. Which rule wins
+ * a request is Chrome's decision, and Chrome compares `priority` first, falling back
+ * to the allow > block > redirect ordering only to break a tie *within* one priority.
+ * So "a site over its budget is refused rather than rewritten" is a claim about the
+ * priority numbers in `limit/rules.ts` and `optimize/rules.ts`, not about the order
+ * they are composed in here — this file cannot make it true.
  */
 
 import type { ResourceType } from "../core/types";

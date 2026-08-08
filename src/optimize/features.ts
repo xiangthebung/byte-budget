@@ -172,7 +172,42 @@ export function defaultOptimizeSettings(): OptimizeSettings {
 
 const STORAGE_KEY = "optimize";
 
-function normalize(value: Partial<OptimizeSettings> | undefined): OptimizeSettings {
+/**
+ * The exclusion list is stored apart from the rest, in `chrome.storage.local`.
+ *
+ * Everything else on `OptimizeSettings` is a preference — a master switch, feature
+ * flags, pack toggles, a sampling rate — and says nothing about anyone's browsing, so
+ * it stays in sync and keeps following the person between machines. `exclusions` is a
+ * list of site keys: the sites someone found the optimizer broke, or did not want
+ * touched. That is browsing data, and PRIVACY_POLICY.md promises the sync transfer
+ * carries none.
+ *
+ * The cost of the split is that the never-optimize list is per-profile now: exclude a
+ * site on the laptop and the desktop carries on optimizing it. That is the deliberate
+ * half of the trade, taken for the same reason as the one in `limit/budgets.ts`. The
+ * public API still hands out a single `OptimizeSettings`, so no caller has to know the
+ * value is assembled from two areas.
+ */
+const EXCLUSIONS_KEY = "optimizeExclusions";
+
+function normalizeExclusions(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(value.filter((site): site is string => typeof site === "string" && site !== "")),
+  ];
+}
+
+/**
+ * `exclusions` is taken as a second argument rather than read off `value`, and a
+ * caller that puts it back into the first will find it ignored. That is on purpose:
+ * `value` is whatever the synced item holds, and an older build's copy of the list is
+ * still in there until the migration below rewrites it. Reading it from both places
+ * would make the stale synced copy win over the local one at every cold start.
+ */
+function normalize(
+  value: Partial<OptimizeSettings> | undefined,
+  exclusions: unknown,
+): OptimizeSettings {
   const defaults = defaultOptimizeSettings();
   const features = { ...defaults.features };
   for (const id of FEATURE_IDS) {
@@ -189,31 +224,90 @@ function normalize(value: Partial<OptimizeSettings> | undefined): OptimizeSettin
     enabled: typeof value?.enabled === "boolean" ? value.enabled : defaults.enabled,
     features,
     packs,
-    exclusions: Array.isArray(value?.exclusions)
-      ? [...new Set(value.exclusions.filter((site) => typeof site === "string" && site))]
-      : [],
+    exclusions: normalizeExclusions(exclusions),
     holdoutPercent: (HOLDOUT_OPTIONS as readonly number[]).includes(holdout)
       ? holdout
       : defaults.holdoutPercent,
   };
 }
 
-export async function getOptimizeSettings(): Promise<OptimizeSettings> {
+let migration: Promise<void> | null = null;
+
+/**
+ * Lifts the exclusion list out of the synced item, once.
+ *
+ * The synced item is rewritten rather than removed: the master switch, the feature
+ * flags, the packs and the holdout rate belong in sync and are meant to keep following
+ * the person. Only `exclusions` comes out.
+ *
+ * Local wins whenever it already holds a list, empty included — `[]` is what "I
+ * un-excluded my last site" looks like, and adopting the synced copy over it would put
+ * the exclusion back and leave the site quietly unoptimized with nothing on any surface
+ * saying why.
+ */
+async function migrateFromSync(): Promise<void> {
   const stored = await chrome.storage.sync.get(STORAGE_KEY);
-  return normalize(stored[STORAGE_KEY] as Partial<OptimizeSettings> | undefined);
+  const raw = stored[STORAGE_KEY] as Partial<OptimizeSettings> | undefined;
+  if (!raw || typeof raw !== "object" || !("exclusions" in raw)) return;
+  const { exclusions, ...preferences } = raw;
+  const local = await chrome.storage.local.get(EXCLUSIONS_KEY);
+  if (local[EXCLUSIONS_KEY] === undefined) {
+    await chrome.storage.local.set({ [EXCLUSIONS_KEY]: normalizeExclusions(exclusions) });
+  }
+  await chrome.storage.sync.set({ [STORAGE_KEY]: preferences });
+}
+
+/**
+ * Memoized per worker, and it clears the memo on failure rather than caching it.
+ *
+ * A cached rejection would make `getOptimizeSettings` throw for the worker's whole
+ * life, and `applyOptimize` reads through it on every wake — the optimizer would come
+ * back with no rules and no content script and no error anyone could see. Retrying next
+ * wake costs one `sync.get` of an item that no longer has the field.
+ */
+function ensureMigrated(): Promise<void> {
+  if (!migration) {
+    migration = migrateFromSync().catch((error: unknown) => {
+      migration = null;
+      console.error("Byte Budget: could not move the exclusion list out of sync storage", error);
+    });
+  }
+  return migration;
+}
+
+export async function getOptimizeSettings(): Promise<OptimizeSettings> {
+  await ensureMigrated();
+  const [synced, local] = await Promise.all([
+    chrome.storage.sync.get(STORAGE_KEY),
+    chrome.storage.local.get(EXCLUSIONS_KEY),
+  ]);
+  return normalize(
+    synced[STORAGE_KEY] as Partial<OptimizeSettings> | undefined,
+    local[EXCLUSIONS_KEY],
+  );
 }
 
 export async function saveOptimizeSettings(
   changes: Partial<OptimizeSettings>,
 ): Promise<OptimizeSettings> {
   const current = await getOptimizeSettings();
-  const merged = normalize({
-    ...current,
-    ...changes,
-    features: { ...current.features, ...(changes.features ?? {}) },
-    packs: { ...current.packs, ...(changes.packs ?? {}) },
-  });
-  await chrome.storage.sync.set({ [STORAGE_KEY]: merged });
+  const merged = normalize(
+    {
+      ...current,
+      ...changes,
+      features: { ...current.features, ...(changes.features ?? {}) },
+      packs: { ...current.packs, ...(changes.packs ?? {}) },
+    },
+    changes.exclusions ?? current.exclusions,
+  );
+  // Split on the way out as well as on the way in. Writing `merged` whole would put the
+  // site keys straight back into sync, undoing the split silently and with no symptom
+  // anywhere — which is precisely how they got there in the first place.
+  const { exclusions, ...preferences } = merged;
+  await Promise.all([
+    chrome.storage.sync.set({ [STORAGE_KEY]: preferences }),
+    chrome.storage.local.set({ [EXCLUSIONS_KEY]: exclusions }),
+  ]);
   return merged;
 }
 

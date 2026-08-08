@@ -10,6 +10,14 @@
  * no reason to run code on every page in the browser to serve the handful that are
  * over a budget.
  *
+ * The card is not the live region. The region is a wrapper that stays in the tree
+ * while a notice is on screen; the card is swapped into it on the *next* frame,
+ * because a live region only announces content that changes after it is already in
+ * the document. The first version assembled a populated card and then appended it,
+ * which is silent to every screen reader — so the one mechanism separating "a limit
+ * I set" from "a broken website" reached everyone except the users with no other
+ * signal that anything happened.
+ *
  * Two constraints, same as `timing.ts`: it imports nothing, because a manifest or
  * `files:`-injected content script is a classic script and a bundle with an `import`
  * silently does nothing on a page; and everything is inside an IIFE behind a marker,
@@ -21,9 +29,12 @@
   const HOST_ID = "byte-budget-notice";
   const scope = window as unknown as Record<string, boolean>;
   if (scope[MARKER]) {
-    // Already running: ask for the current state so a re-injection refreshes rather
-    // than stacking a second banner.
-    window.dispatchEvent(new CustomEvent("byte-budget-refresh"));
+    // Already running, and there is nothing to ask for: `announce()` follows every
+    // injection with a NOTICE_UPDATE, so the live copy is about to be handed the
+    // current state through the ordinary path. This used to dispatch a window event
+    // that `refresh()` listened for, which meant the page's own main world could
+    // fire it — so a site the user is over budget on could drive GET_TAB_NOTICE in a
+    // loop, each message waking the service worker and rebuilding this shadow DOM.
     return;
   }
   scope[MARKER] = true;
@@ -36,10 +47,62 @@
     canPause: boolean;
   }
 
-  let dismissed = false;
+  /**
+   * Mirrors `TIERS` in src/limit/tiers.ts, lightest first. Copied rather than
+   * imported because this file imports nothing. A tier added there and not here
+   * lands at -1 below and counts as an escalation, which costs one banner too many
+   * rather than silently swallowing the escalation that matters.
+   */
+  const TIER_ORDER = ["off", "trim", "lean", "strict"];
 
+  /** The tier whose banner the user waved away; null while nothing is suppressed. */
+  let dismissedTier: string | null = null;
+  /** The live region. Survives re-renders — see `render`. */
+  let region: HTMLElement | null = null;
+  /** Pending fill, so two updates inside one frame produce one announcement. */
+  let frame = 0;
+  /** What the region is showing, so an unchanged notice is not announced twice. */
+  let shown: string | null = null;
+
+  function keyOf(notice: Notice): string {
+    return [
+      notice.site,
+      notice.tier,
+      notice.headline,
+      notice.detail,
+      String(notice.canPause),
+    ].join(" ");
+  }
+
+  /** Whether a tier is heavier than the one the user dismissed. */
+  function escalates(tier: string): boolean {
+    if (dismissedTier === null) return true;
+    const next = TIER_ORDER.indexOf(tier);
+    return next < 0 || next > TIER_ORDER.indexOf(dismissedTier);
+  }
+
+  function cancelFill(): void {
+    if (frame !== 0) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+    }
+  }
+
+  /** Takes the banner off the page entirely: the limit is gone, or we are. */
   function remove(): void {
+    cancelFill();
     document.getElementById(HOST_ID)?.remove();
+    region = null;
+    shown = null;
+  }
+
+  /**
+   * The limit is off. A dismissal of it stops applying with it — if the site crosses
+   * again tomorrow, the user is owed the explanation again.
+   */
+  function withdraw(): void {
+    dismissedTier = null;
+    remove();
   }
 
   function style(): string {
@@ -82,8 +145,18 @@
       }
       button:hover { border-color: rgba(255, 255, 255, 0.4); color: #fff; }
       .close {
-        margin-left: auto;
-        padding: 0 5px;
+        /* 28px of target, not the ~15px the glyph occupies. This is the only undo
+           for a banner that lands on arbitrary third-party pages, where a touch user
+           has no alternative route to it, and the neighbouring copy rules out the
+           SC 2.5.8 spacing exception. Negative margins keep the x optically where it
+           was, so the card does not grow to pay for the hit area. */
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        min-height: 28px;
+        margin: -6px -6px 0 auto;
+        padding: 0;
         border: 0;
         color: #8ea1a8;
         font-size: 15px;
@@ -99,9 +172,14 @@
     `;
   }
 
-  function render(notice: Notice): void {
-    remove();
-    if (dismissed || !document.body) return;
+  /**
+   * The live region, attached empty. Nothing here reads the notice: whatever the
+   * region ends up saying has to arrive after it is in the tree.
+   */
+  function mount(): HTMLElement | null {
+    if (region?.isConnected) return region;
+    if (!document.body) return null;
+    document.getElementById(HOST_ID)?.remove();
 
     const host = document.createElement("div");
     host.id = HOST_ID;
@@ -112,9 +190,19 @@
     const sheet = document.createElement("style");
     sheet.textContent = style();
 
+    const live = document.createElement("div");
+    live.setAttribute("role", "status");
+    live.setAttribute("aria-live", "polite");
+
+    root.append(sheet, live);
+    document.body.append(host);
+    region = live;
+    return live;
+  }
+
+  function build(notice: Notice): HTMLElement {
     const card = document.createElement("div");
     card.className = "card";
-    card.setAttribute("role", "status");
 
     const row = document.createElement("div");
     row.className = "row";
@@ -137,7 +225,11 @@
     close.setAttribute("aria-label", "Dismiss");
     close.textContent = "\u00d7";
     close.addEventListener("click", () => {
-      dismissed = true;
+      // Remember *which* tier was dismissed, not merely that something was. A flat
+      // flag meant waving away the `trim` banner also silenced `strict` — the tier
+      // where every subresource is refused, the page is genuinely broken, and a
+      // long-lived tab needs the explanation more than it ever did at `trim`.
+      dismissedTier = notice.tier;
       remove();
     });
 
@@ -157,7 +249,6 @@
             { type: "SNOOZE_BUDGET", site: notice.site, minutes: 60 },
             () => {
               void chrome.runtime.lastError;
-              dismissed = true;
               remove();
               location.reload();
             },
@@ -184,8 +275,36 @@
       card.append(actions);
     }
 
-    root.append(sheet, card);
-    document.body.append(host);
+    return card;
+  }
+
+  function render(notice: Notice): void {
+    if (!escalates(notice.tier)) return;
+
+    const key = keyOf(notice);
+    // The worker re-announces on every tier sync. Re-rendering identical words would
+    // repeat them to a screen reader and restart the entrance animation for everyone
+    // else, so the same notice twice is a no-op.
+    if (key === shown && region?.isConnected) return;
+
+    const live = mount();
+    if (!live) return;
+    shown = key;
+
+    // Empty it, then fill it a frame later. Both halves matter: the region has to be
+    // in the document before its contents change, and it has to *stay* in the
+    // document between the old card and the new one — tearing the host down and
+    // putting a populated one back is exactly the sequence a live region ignores,
+    // which would leave a tier escalation unannounced on a page the user is already
+    // sitting on. A hidden tab runs no frames, so the card lands there when the tab
+    // is next looked at — which is also the only moment an announcement could reach
+    // anyone, so do not "fix" that with a timeout.
+    cancelFill();
+    live.replaceChildren();
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      live.append(build(notice));
+    });
   }
 
   function refresh(): void {
@@ -194,14 +313,12 @@
         void chrome.runtime.lastError;
         const notice = (response as { ok?: boolean; notice?: Notice | null } | undefined)?.notice;
         if (notice) render(notice);
-        else remove();
+        else withdraw();
       });
     } catch {
       remove();
     }
   }
-
-  window.addEventListener("byte-budget-refresh", refresh);
 
   // The worker pushes an update when a tier changes or a limit is lifted, so the
   // banner does not sit there claiming a limit that is no longer in force.
@@ -209,7 +326,7 @@
     const payload = message as { type?: string; notice?: Notice | null };
     if (payload?.type !== "NOTICE_UPDATE") return;
     if (payload.notice) render(payload.notice);
-    else remove();
+    else withdraw();
   });
 
   if (document.body) refresh();

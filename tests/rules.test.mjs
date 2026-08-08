@@ -7,6 +7,10 @@
  * own error page, which reads as a broken website rather than as a limit the person
  * set. `scripts/smoke.mjs` proves the rules actually take effect in a browser;
  * these prove they say what they mean.
+ *
+ * A third property joined them after a defect: a rule that says the right thing is
+ * still not applied if another rule outranks it, so the last test here reaches into
+ * the optimizer's module and pins the priority gap between the two rule sets.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -19,6 +23,8 @@ import {
   tierBlocks,
 } from "../src/limit/tiers.ts";
 import { enforcementRules, FIRST_RULE_ID } from "../src/limit/rules.ts";
+import { optimizeRules } from "../src/optimize/rules.ts";
+import { defaultOptimizeSettings } from "../src/optimize/features.ts";
 
 test("off refuses nothing", () => {
   assert.deepEqual(blockedTypes("off"), []);
@@ -85,13 +91,20 @@ test("a limited site gets both a tab-scoped and an origin-scoped rule", () => {
   assert.equal(rules.length, 2);
 
   const byTab = rules.find((rule) => rule.condition.tabIds);
-  const byOrigin = rules.find((rule) => rule.condition.initiatorDomains);
+  // Both rules name the domain now, so the origin-scoped one is the one with no tabs.
+  const byOrigin = rules.find((rule) => !rule.condition.tabIds);
 
-  // Tab-scoped, because bytes are attributed by tab: it is the only condition that
-  // also reaches subresources inside an iframe, whose initiator is the frame.
+  // Tab-scoped, because bytes are attributed by tab: enforcement is scoped to the
+  // same thing the counting is.
   assert.deepEqual(byTab.condition.tabIds, [7, 9]);
   assert.deepEqual(byTab.condition.resourceTypes, ["media"]);
   assert.equal(byTab.action.type, "block");
+
+  // And scoped to the site as well as the tab. Without the domain condition this rule
+  // reads "everything this tab asks for", so from the moment the tab navigates
+  // elsewhere until the tab map catches up — an onCommitted plus an IndexedDB write —
+  // it refuses the *next* site's scripts and stylesheets, with no banner to say why.
+  assert.deepEqual(byTab.condition.initiatorDomains, ["example.com"]);
 
   // Origin-scoped, for the window before a tab has been associated.
   assert.deepEqual(byOrigin.condition.initiatorDomains, ["example.com"]);
@@ -122,4 +135,30 @@ test("reserved buckets are never enforced", () => {
   // scope a rule to; a rule built from one would match everything.
   assert.deepEqual(enforcementRules([{ site: "#background", tier: "strict", tabIds: [1] }]), []);
   assert.deepEqual(enforcementRules([{ site: "", tier: "strict", tabIds: [1] }]), []);
+});
+
+test("a limit outranks every rule the optimizer installs", () => {
+  const limit = enforcementRules([
+    { site: "example.com", tier: "strict", tabIds: [3] },
+    { site: "other.example", tier: "trim", tabIds: [] },
+  ]);
+  const optimize = optimizeRules({
+    settings: { ...defaultOptimizeSettings(), enabled: true },
+    holdoutTabIds: [],
+  });
+  assert.ok(limit.length > 0 && optimize.length > 0, "both sides must have rules to compare");
+
+  const lowestLimit = Math.min(...limit.map((rule) => rule.priority));
+  const highestOptimize = Math.max(...optimize.map((rule) => rule.priority));
+
+  // Chrome selects the highest-priority *matching* rule and only uses the action-type
+  // ordering (allow > allowAllRequests > block > redirect/upgrade) to break a tie
+  // within one priority. While limits were 1 and the optimizer 2 the redirect simply
+  // won, so a site over a hard cap kept pulling images through the five pack CDNs —
+  // refused everywhere else, silently not refused exactly where a pack applied. This
+  // assertion is the only thing standing between that and a one-line edit.
+  assert.ok(
+    lowestLimit > highestOptimize,
+    `every limit rule must outrank every optimizer rule (limit ${lowestLimit}, optimize ${highestOptimize})`,
+  );
 });

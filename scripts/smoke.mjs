@@ -753,16 +753,13 @@ async function main() {
         message,
       );
 
-    const applied = await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'lean' });
-    check(
-      applied.ok === true && applied.rules >= 1,
-      `enforcement installed ${applied.rules ?? 0} rule(s) for the site`,
-    );
-    check(
-      applied.enforcement?.[0]?.tier === 'lean',
-      `the site is recorded as limited (${JSON.stringify(applied.enforcement)})`,
-    );
-
+    // Cleared *before* the tier is set by hand, not after. `CLEAR_DATA` now also drops
+    // every enforcement decision — deleting the usage a limit was computed from and
+    // leaving the limit in place would keep a site cut off on the strength of numbers
+    // that no longer exist anywhere. So clearing after the `SET_ENFORCEMENT` below would
+    // undo it, and the refusal assertions would fail for a reason that is not a bug.
+    // Nothing between here and there writes usage, so the clear does its real job —
+    // emptying the size model so refusals price from the per-type default — either way.
     await ask({ type: 'CLEAR_DATA' });
 
     // Every usage store is empty on disk. Necessary but not sufficient, which is the
@@ -777,6 +774,16 @@ async function main() {
         visits: cleared.visitRows,
         daily: cleared.dailyRows,
       })})`,
+    );
+
+    const applied = await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'lean' });
+    check(
+      applied.ok === true && applied.rules >= 1,
+      `enforcement installed ${applied.rules ?? 0} rule(s) for the site`,
+    );
+    check(
+      applied.enforcement?.[0]?.tier === 'lean',
+      `the site is recorded as limited (${JSON.stringify(applied.enforcement)})`,
     );
 
     resetHits();

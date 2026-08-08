@@ -9,8 +9,14 @@
  * The decision map is mirrored into `chrome.storage.session` for the same reason
  * the tab map is: the worker is torn down after thirty idle seconds, and the
  * `webRequest` listener that has to decide whether a blocked request was *our*
- * doing needs to know what we are enforcing. Chrome keeps the DNR rules alive
- * across that restart; the reason for them has to survive too.
+ * doing needs to know what we are enforcing.
+ *
+ * Chrome does keep the DNR rules themselves alive across that teardown — but this
+ * extension does not leave them alone. `rules/session.ts` owns the whole session set
+ * and removes every rule it finds before installing the set it composes from module
+ * memory, and module memory is empty in a fresh worker. So restoring the map is not
+ * bookkeeping for the UI's benefit: it is what the rules are rebuilt from, and
+ * `ensureEnforcementReady` republishes them before it resolves.
  */
 
 import { asResourceType, type ResourceType } from "../core/types";
@@ -50,6 +56,28 @@ export function ensureEnforcementReady(): Promise<void> {
     } catch {
       // Nothing enforced is the safe default: it under-blocks rather than leaving
       // a site cut off for a reason we can no longer name.
+    }
+    /**
+     * Restoring the map is only half of it. Chrome keeps session rules across a
+     * worker teardown, but `rules/session.ts` composes the whole set from module
+     * memory and `install()` removes every rule it finds before adding that set
+     * back — so the first publish of a cold worker deletes the limit rules and, with
+     * Data Saver shipping off, replaces them with nothing. The symptom is a site
+     * parked at `strict` that stops being enforced after the first thirty-second
+     * idle gap while every surface carries on saying it is limited, and it heals
+     * only if that site's tab set happens to change.
+     *
+     * Inside the loading promise, not after it: awaiting readiness has to mean the
+     * rules are back, not merely that the map is. Skipped when nothing is enforced,
+     * which is the normal case and where the round trip would be pure cost —
+     * `applyOptimize` reinstalls from an empty `limit` source anyway.
+     */
+    if (entries.size > 0) {
+      try {
+        await syncRules();
+      } catch (error) {
+        console.error("Byte Budget: could not republish the limit rules", error);
+      }
     }
     loaded = true;
     loading = null;
@@ -104,17 +132,44 @@ export async function setEnforcement(
   tabIds: readonly number[],
 ): Promise<{ rules: number }> {
   await ensureEnforcementReady();
+  const previous = entries.get(site);
   if (tier === "off") {
     entries.delete(site);
   } else {
-    const existing = entries.get(site);
     entries.set(site, {
       tier,
       tabIds: [...tabIds],
-      since: existing && existing.tier === tier ? existing.since : Date.now(),
+      since: previous && previous.tier === tier ? previous.since : Date.now(),
     });
   }
-  const rules = await syncRules();
+
+  let rules: number;
+  try {
+    rules = await syncRules();
+  } catch (error) {
+    /**
+     * The map is written before the install, so a rejected install leaves it
+     * claiming a tier Chrome is not applying — and the governor's
+     * `if (wanted === enforcementFor(site)) return` then never fires again for that
+     * site, so the tier it thinks is installed is the one thing it will never try to
+     * install. Rolling back keeps the two in step: Chrome applies a rule update
+     * atomically, so a rejection means it still holds exactly what `previous`
+     * describes.
+     */
+    if (previous) entries.set(site, previous);
+    else entries.delete(site);
+    // And republish from the rolled-back map. `publishRules` keeps the last set it
+    // was handed whether or not it installed, so leaving the rejected one in place
+    // would make the *optimizer's* next publish fail too, on rules nobody wants.
+    try {
+      await syncRules();
+    } catch {
+      // Both attempts failed, so the whole rule pipeline is down. The throw below is
+      // what says so; a second log line would only be noise.
+    }
+    throw error;
+  }
+
   await persist();
   return { rules };
 }

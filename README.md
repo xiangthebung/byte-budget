@@ -9,7 +9,7 @@ and the record of what the browser tests changed about it.
 
 ```sh
 npm install
-npm run verify     # typecheck, 51 unit tests, build
+npm run verify     # typecheck, unit tests, build
 npm run smoke      # build, then measure a known page in a real Chromium
 ```
 
@@ -38,11 +38,27 @@ is occasionally wrong without saying so.
 
 ### What is approximate, stated plainly
 
+- **The scope of the whole number.** Every total here covers one Chrome profile.
+  A second profile, a different browser, a native app, an OS or app update, and
+  every other device on the same hotspot are invisible to an extension — there is
+  no API that would show them. So this figure can sit well below a carrier's,
+  sometimes by a factor of several. It answers "what did my browsing in this
+  profile cost", which is a smaller question than "what did my plan spend", and
+  the smaller one is the only question anything running inside Chrome can answer
+  honestly.
 - **HTTP header overhead.** Counted from the header names and values, then
   halved, because HTTP/2 and /3 compress headers by an amount Chrome does not
   report. Bounded at a few hundred bytes a request. Not folded into the measured
   share — that figure answers "did we measure the body", which is the uncertainty
   that spans orders of magnitude.
+- **`Cookie` and `Set-Cookie`.** Chrome hides both from `webRequest` unless the
+  extension opts in with `extraHeaders`, which this build does not, so they are
+  counted as zero — before the halving above, not after it. A logged-in session's
+  `Cookie` header runs to a few kB and goes out with every request to that site,
+  so the bytes-sent figure is structurally low wherever you are signed in. The
+  opt-in is not free — it moves every request onto a slower path through Chrome's
+  network stack — so the trade is deliberate; counting them as zero without saying
+  so would not be.
 - **WebSocket frames.** Not observable by an extension at all. Only the handshake
   is counted.
 - **Cancelled requests.** Chrome aborts loads it decides it no longer needs, and
@@ -153,8 +169,13 @@ goes on file, and from then on the saving on that URL is arithmetic.
 ## What it stores, and where
 
 Everything stays in the browser profile. There is no account, no endpoint, and no
-network request of the extension's own — `connect-src 'self'` in the manifest
-enforces that rather than promising it.
+network request of the extension's own — `default-src 'self'` in the manifest
+enforces that rather than promising it. It has to start at `default-src`: this was
+written at first as `connect-src 'self'` alone, which covers `fetch` and leaves
+`new Image().src`, a stylesheet, a font, a frame and a form submission free to
+reach any host on the internet. The policy also pins `form-action 'none'` and
+`base-uri 'none'`, neither of which inherits from `default-src` and both of which
+are exfiltration routes that need no script at all.
 
 | Store | Holds | Kept for |
 | --- | --- | --- |
@@ -169,12 +190,16 @@ enforces that rather than promising it.
 averages need to know which site and how many bytes; anything more would make
 this a browsing history, which is a different product with different stakes.
 
-Preferences live in `chrome.storage.sync` so they follow you between browsers.
-Measurements do not.
+Preferences — theme, badge, retention, whether per-host detail is recorded — live
+in `chrome.storage.sync` so they follow you between browsers. Nothing that names a
+site goes with them: limits and the never-optimize list are lists of domains, which
+is a browsing history in all but name, so they stay in `chrome.storage.local` on
+the machine you set them on. Measurements never leave the device by either route.
+The cost is that a limit set on one machine is not a limit on the next, which is a
+worse product and a better promise.
 
-Export to CSV or JSON from the dashboard. A number nobody can get out of an
-extension is a number they have to take on faith, and this one is about a data
-plan.
+Export everything to CSV or JSON. A number nobody can get out of an extension is a
+number they have to take on faith, and this one is about a data plan.
 
 ## Permissions
 

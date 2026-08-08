@@ -8,7 +8,7 @@
  * where a byte count belongs.
  */
 
-import { DEFAULT_SETTINGS, type Settings } from "./types";
+import { DEFAULT_SETTINGS, RETENTION_OPTIONS, type Settings } from "./types";
 
 const SETTINGS_KEY = "settings";
 
@@ -18,14 +18,43 @@ function pick<T extends string>(value: unknown, allowed: readonly T[], fallback:
     : fallback;
 }
 
+/** For numbers that come from a fixed menu: anything outside it is a build we do not know. */
+function pickNumber(value: unknown, allowed: readonly number[], fallback: number): number {
+  return typeof value === "number" && allowed.includes(value) ? value : fallback;
+}
+
+function pickBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+/**
+ * Guarantees a complete `Settings` in which every field holds one of its declared
+ * options — an unrecognised or out-of-range value falls back to the default rather
+ * than reaching a formatter as `undefined`. Nothing is dropped: what a person
+ * saved is what comes back.
+ *
+ * This used to spread `DEFAULT_SETTINGS` and carry forward only `theme` and
+ * `badge`, which meant `retentionDays` was permanently 400 and `trackHosts`
+ * permanently on for everyone — controls the privacy policy describes as theirs,
+ * that the worker already honours (`pruneOldRows`, `ledger.setTrackHosts`) and
+ * that only this function was standing in the way of. So: every field is listed,
+ * and listing them beats spreading the defaults because a field added to
+ * `Settings` then fails to compile here until someone decides how to validate it.
+ */
 function normalize(value: Partial<Settings> | undefined): Settings {
-  // Keep the product predictable: customers choose only presentation and whether a
-  // toolbar total is useful. Data-plan units, rolling periods, retention and host
-  // detail use one safe default everywhere instead of becoming setup questions.
   return {
-    ...DEFAULT_SETTINGS,
     theme: pick(value?.theme, ["auto", "light", "dark"], DEFAULT_SETTINGS.theme),
-    badge: value?.badge === "today" ? "today" : "off",
+    units: pick(value?.units, ["si", "iec"], DEFAULT_SETTINGS.units),
+    weekMode: pick(value?.weekMode, ["calendar", "rolling"], DEFAULT_SETTINGS.weekMode),
+    monthMode: pick(value?.monthMode, ["calendar", "rolling"], DEFAULT_SETTINGS.monthMode),
+    weekStart: value?.weekStart === 1 ? 1 : value?.weekStart === 0 ? 0 : DEFAULT_SETTINGS.weekStart,
+    retentionDays: pickNumber(
+      value?.retentionDays,
+      RETENTION_OPTIONS,
+      DEFAULT_SETTINGS.retentionDays,
+    ),
+    badge: pick(value?.badge, ["off", "session", "today"], DEFAULT_SETTINGS.badge),
+    trackHosts: pickBoolean(value?.trackHosts, DEFAULT_SETTINGS.trackHosts),
   };
 }
 
