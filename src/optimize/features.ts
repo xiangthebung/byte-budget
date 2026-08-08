@@ -12,6 +12,7 @@
  * one switch would mean the cautious setting is also the useless one.
  */
 
+import { t } from "../core/i18n";
 import { PACKS } from "./packs";
 
 export const DNR_FEATURES = ["saveData", "blockBeacons", "systemFonts"] as const;
@@ -41,7 +42,9 @@ export const FEATURE_IDS: readonly FeatureId[] = [...DNR_FEATURES, ...PAGE_FEATU
 
 export interface FeatureInfo {
   id: FeatureId;
+  /** Already localised. The catalogue key is `coreFeature<Id>Label`. */
   label: string;
+  /** Already localised. The catalogue key is `coreFeature<Id>Description`. */
   description: string;
   /** How visible the change is, for the UI to order and default by. */
   visibility: "invisible" | "subtle" | "noticeable";
@@ -51,17 +54,15 @@ export interface FeatureInfo {
 export const FEATURES: readonly FeatureInfo[] = [
   {
     id: "saveData",
-    label: "Ask sites for the light version",
-    description:
-      "Sends the Save-Data header, which many image CDNs and some sites honour by serving smaller assets. Sites that ignore it are unaffected.",
+    label: t("coreFeatureSaveDataLabel"),
+    description: t("coreFeatureSaveDataDescription"),
     visibility: "invisible",
     defaultOn: true,
   },
   {
     id: "blockBeacons",
-    label: "Drop analytics beacons",
-    description:
-      "Refuses fire-and-forget pings to known analytics services. Small individually, constant in aggregate. Beacons to the site itself are left alone — a page also uses them to save your work as you leave it.",
+    label: t("coreFeatureBlockBeaconsLabel"),
+    description: t("coreFeatureBlockBeaconsDescription"),
     visibility: "invisible",
     defaultOn: true,
   },
@@ -75,59 +76,57 @@ export const FEATURES: readonly FeatureInfo[] = [
    *
    * So both of these act on content added *after* the initial parse, which is where the
    * bytes are on the modern web anyway: an endless feed, a gallery that pages in, an
-   * app that renders its own content. The labels say so rather than implying they fix
-   * the first screenful.
+   * app that renders its own content. The descriptions say so rather than implying they
+   * fix the first screenful — the English is in `i18n/core.json` now, under
+   * `coreFeatureTrimSrcsetDescription` and `coreFeatureLazyOffscreenDescription`, and
+   * each carries that limit as its own sentence so a translation cannot lose it.
    */
   {
     id: "trimSrcset",
-    label: "Stop feeds over-ordering images",
-    description:
-      "For images added after the page loads, asks for the smallest version that still covers the space it is shown in rather than one sized for a higher-density screen. Images in the initial HTML are already requested before any script can see them.",
+    label: t("coreFeatureTrimSrcsetLabel"),
+    description: t("coreFeatureTrimSrcsetDescription"),
     visibility: "subtle",
     defaultOn: true,
   },
   {
     id: "lazyOffscreen",
-    label: "Load feed images when they are reached",
-    description:
-      "Defers images and frames added after the page loads until they are near the viewport, so scrolling halfway down an endless feed costs half of it. Again, only what arrives after the initial parse.",
+    label: t("coreFeatureLazyOffscreenLabel"),
+    description: t("coreFeatureLazyOffscreenDescription"),
     visibility: "invisible",
     defaultOn: true,
   },
   {
     id: "tameMedia",
-    label: "Stop offscreen video pre-buffering",
-    description:
-      "Turns off preloading and autoplay for video and audio that is not on screen. The heaviest single thing most pages do without being asked.",
+    label: t("coreFeatureTameMediaLabel"),
+    description: t("coreFeatureTameMediaDescription"),
     visibility: "subtle",
     defaultOn: true,
   },
   {
     id: "clickToLoadMedia",
-    label: "Click to load video and audio",
-    description:
-      "Holds video and audio sources until they are clicked. Some media requested directly by the page may start before an extension can pause it.",
+    label: t("coreFeatureClickToLoadMediaLabel"),
+    description: t("coreFeatureClickToLoadMediaDescription"),
     visibility: "noticeable",
     defaultOn: false,
   },
   {
     id: "dropHints",
-    label: "Ignore speculative loading",
-    // Deliberately not "stops a page prefetching". This runs in the page, and a hint
-    // written into the first HTML is dispatched by Chrome's preload scanner before any
-    // script sees the element — measured in `scripts/smoke.mjs`, the same limit PLAN.md
-    // §5.2 records for the image features. Hints a page adds later are caught, which on
-    // an app-rendered site is most of them.
-    description:
-      "Removes prefetch, preload and prerender hints, so a page cannot spend your data on something you may never open. Hints in the first HTML may start before an extension can remove them.",
+    label: t("coreFeatureDropHintsLabel"),
+    // The description is deliberately not "stops a page prefetching". This runs in the
+    // page, and a hint written into the first HTML is dispatched by Chrome's preload
+    // scanner before any script sees the element — measured in `scripts/smoke.mjs`, the
+    // same limit PLAN.md §5.2 records for the image features. Hints a page adds later
+    // are caught, which on an app-rendered site is most of them. The sentence that says
+    // so is the second one in `coreFeatureDropHintsDescription`; a translation that
+    // drops it makes the feature claim something it cannot do.
+    description: t("coreFeatureDropHintsDescription"),
     visibility: "subtle",
     defaultOn: false,
   },
   {
     id: "systemFonts",
-    label: "Use system fonts",
-    description:
-      "Refuses downloadable fonts and falls back to what is already on the device. Usually a small first-visit saving because fonts are cached, so it is off by default.",
+    label: t("coreFeatureSystemFontsLabel"),
+    description: t("coreFeatureSystemFontsDescription"),
     visibility: "noticeable",
     defaultOn: false,
   },

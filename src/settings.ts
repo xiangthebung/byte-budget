@@ -1,5 +1,13 @@
 import "./dashboard.css";
-import { bindGroup, button, element, paintGroup, query, replaceChildren } from "./core/dom";
+import {
+  bindGroup,
+  button,
+  element,
+  paintGroup,
+  query,
+  queryAll,
+  replaceChildren,
+} from "./core/dom";
 import {
   formatAgo,
   formatBytes,
@@ -7,6 +15,7 @@ import {
   formatPercent,
   parseByteSize,
 } from "./core/format";
+import { t } from "./core/i18n";
 import {
   errorMessage,
   sendRequest,
@@ -103,18 +112,67 @@ function bytes(value: number): string {
 /** Every optimize input, so a save can disable the lot without naming them. */
 const optimizeInputs: HTMLInputElement[] = [];
 
+/**
+ * The ordinal is four whole messages rather than four suffixes.
+ *
+ * A suffix bolted onto a number is the fragment a translator cannot work with: the
+ * position of the marker differs by language and some languages have none. Each branch
+ * hands over the complete word, so a locale with no ordinal returns `$DAY$` alone. The
+ * choice of branch stays here because it is English grammar, and picking it wrongly
+ * would put "21th" on the reset-day picker.
+ */
 function ordinal(day: number): string {
   const teens = day % 100;
-  if (teens >= 11 && teens <= 13) return `${day}th`;
+  if (teens >= 11 && teens <= 13) return t("settingsOrdinalOther", String(day));
   switch (day % 10) {
     case 1:
-      return `${day}st`;
+      return t("settingsOrdinalFirst", String(day));
     case 2:
-      return `${day}nd`;
+      return t("settingsOrdinalSecond", String(day));
     case 3:
-      return `${day}rd`;
+      return t("settingsOrdinalThird", String(day));
     default:
-      return `${day}th`;
+      return t("settingsOrdinalOther", String(day));
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * The markup's own strings
+ * ------------------------------------------------------------------ */
+
+/**
+ * Replaces the English in `settings.html` with the current locale's messages.
+ *
+ * Chrome substitutes `__MSG_name__` in the manifest and in CSS and nowhere else, so
+ * every word in an extension page has to be written by script. The attributes name a
+ * message per element rather than per surface, which is what keeps `settings.html`
+ * readable: the words stay next to the markup they belong to and a reviewer can still
+ * see what the page says.
+ *
+ * Three attributes, because the markup carries three kinds of string. There is no
+ * `data-i18n-title` handler: every tooltip on this page is built in script, and a
+ * branch for markup that does not exist is a branch nothing would notice breaking.
+ *
+ * Called before anything else in `start()`. Running it after the first render would
+ * leave whichever panel painted first in the wrong language until its next refresh.
+ */
+function localizeMarkup(): void {
+  for (const node of queryAll<HTMLElement>("[data-i18n]")) {
+    const key = node.dataset.i18n;
+    if (key) node.textContent = t(key);
+  }
+  for (const node of queryAll<HTMLElement>("[data-i18n-label]")) {
+    const key = node.dataset.i18nLabel;
+    if (key) node.setAttribute("aria-label", t(key));
+  }
+  for (const node of queryAll<HTMLInputElement>("[data-i18n-placeholder]")) {
+    const key = node.dataset.i18nPlaceholder;
+    if (key) node.placeholder = t(key);
+  }
+  // The export ranges are one message with the day count substituted in, so the option
+  // carries its number in `value` and the label is built from it.
+  for (const option of queryAll<HTMLOptionElement>("#export-days option")) {
+    option.textContent = t("settingsExportRangeDays", option.value);
   }
 }
 
@@ -238,15 +296,29 @@ function groupField(
 
 const IMPACT_SCORE: Record<SavingsImpact, number> = { low: 1, medium: 2, high: 3 };
 
+/**
+ * Named rather than capitalised from the impact id.
+ *
+ * The label used to be the enum value with its first letter upper-cased, which is a
+ * rule about English orthography applied to a word that is about to be translated —
+ * `toUpperCase()` on a locale where the word does not begin with a letter, or where
+ * title case is not how a label is written, produces something nobody chose.
+ */
+const IMPACT_LABEL_KEYS: Record<SavingsImpact, string> = {
+  low: "settingsImpactLow",
+  medium: "settingsImpactMedium",
+  high: "settingsImpactHigh",
+};
+
 function renderImpactMeters(): void {
   for (const node of document.querySelectorAll<HTMLElement>("[data-impact-feature]")) {
     const feature = node.dataset.impactFeature as FeatureId | undefined;
     const impact = feature ? SAVINGS_IMPACT_BY_FEATURE[feature] : undefined;
     if (!impact) continue;
-    const label = impact[0]?.toUpperCase() + impact.slice(1);
+    const label = t(IMPACT_LABEL_KEYS[impact]);
     const score = IMPACT_SCORE[impact];
     node.setAttribute("role", "img");
-    node.setAttribute("aria-label", `Expected data savings: ${label}`);
+    node.setAttribute("aria-label", t("settingsImpactAria", label));
     replaceChildren(node, [
       element(
         "span",
@@ -290,12 +362,12 @@ const DOMAIN_ENDING = /^[a-z]{2,}$/;
 
 function siteFromInput(raw: string): SiteInput {
   const text = raw.trim();
-  if (!text) return { error: "Which website is it for?" };
+  if (!text) return { error: t("settingsSiteErrorEmpty") };
 
   let host: string;
   if (text.includes("://")) {
     const parsed = hostFromUrl(text);
-    if (!parsed) return { error: "Only http and https addresses can be used here." };
+    if (!parsed) return { error: t("settingsSiteErrorScheme") };
     host = parsed;
   } else {
     // What the address bar hands over when you copy: no scheme, but a path and a query.
@@ -312,29 +384,31 @@ function siteFromInput(raw: string): SiteInput {
     // colon guard sends the whole string through untouched — and Chrome matches a rule
     // by domain name, so the limit would exist and never fire.
     if (!/^\d+$/.test(port)) {
-      return { error: "Byte Budget matches sites by name, so an IPv6 address cannot be used." };
+      return { error: t("settingsSiteErrorIpv6") };
     }
     host = host.slice(0, colon);
   }
 
-  if (!host) return { error: "Which website is it for?" };
+  if (!host) return { error: t("settingsSiteErrorEmpty") };
   if (!HOST_SHAPE.test(host)) {
-    return { error: `"${text}" is not a website address. One looks like example.com.` };
+    return { error: t("settingsSiteErrorShape", text) };
   }
 
   const labels = host.split(".");
   const ending = labels[labels.length - 1] ?? "";
   if (host !== "localhost" && !IPV4.test(host)) {
     if (labels.length < 2) {
-      return { error: `"${host}" has no domain ending. Try "${host}.com", or paste the address.` };
+      // One message, not a sentence with the host spliced in twice: the suggestion has
+      // to be able to move relative to the complaint, and in some languages it does.
+      return { error: t("settingsSiteErrorNoEnding", host) };
     }
     if (!DOMAIN_ENDING.test(ending)) {
-      return { error: `"${host}" does not end in something like .com or .org.` };
+      return { error: t("settingsSiteErrorBadEnding", host) };
     }
   }
 
   const site = siteKeyFromHost(host);
-  if (!site) return { error: "Which website is it for?" };
+  if (!site) return { error: t("settingsSiteErrorEmpty") };
   return { site };
 }
 
@@ -356,20 +430,21 @@ function siteFromInput(raw: string): SiteInput {
  */
 type PlanEnforcement = BudgetShape | "watch";
 
-const PLAN_ENFORCEMENT_LABELS: Record<PlanEnforcement, string> = {
-  watch: "Just measure",
-  progressive: "Shed weight",
-  hard: "Hard stop",
+const PLAN_ENFORCEMENT_LABEL_KEYS: Record<PlanEnforcement, string> = {
+  watch: "settingsPlanShapeWatch",
+  progressive: "settingsPlanShapeProgressive",
+  hard: "settingsPlanShapeHard",
 };
 
-const PLAN_ENFORCEMENT_HINTS: Record<PlanEnforcement, string> = {
-  watch:
-    "Nothing is ever refused, and there is no allowance for an alert to check — so plan alerts stay quiet. The dashboard still measures the cycle against the plan.",
-  progressive:
-    "Across every site: video and audio stop at 60% of the plan, images and web fonts at 85%, everything but the page itself at 100%.",
-  hard:
-    "Nothing changes until the plan is spent. After that only pages themselves load, until the allowance rolls over, or you pause it, or you add bytes to this window.",
+const PLAN_ENFORCEMENT_HINT_KEYS: Record<PlanEnforcement, string> = {
+  watch: "settingsPlanShapeWatchHint",
+  progressive: "settingsPlanShapeProgressiveHint",
+  hard: "settingsPlanShapeHardHint",
 };
+
+function planEnforcementLabel(value: PlanEnforcement): string {
+  return t(PLAN_ENFORCEMENT_LABEL_KEYS[value]);
+}
 
 /**
  * Default for a plan that has never had an allowance.
@@ -386,9 +461,9 @@ function totalStatus(): BudgetStatus | null {
 }
 
 function cycleDayOptions(): { value: string; label: string }[] {
-  const options = [{ value: "0", label: "The 1st (calendar month)" }];
+  const options = [{ value: "0", label: t("settingsPlanCycleCalendar") }];
   for (let day = 2; day <= MAX_CYCLE_START_DAY; day++) {
-    options.push({ value: String(day), label: `The ${ordinal(day)}` });
+    options.push({ value: String(day), label: t("settingsPlanCycleDay", ordinal(day)) });
   }
   return options;
 }
@@ -396,7 +471,7 @@ function cycleDayOptions(): { value: string; label: string }[] {
 function paintPlanEcho(): void {
   const raw = planSizeInput.value.trim();
   if (!raw) {
-    planEcho.textContent = "Empty removes the plan.";
+    planEcho.textContent = t("settingsPlanEchoEmpty");
     return;
   }
   const size = parseByteSize(raw);
@@ -404,7 +479,9 @@ function paintPlanEcho(): void {
   // number and mean a different one. "1,5 GB" is 1.5 GB in most of the world and 15 GB
   // in some parsers; whichever this build reads it as, it says so before you save.
   planEcho.textContent =
-    size === null || size <= 0 ? "Cannot read that as a size." : `Reads as ${bytes(size)}.`;
+    size === null || size <= 0
+      ? t("settingsPlanEchoUnreadable")
+      : t("settingsPlanEchoReads", bytes(size));
 }
 
 function paintPlan(): void {
@@ -422,12 +499,12 @@ function paintPlan(): void {
   if (total) planEnforcement = total.budget.shape;
   else if (settings.planBytes !== null) planEnforcement = "watch";
   paintGroup(planShapeGroup, planEnforcement);
-  planShapeHint.textContent = PLAN_ENFORCEMENT_HINTS[planEnforcement];
+  planShapeHint.textContent = t(PLAN_ENFORCEMENT_HINT_KEYS[planEnforcement]);
 
   planNote.textContent =
     settings.planBytes === null
-      ? "No plan set"
-      : `${bytes(settings.planBytes)} · resets ${formatAgo(cycleResetsAt(settings))}`;
+      ? t("settingsPlanNoteUnset")
+      : t("settingsPlanNote", [bytes(settings.planBytes), formatAgo(cycleResetsAt(settings))]);
 
   replaceChildren(planAllowance, planAllowanceBlock(settings, total));
   // The alerts panel's warning depends on whether that allowance exists, and this is
@@ -440,7 +517,7 @@ function planAllowanceBlock(current: Settings, total: BudgetStatus | null): Node
     return [
       element("p", {
         className: "empty friendly-empty",
-        text: "No plan set. Until there is one the dashboard can only show totals: no share of a plan, no projection, and nothing for a plan alert to check.",
+        text: t("settingsPlanEmpty"),
       }),
     ];
   }
@@ -450,9 +527,12 @@ function planAllowanceBlock(current: Settings, total: BudgetStatus | null): Node
   const nodes: Node[] = [
     element("p", {
       className: "field-hint",
-      text: `This cycle started ${formatDayShort(range.from)} — day ${formatCount(
-        elapsed.elapsedDays,
-      )} of ${formatCount(elapsed.totalDays)}, resets ${formatAgo(cycleResetsAt(current))}.`,
+      text: t("settingsPlanCycleLine", [
+        formatDayShort(range.from),
+        formatCount(elapsed.elapsedDays),
+        formatCount(elapsed.totalDays),
+        formatAgo(cycleResetsAt(current)),
+      ]),
     }),
   ];
 
@@ -460,7 +540,7 @@ function planAllowanceBlock(current: Settings, total: BudgetStatus | null): Node
     nodes.push(
       element("p", {
         className: "field-hint",
-        text: `${PLAN_ENFORCEMENT_LABELS.watch} is selected, so there is no allowance over everything. Nothing is refused and plan alerts have nothing to measure against.`,
+        text: t("settingsPlanNoAllowance", planEnforcementLabel("watch")),
       }),
     );
     return nodes;
@@ -481,11 +561,14 @@ function allowanceCard(status: BudgetStatus): HTMLElement {
   const state = statusWords(status);
   return element("div", { className: "exception-settings" }, [
     element("div", { className: "exception-head" }, [
-      element("span", { className: "field-label", text: "Allowance over everything" }),
+      element("span", { className: "field-label", text: t("settingsAllowanceLabel") }),
       element("span", {
         className: "summary-note",
         text: status.resetsAt
-          ? `${BUDGET_PERIOD_LABELS[status.budget.period]} · resets ${formatAgo(status.resetsAt)}`
+          ? t("settingsAllowanceResets", [
+              BUDGET_PERIOD_LABELS[status.budget.period],
+              formatAgo(status.resetsAt),
+            ])
           : BUDGET_PERIOD_LABELS[status.budget.period],
       }),
     ]),
@@ -496,7 +579,12 @@ function allowanceCard(status: BudgetStatus): HTMLElement {
         text: state.text,
         dataset: state.tone ? { tone: state.tone } : {},
       }),
-      status.tier === "off" ? null : ` ${TIER_LABELS[status.tier]} — ${TIER_DESCRIPTIONS[status.tier]}`,
+      // The space is the gap after the chip, not part of either sentence, so it stays
+      // out of the message rather than becoming leading whitespace a translator has to
+      // notice and preserve.
+      status.tier === "off"
+        ? null
+        : ` ${t("settingsAllowanceTier", [TIER_LABELS[status.tier], TIER_DESCRIPTIONS[status.tier]])}`,
     ]),
     // No Remove here. Removing this budget is what "Just measure" above does, and it
     // has to be that control rather than this button, because dropping the allowance
@@ -511,7 +599,7 @@ async function savePlan(): Promise<void> {
   const size = raw ? parseByteSize(raw) : null;
 
   if (raw && (size === null || size <= 0)) {
-    planStatus.textContent = `Could not read "${raw}" as a size. Try 15 GB or 500 MB.`;
+    planStatus.textContent = t("settingsPlanSizeUnreadable", raw);
     return;
   }
 
@@ -521,7 +609,7 @@ async function savePlan(): Promise<void> {
   // measure" and quietly save a plan with no allowance behind it.
   const enforcement = planEnforcement;
 
-  planStatus.textContent = "Saving…";
+  planStatus.textContent = t("settingsSaving");
   try {
     const response = await sendRequest({
       type: "SAVE_SETTINGS",
@@ -529,16 +617,17 @@ async function savePlan(): Promise<void> {
     });
     paintSettings(response.settings);
     await applyPlanAllowance(size, enforcement);
+    // Two whole sentences rather than one with a preposition spliced into it. "on the
+    // 1st" and "on the 17th" are not interchangeable fragments in every language, and a
+    // sentence assembled from them cannot be reordered by whoever translates it.
     planStatus.textContent =
       size === null
-        ? "Plan removed."
-        : `Plan saved: ${bytes(size)}, resetting ${
-            response.settings.cycleStartDay === 0
-              ? "on the 1st"
-              : `on ${ordinal(response.settings.cycleStartDay)}`
-          }.`;
+        ? t("settingsPlanRemoved")
+        : response.settings.cycleStartDay === 0
+          ? t("settingsPlanSavedCalendar", bytes(size))
+          : t("settingsPlanSavedDay", [bytes(size), ordinal(response.settings.cycleStartDay)]);
   } catch (error) {
-    const message = errorMessage(error, "Could not save the plan.");
+    const message = errorMessage(error, t("settingsPlanSaveError"));
     planStatus.textContent = message;
     liveRegion.textContent = message;
   }
@@ -572,17 +661,17 @@ async function applyPlanAllowance(
 async function choosePlanEnforcement(value: PlanEnforcement): Promise<void> {
   planEnforcement = value;
   paintGroup(planShapeGroup, value);
-  planShapeHint.textContent = PLAN_ENFORCEMENT_HINTS[value];
+  planShapeHint.textContent = t(PLAN_ENFORCEMENT_HINT_KEYS[value]);
   if (!settings || settings.planBytes === null) {
-    planStatus.textContent = "Set a plan size for this to apply to.";
+    planStatus.textContent = t("settingsPlanNeedsSize");
     return;
   }
-  planStatus.textContent = "Saving…";
+  planStatus.textContent = t("settingsSaving");
   try {
     await applyPlanAllowance(settings.planBytes, value);
-    planStatus.textContent = "Saved.";
+    planStatus.textContent = t("settingsSavedSentence");
   } catch (error) {
-    planStatus.textContent = errorMessage(error, "Could not change the allowance.");
+    planStatus.textContent = errorMessage(error, t("settingsAllowanceChangeError"));
   }
 }
 
@@ -603,19 +692,26 @@ let deferredStatuses: readonly BudgetStatus[] | null = null;
 let formPeriod: BudgetPeriod = "day";
 let formHard = false;
 
-const PERIOD_OPTION_LABELS: Record<BudgetPeriod, string> = {
-  session: "Session",
-  day: "Day",
-  week: "Week",
-  month: "Month",
+const PERIOD_OPTION_KEYS: Record<BudgetPeriod, string> = {
+  session: "settingsPeriodSession",
+  day: "settingsPeriodDay",
+  week: "settingsPeriodWeek",
+  month: "settingsPeriodMonth",
 };
 
-/** What "add some more" is called for each window. */
-const GRANT_WINDOW_LABELS: Record<BudgetPeriod, string> = {
-  session: "this session",
-  day: "today",
-  week: "this week",
-  month: "this month",
+/**
+ * The whole "add some more" label, per window.
+ *
+ * This used to be the four window names alone — "today", "this week" — joined onto a
+ * byte figure at the call site. That is the fragment a translation cannot move: the
+ * size goes before the window in English and after it in plenty of languages, and a
+ * translator handed "today" on its own has no way to say so.
+ */
+const GRANT_LABEL_KEYS: Record<BudgetPeriod, string> = {
+  session: "settingsGrantSession",
+  day: "settingsGrantDay",
+  week: "settingsGrantWeek",
+  month: "settingsGrantMonth",
 };
 
 async function loadLimits(): Promise<void> {
@@ -623,7 +719,7 @@ async function loadLimits(): Promise<void> {
     const { statuses: loaded } = await sendRequest({ type: "GET_BUDGETS" });
     renderLimits(loaded);
   } catch (error) {
-    limitStatus.textContent = errorMessage(error, "Could not read the limits.");
+    limitStatus.textContent = errorMessage(error, t("settingsLimitsReadError"));
   }
 }
 
@@ -639,10 +735,16 @@ function renderLimits(loaded: readonly BudgetStatus[]): void {
   const rows = loaded.filter((status) => status.budget.site !== ALL_SITES);
   limitsEmpty.hidden = rows.length > 0;
   limitsTable.hidden = rows.length === 0;
+  // Singular and plural are two whole messages. Joining a count to a noun chosen by a
+  // ternary is English-only arithmetic: other languages pick the form from the number
+  // itself, and several have more than two forms to pick from.
   limitsNote.textContent =
     rows.length === 0
       ? ""
-      : `${formatCount(rows.length)} ${rows.length === 1 ? "limit" : "limits"}`;
+      : t(
+          rows.length === 1 ? "settingsLimitsNoteOne" : "settingsLimitsNoteMany",
+          formatCount(rows.length),
+        );
 
   replaceChildren(
     limitsBody,
@@ -668,18 +770,27 @@ function endEditing(): void {
 function statusWords(status: BudgetStatus): { text: string; tone: string } {
   if (status.snoozed) {
     const until = status.budget.snoozedUntil;
-    return { text: until ? `Paused · resumes ${formatAgo(until)}` : "Paused", tone: "paused" };
+    return {
+      text: until
+        ? t("settingsStatusPausedUntil", formatAgo(until))
+        : t("settingsStatusPaused"),
+      tone: "paused",
+    };
   }
-  if (status.share >= 1) return { text: "Over limit", tone: "enforcing" };
-  if (status.share >= 0.85) return { text: "Nearly full", tone: "enforcing" };
-  return { text: "Within limit", tone: "" };
+  if (status.share >= 1) return { text: t("settingsStatusOver"), tone: "enforcing" };
+  if (status.share >= 0.85) return { text: t("settingsStatusNearly"), tone: "enforcing" };
+  return { text: t("settingsStatusWithin"), tone: "" };
 }
 
 function meter(status: BudgetStatus): HTMLElement {
   const over = status.share >= 1;
   return element("span", { className: "limit-meter" }, [
     element("span", {
-      text: `${bytes(status.used)} of ${bytes(status.allowance)} · ${formatPercent(status.share)}`,
+      text: t("settingsMeter", [
+        bytes(status.used),
+        bytes(status.allowance),
+        formatPercent(status.share),
+      ]),
     }),
     element("span", { className: "limit-meter-track", ariaHidden: true }, [
       element("span", {
@@ -711,21 +822,24 @@ function rowActions(status: BudgetStatus, removable = true): HTMLElement[] {
   const size = grantSize(status.allowance);
   const actions: HTMLElement[] = [
     button("ghost-button", {
-      text: `+${bytes(size)} ${GRANT_WINDOW_LABELS[status.budget.period]}`,
-      title: `Raises the allowance to ${bytes(status.allowance + size)} until it resets. ${
-        status.budget.period === "session" ? "Only for this session." : "Only for this window."
-      }`,
+      text: t(GRANT_LABEL_KEYS[status.budget.period], bytes(size)),
+      title: t(
+        status.budget.period === "session"
+          ? "settingsGrantTitleSession"
+          : "settingsGrantTitleWindow",
+        bytes(status.allowance + size),
+      ),
       onClick: () => void changeLimit({ type: "GRANT_BYTES", site, bytes: size }),
     }),
     status.snoozed
       ? button("ghost-button", {
-          text: "Resume",
-          title: "Start enforcing this limit again now",
+          text: t("settingsResume"),
+          title: t("settingsResumeTitle"),
           onClick: () => void changeLimit({ type: "RESUME_BUDGET", site }),
         })
       : button("ghost-button", {
-          text: "Pause 1 h",
-          title: "Stop refusing anything for an hour. The counter keeps running.",
+          text: t("settingsPause"),
+          title: t("settingsPauseTitle"),
           onClick: () => void changeLimit({ type: "SNOOZE_BUDGET", site, minutes: 60 }),
         }),
   ];
@@ -733,9 +847,9 @@ function rowActions(status: BudgetStatus, removable = true): HTMLElement[] {
   if (removable) {
     actions.push(
       button("ghost-button", {
-        text: "Remove",
+        text: t("settingsRemove"),
         dataset: { danger: "true" },
-        title: "Deletes the limit and lifts anything it is refusing right now",
+        title: t("settingsRemoveTitle"),
         onClick: () => void changeLimit({ type: "REMOVE_BUDGET", site }),
       }),
     );
@@ -753,19 +867,25 @@ function limitRow(status: BudgetStatus): HTMLTableRowElement {
    * columns become one card per limit (see `#limits-table` in `dashboard.css`).
    * The site and the actions are left unlabelled — the hostname is the card's
    * title and the buttons name themselves.
+   *
+   * CSS prints these through `content: attr(data-label)`, so they are read on screen
+   * and take the same messages as the `<th>`s they repeat.
    */
   // Built before the button, because the button's job is to replace this cell's
   // contents with the editor and it needs somewhere to put them.
-  const limitCell = element("td", { dataset: { label: "Limit" } });
+  const limitCell = element("td", { dataset: { label: t("settingsLimitsColLimit") } });
   replaceChildren(limitCell, [
     element("span", { className: "limit-meter" }, [
       // Wrapped so the button keeps its own width: `.limit-meter` is a grid, and a
       // grid item stretches to the 130px column.
       element("span", {}, [
         button("ghost-button", {
-          text: `${bytes(status.budget.bytes)} ${BUDGET_PERIOD_LABELS[status.budget.period]}`,
-          ariaLabel: `Change the allowance for ${site}`,
-          title: "Change this allowance",
+          text: t("settingsLimitAllowanceButton", [
+            bytes(status.budget.bytes),
+            BUDGET_PERIOD_LABELS[status.budget.period],
+          ]),
+          ariaLabel: t("settingsLimitEditAria", site),
+          title: t("settingsLimitEditTitle"),
           onClick: () => startEditing(status, limitCell),
         }),
       ]),
@@ -779,8 +899,10 @@ function limitRow(status: BudgetStatus): HTMLTableRowElement {
   return element("tr", {}, [
     element("td", {}, [element("span", { className: "host-name", text: site, title: site })]),
     limitCell,
-    element("td", { className: "numeric", dataset: { label: "Used" } }, [meter(status)]),
-    element("td", { dataset: { label: "Status" } }, [
+    element("td", { className: "numeric", dataset: { label: t("settingsLimitsColUsed") } }, [
+      meter(status),
+    ]),
+    element("td", { dataset: { label: t("settingsLimitsColStatus") } }, [
       element("span", { className: "limit-meter" }, [
         // The chip is wrapped rather than placed straight into the grid: it is
         // `inline-block`, and a grid item stretches to the column width, which would
@@ -802,8 +924,8 @@ function limitRow(status: BudgetStatus): HTMLTableRowElement {
       ]),
     ]),
     element("td", {
-      dataset: { label: "Resets" },
-      text: status.resetsAt ? formatAgo(status.resetsAt) : "on browser close",
+      dataset: { label: t("settingsLimitsColResets") },
+      text: status.resetsAt ? formatAgo(status.resetsAt) : t("settingsResetsOnClose"),
     }),
     element("td", {}, [element("span", { className: "row-actions" }, rowActions(status))]),
   ]);
@@ -818,6 +940,18 @@ interface ByteUnit {
   readonly factor: number;
 }
 
+/*
+ * The unit symbols below are not messages, and neither are the two options in the
+ * Units picker that choose between them.
+ *
+ * They are the symbols `formatBytes` prints on every figure in the product, and that
+ * function has one table of them in `core/format.ts`. Translating the picker while
+ * every number beside it still read "GB" would make the control describe something
+ * the page does not show. They are also this select's values — the factor is looked
+ * up by matching the chosen string — so a localised label would have to be decoupled
+ * from the value first, which is a change to how the editor works rather than to what
+ * it says.
+ */
 const SI_EDIT_UNITS: readonly ByteUnit[] = [
   { label: "kB", factor: 1000 },
   { label: "MB", factor: 1_000_000 },
@@ -862,7 +996,7 @@ function startEditing(status: BudgetStatus, cell: HTMLTableCellElement): void {
   amount.min = "0";
   amount.step = "any";
   amount.value = String(start.amount);
-  amount.setAttribute("aria-label", `Allowance for ${status.budget.site}`);
+  amount.setAttribute("aria-label", t("settingsEditAmountAria", status.budget.site));
 
   const unit = element("select", { className: "select" });
   fillSelect(
@@ -870,7 +1004,7 @@ function startEditing(status: BudgetStatus, cell: HTMLTableCellElement): void {
     editUnits().map((entry) => ({ value: entry.label, label: entry.label })),
     start.label,
   );
-  unit.setAttribute("aria-label", "Unit");
+  unit.setAttribute("aria-label", t("settingsEditUnitAria"));
 
   const cancelEdit = (): void => {
     const pending = deferredStatuses;
@@ -879,14 +1013,14 @@ function startEditing(status: BudgetStatus, cell: HTMLTableCellElement): void {
     renderLimits(pending ?? statuses);
   };
 
-  const save = element("button", { className: "primary-button", text: "Save" });
+  const save = element("button", { className: "primary-button", text: t("settingsEditSave") });
   save.type = "submit";
 
   const form = element("form", { className: "exclusion-form" }, [
     amount,
     unit,
     save,
-    button("ghost-button", { text: "Cancel", onClick: cancelEdit }),
+    button("ghost-button", { text: t("settingsCancel"), onClick: cancelEdit }),
   ]);
 
   form.addEventListener("submit", (submit) => {
@@ -894,11 +1028,11 @@ function startEditing(status: BudgetStatus, cell: HTMLTableCellElement): void {
     const factor = editUnits().find((entry) => entry.label === unit.value)?.factor;
     const value = amount.valueAsNumber;
     if (factor === undefined || !Number.isFinite(value) || value <= 0) {
-      limitStatus.textContent = "Give the allowance a size above zero.";
+      limitStatus.textContent = t("settingsEditSizeInvalid");
       return;
     }
     editingSite = null;
-    limitStatus.textContent = "Saving…";
+    limitStatus.textContent = t("settingsSaving");
     void changeLimit({
       type: "PUT_BUDGET",
       site: status.budget.site,
@@ -908,9 +1042,11 @@ function startEditing(status: BudgetStatus, cell: HTMLTableCellElement): void {
     }).then((saved) => {
       endEditing();
       if (!saved) return;
-      limitStatus.textContent = `${status.budget.site} is now ${bytes(
-        Math.round(value * factor),
-      )} ${BUDGET_PERIOD_LABELS[status.budget.period]}.`;
+      limitStatus.textContent = t("settingsEditSaved", [
+        status.budget.site,
+        bytes(Math.round(value * factor)),
+        BUDGET_PERIOD_LABELS[status.budget.period],
+      ]);
     });
   });
 
@@ -932,7 +1068,7 @@ async function changeLimit(request: Parameters<typeof sendRequest>[0]): Promise<
     limitStatus.textContent = "";
     return true;
   } catch (error) {
-    limitStatus.textContent = errorMessage(error, "Could not change that limit.");
+    limitStatus.textContent = errorMessage(error, t("settingsLimitChangeError"));
     return false;
   }
 }
@@ -951,7 +1087,7 @@ query<HTMLFormElement>("#limit-form").addEventListener("submit", (event) => {
     return;
   }
   if (size === null || size <= 0) {
-    limitStatus.textContent = `Could not read "${raw}" as a size. Try 500 MB or 1.5 GB.`;
+    limitStatus.textContent = t("settingsLimitSizeUnreadable", raw);
     sizeInput.focus();
     return;
   }
@@ -960,7 +1096,7 @@ query<HTMLFormElement>("#limit-form").addEventListener("submit", (event) => {
   const replacing = statuses.some((status) => status.budget.site === site);
   const shape: BudgetShape = formHard ? "hard" : "progressive";
 
-  limitStatus.textContent = "Saving…";
+  limitStatus.textContent = t("settingsSaving");
   void changeLimit({ type: "PUT_BUDGET", site, bytes: size, period: formPeriod, shape }).then(
     (saved) => {
       if (!saved) return;
@@ -969,9 +1105,16 @@ query<HTMLFormElement>("#limit-form").addEventListener("submit", (event) => {
       // Names the site key that was actually stored, which is the only signal that a
       // pasted URL was trimmed to a domain — and says when an existing limit was
       // replaced, which the form used to do silently.
-      limitStatus.textContent = `${replacing ? "Replaced the limit on" : "Limit set for"} ${site}: ${bytes(
-        size,
-      )} ${BUDGET_PERIOD_LABELS[formPeriod]}, ${BUDGET_SHAPE_LABELS[shape].toLowerCase()}.`;
+      //
+      // Two whole sentences, not one built from a leading clause chosen by a ternary:
+      // "Replaced the limit on" and "Limit set for" are the start of a sentence in
+      // English and need not be anywhere near the start of one elsewhere.
+      limitStatus.textContent = t(replacing ? "settingsLimitReplaced" : "settingsLimitCreated", [
+        site,
+        bytes(size),
+        BUDGET_PERIOD_LABELS[formPeriod],
+        BUDGET_SHAPE_LABELS[shape].toLowerCase(),
+      ]);
     },
   );
 });
@@ -982,26 +1125,33 @@ query<HTMLFormElement>("#limit-form").addEventListener("submit", (event) => {
 
 const VISIBILITY_GROUPS: readonly {
   key: FeatureInfo["visibility"];
-  title: string;
-  note: string;
+  titleKey: string;
+  noteKey: string;
 }[] = [
   {
     key: "invisible",
-    title: "Nothing on the page changes",
-    note: "Only what the page is allowed to ask for changes. If one of these breaks something, it is a bug.",
+    titleKey: "settingsGroupInvisibleTitle",
+    noteKey: "settingsGroupInvisibleNote",
   },
   {
     key: "subtle",
-    title: "You may notice these",
-    note: "Content can arrive later than it would have, or at a lower resolution than the page asked for.",
+    titleKey: "settingsGroupSubtleTitle",
+    noteKey: "settingsGroupSubtleNote",
   },
   {
     key: "noticeable",
-    title: "You will see these",
-    note: "These change what a page looks like or how it behaves. They save the most.",
+    titleKey: "settingsGroupNoticeableTitle",
+    noteKey: "settingsGroupNoticeableNote",
   },
 ];
 
+/**
+ * Decorative glyphs, so they carry no message.
+ *
+ * Each is rendered `aria-hidden`, next to the feature's own label — nothing here is
+ * read out and nothing here is a word. Sending them to a translator would ask for a
+ * decision about a mark that has no meaning to translate.
+ */
 const FEATURE_SYMBOLS: Record<FeatureId, { text: string; isText: boolean }> = {
   saveData: { text: "SD", isText: true },
   blockBeacons: { text: "×", isText: false },
@@ -1022,11 +1172,11 @@ const FEATURE_SYMBOLS: Record<FeatureId, { text: string; isText: boolean }> = {
  * install that sends it a rare and stable bit for anyone fingerprinting. The privacy
  * policy now says as much, and a control the policy describes has to exist on the page.
  */
-const FEATURE_NOTES: Partial<Record<FeatureId, string>> = {
-  saveData:
-    "Cost: it also makes this browser easier to recognise. Desktop Chrome has no setting that sends this header, so sending it is a rare, stable signal a tracker can use. It is on by default; the image services below remove the same kind of bytes without announcing anything.",
+const FEATURE_NOTE_KEYS: Partial<Record<FeatureId, string>> = {
+  saveData: "settingsFeatureSaveDataNote",
 };
 
+/** Decorative glyphs, for the reason given above `FEATURE_SYMBOLS`. */
 const PACK_SYMBOLS: Record<string, string> = {
   twimg: "X",
   wikimedia: "W",
@@ -1062,14 +1212,17 @@ function buildFeatureRows(): void {
       const cards = FEATURES.filter((feature) => feature.visibility === group.key).map(
         (feature) => {
           const symbol = FEATURE_SYMBOLS[feature.id];
-          const note = FEATURE_NOTES[feature.id];
+          const noteKey = FEATURE_NOTE_KEYS[feature.id];
+          // The label and description are the feature table's own, already localised
+          // there. Copying them into this page's catalogue would give a translator two
+          // of each and the product two answers to what a feature is called.
           const { card, input } = checkCard({
             id: `feature-${feature.id}`,
             symbol: symbol.text,
             symbolIsText: symbol.isText,
             title: feature.label,
             hint: feature.description,
-            ...(note ? { note } : {}),
+            ...(noteKey ? { note: t(noteKey) } : {}),
             ...(SAVINGS_IMPACT_BY_FEATURE[feature.id] ? { impact: feature.id } : {}),
             onChange: (checked) =>
               void changeOptimize({
@@ -1084,10 +1237,10 @@ function buildFeatureRows(): void {
 
       return element("div", { className: "exception-settings" }, [
         element("div", { className: "exception-head" }, [
-          element("span", { className: "field-label", text: group.title }),
+          element("span", { className: "field-label", text: t(group.titleKey) }),
           count,
         ]),
-        element("p", { text: group.note }),
+        element("p", { text: t(group.noteKey) }),
         element("div", { className: "advanced-options" }, cards),
       ]);
     }),
@@ -1103,19 +1256,20 @@ function buildFeatureRows(): void {
  * lever was excluding the whole site — which also gives up every other saving on it.
  */
 function buildPackRows(): void {
-  packsIntro.textContent =
-    "Image services that serve a smaller version of the same file from the same path. Byte Budget rewrites the request before it is sent, so the smaller file is what crosses the wire. If pictures from one service look wrong, switch that service off rather than excluding the whole site.";
+  packsIntro.textContent = t("settingsPacksIntro");
 
   replaceChildren(
     packList,
     PACKS.map((pack) => {
+      // As with the features: the pack's own label and description come from the pack
+      // table and are not repeated in this page's catalogue.
       const { card, input } = checkCard({
         id: `pack-${pack.id}`,
         symbol: PACK_SYMBOLS[pack.id] ?? pack.label.slice(0, 2),
         symbolIsText: true,
         title: pack.label,
         hint: pack.description,
-        note: `Only ${pack.hosts.join(", ")}.`,
+        note: t("settingsPackHosts", pack.hosts.join(", ")),
         onChange: (checked) => void changeOptimize({ packs: { [pack.id]: checked } }),
       });
       packInputs.set(pack.id, input);
@@ -1125,11 +1279,16 @@ function buildPackRows(): void {
   );
 }
 
+/**
+ * The consent disclosure for the holdout.
+ *
+ * This is the only place a person is told that measuring this extension's own savings
+ * spends their data, so the sentence naming the cost is the load-bearing one and the
+ * message's description says so to whoever translates it.
+ */
 function holdoutText(percent: number): string {
-  if (percent === 0) {
-    return "No page loads are held back. Savings are then the estimator's guess at what a refused request weighed, plus arithmetic wherever the original size of a rewritten image is already on file. The dashboard says which part is which.";
-  }
-  return `${percent}% of page loads are deliberately left unoptimized, so "saved" can be the difference between two sets of real page loads rather than a model of one. A held-back load costs the bytes the optimizer would have removed — real money on a metered connection. A site also gets up to three of them before this rate applies, so there is something to compare against at all.`;
+  if (percent === 0) return t("settingsHoldoutOffHint");
+  return t("settingsHoldoutOnHint", String(percent));
 }
 
 /* ------------------------------------------------------------------ *
@@ -1141,7 +1300,7 @@ async function loadOptimize(): Promise<void> {
     const response = await sendRequest({ type: "GET_OPTIMIZE" });
     renderOptimize(response.optimize);
   } catch (error) {
-    optimizeNote.textContent = errorMessage(error, "Could not read Data Saver.");
+    optimizeNote.textContent = errorMessage(error, t("settingsOptimizeReadError"));
   }
 }
 
@@ -1152,13 +1311,13 @@ async function changeOptimize(changes: Partial<OptimizeSettings>): Promise<void>
   const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   optimizeToggle.disabled = true;
   for (const input of optimizeInputs) input.disabled = true;
-  optimizeNote.textContent = "Saving…";
+  optimizeNote.textContent = t("settingsSaving");
   try {
     const response = await sendRequest({ type: "SAVE_OPTIMIZE", changes });
     renderOptimize(response.optimize);
-    optimizeNote.textContent = "Saved";
+    optimizeNote.textContent = t("settingsSaved");
   } catch (error) {
-    const message = errorMessage(error, "Could not save Data Saver.");
+    const message = errorMessage(error, t("settingsOptimizeSaveError"));
     await loadOptimize();
     optimizeNote.textContent = message;
   } finally {
@@ -1192,25 +1351,33 @@ function renderOptimize(next: OptimizeSettings): void {
     const inGroup = FEATURES.filter((feature) => feature.visibility === group.key);
     const on = inGroup.filter((feature) => next.features[feature.id]).length;
     const count = groupCounts.get(group.key);
-    if (count) count.textContent = `${formatCount(on)} of ${formatCount(inGroup.length)} on`;
+    if (count) {
+      count.textContent = t("settingsGroupCount", [
+        formatCount(on),
+        formatCount(inGroup.length),
+      ]);
+    }
   }
 
   paintGroup(holdoutGroup, next.holdoutPercent);
   holdoutHint.textContent = holdoutText(next.holdoutPercent);
 
   exclusionCount.textContent =
-    next.exclusions.length === 0 ? "None" : `${formatCount(next.exclusions.length)} excluded`;
+    next.exclusions.length === 0
+      ? t("settingsExclusionsNone")
+      : t("settingsExclusionsCount", formatCount(next.exclusions.length));
 
   replaceChildren(
     exclusionList,
     next.exclusions.length === 0
-      ? [element("li", { className: "field-hint", text: "No exceptions." })]
+      ? [element("li", { className: "field-hint", text: t("settingsExclusionsEmpty") })]
       : next.exclusions.map((site) =>
           element("li", { className: "chip" }, [
             site,
             button("", {
+              // A glyph, not a word: the accessible name beside it is what is read.
               text: "×",
-              ariaLabel: `Use Data Saver on ${site} again`,
+              ariaLabel: t("settingsExclusionRemoveAria", site),
               onClick: () =>
                 void changeOptimize({
                   exclusions: next.exclusions.filter((entry) => entry !== site),
@@ -1234,11 +1401,11 @@ query<HTMLFormElement>("#exclusion-form").addEventListener("submit", (event) => 
     return;
   }
   if (!optimize) {
-    optimizeNote.textContent = "Data Saver settings are still loading.";
+    optimizeNote.textContent = t("settingsOptimizeLoading");
     return;
   }
   if (optimize.exclusions.includes(parsed.site)) {
-    optimizeNote.textContent = `${parsed.site} is already an exception.`;
+    optimizeNote.textContent = t("settingsExclusionDuplicate", parsed.site);
     return;
   }
   input.value = "";
@@ -1263,16 +1430,8 @@ function buildAlertRows(): void {
     alertInputs.set(key, input);
     rows.push(field);
   };
-  add(
-    "plan",
-    "My whole plan",
-    "The allowance over everything, from the plan above. On by default: a plan running out is the thing nobody is watching for.",
-  );
-  add(
-    "sites",
-    "A single site's limit",
-    "Off by default: a limit you typed on a site you chose is one you expect to reach.",
-  );
+  add("plan", t("settingsAlertPlanLabel"), t("settingsAlertPlanHint"));
+  add("sites", t("settingsAlertSitesLabel"), t("settingsAlertSitesHint"));
   replaceChildren(alertOptions, rows);
 }
 
@@ -1281,18 +1440,18 @@ async function loadAlerts(): Promise<void> {
     const response = await sendRequest({ type: "GET_ALERTS" });
     renderAlerts(response.alerts);
   } catch (error) {
-    alertsStatus.textContent = errorMessage(error, "Could not read the alert settings.");
+    alertsStatus.textContent = errorMessage(error, t("settingsAlertsReadError"));
   }
 }
 
 async function changeAlerts(changes: Partial<AlertSettings>): Promise<void> {
-  alertsStatus.textContent = "Saving…";
+  alertsStatus.textContent = t("settingsSaving");
   try {
     const response = await sendRequest({ type: "SAVE_ALERTS", changes });
     renderAlerts(response.alerts);
-    alertsStatus.textContent = "Saved";
+    alertsStatus.textContent = t("settingsSaved");
   } catch (error) {
-    alertsStatus.textContent = errorMessage(error, "Could not save the alert settings.");
+    alertsStatus.textContent = errorMessage(error, t("settingsAlertsSaveError"));
     await loadAlerts();
   }
 }
@@ -1318,10 +1477,16 @@ function paintAlertNote(): void {
   // Printed from `ALERT_THRESHOLDS` rather than typed into the markup, so the sentence
   // cannot end up describing a ladder the alerting module no longer uses.
   const thresholds = ALERT_THRESHOLDS.map((threshold) => formatPercent(threshold)).join(", ");
-  const base = `Thresholds are fixed at ${thresholds}, and only the highest one crossed is sent — one large download cannot produce three notifications at once.`;
+  const base = t("settingsAlertsThresholds", thresholds);
+  // Two complete sentences joined by a space, rather than one message with a clause
+  // spliced into it: the second only appears in one state, and a translator who gets
+  // whole sentences can order the words inside each of them.
   alertsPlanNote.textContent =
     alerts.plan && !totalStatus()
-      ? `${base} Plan alerts are on, but there is no allowance over everything for them to measure: set a plan size above and choose "${PLAN_ENFORCEMENT_LABELS.progressive}" or "${PLAN_ENFORCEMENT_LABELS.hard}".`
+      ? `${base} ${t("settingsAlertsNoAllowance", [
+          planEnforcementLabel("progressive"),
+          planEnforcementLabel("hard"),
+        ])}`
       : base;
 }
 
@@ -1330,13 +1495,13 @@ function paintAlertNote(): void {
  * ------------------------------------------------------------------ */
 
 async function applySettings(changes: Partial<Settings>): Promise<void> {
-  settingsStatus.textContent = "Saving…";
+  settingsStatus.textContent = t("settingsSaving");
   try {
     const response = await sendRequest({ type: "SAVE_SETTINGS", changes });
     paintSettings(response.settings);
-    settingsStatus.textContent = "Saved";
+    settingsStatus.textContent = t("settingsSaved");
   } catch (error) {
-    const message = errorMessage(error, "Could not save that setting.");
+    const message = errorMessage(error, t("settingsSaveError"));
     settingsStatus.textContent = message;
     liveRegion.textContent = message;
   }
@@ -1367,7 +1532,7 @@ async function loadSettings(): Promise<void> {
     const response = await sendRequest({ type: "GET_SETTINGS" });
     paintSettings(response.settings);
   } catch (error) {
-    liveRegion.textContent = errorMessage(error, "Could not read settings.");
+    liveRegion.textContent = errorMessage(error, t("settingsReadError"));
   }
 }
 
@@ -1375,24 +1540,29 @@ async function loadSettings(): Promise<void> {
  * Privacy and data
  * ------------------------------------------------------------------ */
 
-const RETENTION_LABELS: Record<number, string> = {
-  30: "30 days",
-  90: "90 days",
-  400: "400 days",
-  0: "Forever",
-};
+/**
+ * How long usage is kept, in words.
+ *
+ * One message with the count substituted in covers every finite option and the
+ * fallback the table used to carry separately — three messages differing only in a
+ * number is the shape that comes back translated three different ways. Zero is not a
+ * duration and gets its own word.
+ */
+function retentionLabel(days: number): string {
+  return days === 0 ? t("settingsRetentionForever") : t("settingsRetentionDays", String(days));
+}
 
 function buildPrivacyOptions(): void {
   const retention = groupField(
     "retention-group",
-    "Keep daily usage for",
-    "Hourly detail is kept for 3 days whatever this says. Shortening it deletes the days outside the window at the next tidy-up, which runs every six hours.",
+    t("settingsRetentionLabel"),
+    t("settingsRetentionHint"),
   );
 
   const hosts = switchField({
     id: "track-hosts-toggle",
-    label: "Record which hosts a site's bytes came from",
-    hint: "Off makes the per-site drill-down poorer and the database smaller. Rows already recorded stay until they age out.",
+    label: t("settingsTrackHostsLabel"),
+    hint: t("settingsTrackHostsHint"),
     onChange: (checked) => void applySettings({ trackHosts: checked }),
   });
   trackHostsInput = hosts.input;
@@ -1401,22 +1571,22 @@ function buildPrivacyOptions(): void {
 
   bindGroup<number>({
     container: retention.group,
-    options: RETENTION_OPTIONS.map((days) => ({
-      value: days,
-      label: RETENTION_LABELS[days] ?? `${days} days`,
-    })),
+    options: RETENTION_OPTIONS.map((days) => ({ value: days, label: retentionLabel(days) })),
     value: RETENTION_OPTIONS[0],
     onSelect: (value) => void applySettings({ retentionDays: value }),
   });
 }
 
 function paintDeleteScope(): void {
-  const kept = settings
-    ? (RETENTION_LABELS[settings.retentionDays] ?? `${settings.retentionDays} days`)
-    : "";
-  deleteScopeNote.textContent = `This deletes every recorded byte count in this profile: the daily and hourly rows, the per-host rows, one row per page load, the learned size estimator and the observed image sizes. Limits, exceptions and the settings on this page are kept. To remove only the older days instead, shorten "Keep daily usage for" above${
-    kept ? ` — it is ${kept} now` : ""
-  }.`;
+  const kept = settings ? retentionLabel(settings.retentionDays) : "";
+  // Two whole sentences rather than one with a tail appended before the full stop. The
+  // clause naming the current retention sits inside the sentence in English and need
+  // not anywhere else, and a message that ends mid-sentence cannot be translated at
+  // all. The retention control is named through a placeholder so the two cannot drift:
+  // pointing at a label that no longer exists is worse than not pointing at one.
+  deleteScopeNote.textContent = kept
+    ? t("settingsDeleteScopeKept", [t("settingsRetentionLabel"), kept])
+    : t("settingsDeleteScope", t("settingsRetentionLabel"));
 }
 
 let deleteArmed = false;
@@ -1425,7 +1595,7 @@ function renderDeleteActions(): void {
   if (!deleteArmed) {
     replaceChildren(deleteActions, [
       button("ghost-button", {
-        text: "Delete all recorded usage",
+        text: t("settingsDeleteButton"),
         dataset: { danger: "true" },
         onClick: () => {
           deleteArmed = true;
@@ -1437,14 +1607,14 @@ function renderDeleteActions(): void {
   }
 
   const confirmButton = button("ghost-button", {
-    text: "Yes, delete everything recorded",
+    text: t("settingsDeleteConfirm"),
     dataset: { danger: "true" },
     onClick: () => void performDelete(),
   });
   replaceChildren(deleteActions, [
     confirmButton,
     button("ghost-button", {
-      text: "Cancel",
+      text: t("settingsCancel"),
       onClick: () => {
         deleteArmed = false;
         deleteStatus.textContent = "";
@@ -1454,20 +1624,20 @@ function renderDeleteActions(): void {
   ]);
   // Two steps in the page rather than one `confirm()` dialog: the sentence above says
   // what goes and what stays, which a modal cannot without being read as boilerplate.
-  deleteStatus.textContent = "This cannot be undone, and nothing is exported first.";
+  deleteStatus.textContent = t("settingsDeleteWarning");
   confirmButton.focus();
 }
 
 async function performDelete(): Promise<void> {
-  deleteStatus.textContent = "Deleting…";
+  deleteStatus.textContent = t("settingsDeleting");
   try {
     await sendRequest({ type: "CLEAR_DATA" });
     deleteArmed = false;
     renderDeleteActions();
-    deleteStatus.textContent = "Deleted. Every limit now starts its current window from zero.";
+    deleteStatus.textContent = t("settingsDeleted");
     await Promise.all([loadLimits(), loadStorageReport()]);
   } catch (error) {
-    deleteStatus.textContent = errorMessage(error, "Could not delete.");
+    deleteStatus.textContent = errorMessage(error, t("settingsDeleteError"));
   }
 }
 
@@ -1482,9 +1652,9 @@ async function download(format: "csv" | "json"): Promise<void> {
     link.download = file.filename;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    dataStatus.textContent = `Wrote ${file.filename}.`;
+    dataStatus.textContent = t("settingsExportWrote", file.filename);
   } catch (error) {
-    dataStatus.textContent = errorMessage(error, "Could not export.");
+    dataStatus.textContent = errorMessage(error, t("settingsExportError"));
   }
 }
 
@@ -1505,7 +1675,9 @@ let storageLoaded = false;
  */
 async function loadStorageReport(): Promise<void> {
   if (!storageDetails.open) return;
-  replaceChildren(storageReportBlock, [element("p", { className: "field-hint", text: "Reading…" })]);
+  replaceChildren(storageReportBlock, [
+    element("p", { className: "field-hint", text: t("settingsStorageReading") }),
+  ]);
   try {
     const report = await sendRequest({ type: "GET_STORAGE_REPORT" });
     storageLoaded = true;
@@ -1515,7 +1687,7 @@ async function loadStorageReport(): Promise<void> {
     replaceChildren(storageReportBlock, [
       element("p", {
         className: "field-hint",
-        text: errorMessage(error, "Could not read the storage report."),
+        text: errorMessage(error, t("settingsStorageError")),
       }),
     ]);
   }
@@ -1523,24 +1695,46 @@ async function loadStorageReport(): Promise<void> {
 
 function renderStorageReport(report: StorageReport): void {
   const rows: [string, string, string][] = [
-    ["Days of usage", formatCount(report.dailyRows), "One row per site per day"],
-    ["Hours of usage", formatCount(report.hourlyRows), "One row per site per hour, kept 3 days"],
-    ["Host rows", formatCount(report.hostRows), "Which hosts a site's bytes came from"],
-    ["Page loads", formatCount(report.visitRows), "Site and origin only — no path, no query"],
-    ["Learned sizes", formatCount(report.sizeModelRows), "The estimator, per host and type"],
     [
-      "Observed image sizes",
-      report.baselineRows === undefined ? "not reported" : formatCount(report.baselineRows),
-      "Original sizes of images a pack can rewrite. Not covered by the retention setting.",
+      t("settingsStorageDailyLabel"),
+      formatCount(report.dailyRows),
+      t("settingsStorageDailyDesc"),
+    ],
+    [
+      t("settingsStorageHourlyLabel"),
+      formatCount(report.hourlyRows),
+      t("settingsStorageHourlyDesc"),
+    ],
+    [
+      t("settingsStorageHostsLabel"),
+      formatCount(report.hostRows),
+      t("settingsStorageHostsDesc"),
+    ],
+    [
+      t("settingsStorageVisitsLabel"),
+      formatCount(report.visitRows),
+      t("settingsStorageVisitsDesc"),
+    ],
+    [
+      t("settingsStorageModelLabel"),
+      formatCount(report.sizeModelRows),
+      t("settingsStorageModelDesc"),
+    ],
+    [
+      t("settingsStorageBaselinesLabel"),
+      report.baselineRows === undefined
+        ? t("settingsStorageNotReported")
+        : formatCount(report.baselineRows),
+      t("settingsStorageBaselinesDesc"),
     ],
   ];
 
   const table = element("table", { className: "table" }, [
     element("thead", {}, [
       element("tr", {}, [
-        headerCell("Store"),
-        headerCell("Rows", true),
-        headerCell("What it holds"),
+        headerCell(t("settingsStorageColStore")),
+        headerCell(t("settingsStorageColRows"), true),
+        headerCell(t("settingsStorageColHolds")),
       ]),
     ]),
     element(
@@ -1562,10 +1756,8 @@ function renderStorageReport(report: StorageReport): void {
       className: "field-hint",
       text:
         report.bytesUsed === null
-          ? "The browser does not report how much disk this is using."
-          : `The browser estimates ${bytes(
-              report.bytesUsed,
-            )} on disk for this extension, rounded for privacy and including the settings.`,
+          ? t("settingsStorageNoEstimate")
+          : t("settingsStorageEstimate", bytes(report.bytesUsed)),
     }),
   ];
 
@@ -1577,12 +1769,16 @@ function renderStorageReport(report: StorageReport): void {
       element("p", { className: "empty friendly-empty" }, [
         element("span", {
           className: "state-chip",
-          text: "Some counts did not land",
+          text: t("settingsFlushErrorChip"),
           dataset: { tone: "enforcing" },
         }),
-        ` The last write that failed was ${formatAgo(report.lastFlushError.at)}: ${
-          report.lastFlushError.message
-        }. Those counts were put back in the buffer and retried, so they are not lost — but every total read between then and the retry was low by that much.`,
+        // The leading space is the gap after the chip, not part of the sentence. The
+        // worker's own error text is substituted in untranslated: it is a fact about
+        // what failed, not prose this product wrote.
+        ` ${t("settingsFlushError", [
+          formatAgo(report.lastFlushError.at),
+          report.lastFlushError.message,
+        ])}`,
       ]),
     );
   }
@@ -1610,9 +1806,9 @@ function bindControls(): void {
   bindGroup<Settings["theme"]>({
     container: query<HTMLDivElement>("#theme-group"),
     options: [
-      { value: "auto", label: "System" },
-      { value: "light", label: "Light" },
-      { value: "dark", label: "Dark" },
+      { value: "auto", label: t("settingsThemeAuto") },
+      { value: "light", label: t("settingsThemeLight") },
+      { value: "dark", label: t("settingsThemeDark") },
     ],
     value: "auto",
     onSelect: (value) => void applySettings({ theme: value }),
@@ -1621,14 +1817,16 @@ function bindControls(): void {
   bindGroup<Settings["badge"]>({
     container: query<HTMLDivElement>("#badge-group"),
     options: [
-      { value: "off", label: "Off" },
-      { value: "session", label: "Session" },
-      { value: "today", label: "Today" },
+      { value: "off", label: t("settingsBadgeOff") },
+      { value: "session", label: t("settingsBadgeSession") },
+      { value: "today", label: t("settingsBadgeToday") },
     ],
     value: "off",
     onSelect: (value) => void applySettings({ badge: value }),
   });
 
+  // The two option labels are the unit symbols themselves — see the note above
+  // `SI_EDIT_UNITS` for why those are not messages.
   bindGroup<Settings["units"]>({
     container: query<HTMLDivElement>("#units-group"),
     options: [
@@ -1638,23 +1836,22 @@ function bindControls(): void {
     value: "si",
     onSelect: (value) => void applySettings({ units: value }),
   });
-  unitsHint.textContent =
-    "A data plan is quoted in decimal units (1 GB = 1000 MB); a file manager counts binary ones (1 GiB = 1024 MiB). The same bytes read as 15 GB or 14 GiB, which is why the unit is always printed.";
+  unitsHint.textContent = t("settingsUnitsHint");
 
-  const weekStart = groupField("week-start-group", "A week starts on");
-  const weekMode = groupField("week-mode-group", '"7 days" means');
+  const weekStart = groupField("week-start-group", t("settingsWeekStartLabel"));
+  const weekMode = groupField("week-mode-group", t("settingsWeekModeLabel"));
   const monthMode = groupField(
     "month-mode-group",
-    '"30 days" means',
-    "A calendar month is not the same window as your plan's cycle. The cycle is the one the projection uses.",
+    t("settingsMonthModeLabel"),
+    t("settingsMonthModeHint"),
   );
   replaceChildren(periodOptions, [weekStart.field, weekMode.field, monthMode.field]);
 
   bindGroup<Settings["weekStart"]>({
     container: weekStart.group,
     options: [
-      { value: 0, label: "Sunday" },
-      { value: 1, label: "Monday" },
+      { value: 0, label: t("settingsWeekSunday") },
+      { value: 1, label: t("settingsWeekMonday") },
     ],
     value: 1,
     onSelect: (value) => void applySettings({ weekStart: value }),
@@ -1663,8 +1860,8 @@ function bindControls(): void {
   bindGroup<Settings["weekMode"]>({
     container: weekMode.group,
     options: [
-      { value: "rolling", label: "The last 7 days" },
-      { value: "calendar", label: "This week so far" },
+      { value: "rolling", label: t("settingsWeekRolling") },
+      { value: "calendar", label: t("settingsWeekCalendar") },
     ],
     value: "rolling",
     onSelect: (value) => void applySettings({ weekMode: value }),
@@ -1673,8 +1870,8 @@ function bindControls(): void {
   bindGroup<Settings["monthMode"]>({
     container: monthMode.group,
     options: [
-      { value: "rolling", label: "The last 30 days" },
-      { value: "calendar", label: "This month so far" },
+      { value: "rolling", label: t("settingsMonthRolling") },
+      { value: "calendar", label: t("settingsMonthCalendar") },
     ],
     value: "rolling",
     onSelect: (value) => void applySettings({ monthMode: value }),
@@ -1684,7 +1881,7 @@ function bindControls(): void {
     container: planShapeGroup,
     options: (["watch", "progressive", "hard"] as const).map((value) => ({
       value,
-      label: PLAN_ENFORCEMENT_LABELS[value],
+      label: planEnforcementLabel(value),
     })),
     value: planEnforcement,
     onSelect: (value) => void choosePlanEnforcement(value),
@@ -1694,8 +1891,8 @@ function bindControls(): void {
     container: limitPeriodGroup,
     options: BUDGET_PERIODS.map((period) => ({
       value: period,
-      label: PERIOD_OPTION_LABELS[period],
-      title: `Allowance ${BUDGET_PERIOD_LABELS[period]}`,
+      label: t(PERIOD_OPTION_KEYS[period]),
+      title: t("settingsLimitPeriodTitle", BUDGET_PERIOD_LABELS[period]),
     })),
     value: formPeriod,
     onSelect: (value) => {
@@ -1708,7 +1905,7 @@ function bindControls(): void {
     container: holdoutGroup,
     options: HOLDOUT_OPTIONS.map((percent) => ({
       value: percent,
-      label: percent === 0 ? "Off" : `${percent}%`,
+      label: percent === 0 ? t("settingsHoldoutOff") : t("settingsHoldoutPercent", String(percent)),
     })),
     value: 10,
     onSelect: (value) => void changeOptimize({ holdoutPercent: value }),
@@ -1716,8 +1913,8 @@ function bindControls(): void {
 
   const hard = switchField({
     id: "limit-hard",
-    label: "Hard cap",
-    hint: `${BUDGET_SHAPE_LABELS.hard}.`,
+    label: t("settingsLimitHardLabel"),
+    hint: t("settingsLimitHardHint", BUDGET_SHAPE_LABELS.hard),
     onChange: (checked) => {
       formHard = checked;
     },
@@ -1743,7 +1940,10 @@ function bindControls(): void {
 }
 
 function buildTierTable(): void {
-  query<HTMLParagraphElement>("#limit-shape-explainer").textContent = `"${BUDGET_SHAPE_LABELS.progressive}" walks down these steps as the allowance fills. "${BUDGET_SHAPE_LABELS.hard}" skips all of them until 100%, and then applies the last one.`;
+  query<HTMLParagraphElement>("#limit-shape-explainer").textContent = t("settingsTierExplainer", [
+    BUDGET_SHAPE_LABELS.progressive,
+    BUDGET_SHAPE_LABELS.hard,
+  ]);
 
   replaceChildren(
     query<HTMLTableSectionElement>("#tier-table tbody"),
@@ -1774,6 +1974,11 @@ document.addEventListener("visibilitychange", () => {
 });
 
 async function start(): Promise<void> {
+  // First, before any control is built or any panel painted. The words in the markup
+  // and the words built by script sit inside the same panels, so a page that localised
+  // the second lot first would show a heading in one language above its own hint in
+  // another for as long as the settings read takes.
+  localizeMarkup();
   bindControls();
   await loadSettings();
   await Promise.all([loadLimits(), loadOptimize(), loadAlerts()]);

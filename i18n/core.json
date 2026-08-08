@@ -1,0 +1,324 @@
+{
+  "coreBudgetPeriodDay": {
+    "message": "per day",
+    "description": "How often a limit's allowance refills. Appears after a byte figure, e.g. '500 MB per day'."
+  },
+  "coreBudgetPeriodMonth": {
+    "message": "per month",
+    "description": "How often a limit's allowance refills. Appears after a byte figure, e.g. '10 GB per month'."
+  },
+  "coreBudgetPeriodSession": {
+    "message": "per session",
+    "description": "How often a limit's allowance refills. Appears after a byte figure, e.g. '500 MB per session'. A session is one run of the browser."
+  },
+  "coreBudgetPeriodWeek": {
+    "message": "per week",
+    "description": "How often a limit's allowance refills. Appears after a byte figure, e.g. '2 GB per week'."
+  },
+  "coreBudgetShapeHard": {
+    "message": "Nothing until it runs out",
+    "description": "One of two choices for what a limit does as it fills. This one changes nothing until the allowance is spent, then refuses every subresource. It is what most people mean by 'a cap'."
+  },
+  "coreBudgetShapeProgressive": {
+    "message": "Shed weight as it fills",
+    "description": "One of two choices for what a limit does as it fills. This one refuses video first, then images and fonts, then everything, so the site stays usable for longer."
+  },
+  "coreFeatureBlockBeaconsDescription": {
+    "message": "Refuses fire-and-forget pings to known analytics services. Small individually, constant in aggregate. Beacons to the site itself are left alone — a page also uses them to save your work as you leave it.",
+    "description": "What the \"Drop analytics beacons\" feature does. The last clause is the limit of the feature, not a caveat to drop: beacons back to the site you are on are deliberately allowed through."
+  },
+  "coreFeatureBlockBeaconsLabel": {
+    "message": "Drop analytics beacons",
+    "description": "Name of a Data Saver feature, in the settings list and the popup."
+  },
+  "coreFeatureClickToLoadMediaDescription": {
+    "message": "Holds video and audio sources until they are clicked. Some media requested directly by the page may start before an extension can pause it.",
+    "description": "What the \"Click to load video and audio\" feature does. The second sentence is a stated limit of the mechanism."
+  },
+  "coreFeatureClickToLoadMediaLabel": {
+    "message": "Click to load video and audio",
+    "description": "Name of a Data Saver feature, in the settings list and the popup."
+  },
+  "coreFeatureDropHintsDescription": {
+    "message": "Removes prefetch, preload and prerender hints, so a page cannot spend your data on something you may never open. Hints in the first HTML may start before an extension can remove them.",
+    "description": "What the \"Ignore speculative loading\" feature does. \"prefetch\", \"preload\" and \"prerender\" are HTML keyword values and stay in English. The last sentence is a measured limitation."
+  },
+  "coreFeatureDropHintsLabel": {
+    "message": "Ignore speculative loading",
+    "description": "Name of a Data Saver feature, in the settings list and the popup. \"Speculative loading\" is a page fetching something in advance in case you open it."
+  },
+  "coreFeatureLazyOffscreenDescription": {
+    "message": "Defers images and frames added after the page loads until they are near the viewport, so scrolling halfway down an endless feed costs half of it. Again, only what arrives after the initial parse.",
+    "description": "What the \"Load feed images when they are reached\" feature does. \"Again\" refers back to the same limitation stated on the previous feature."
+  },
+  "coreFeatureLazyOffscreenLabel": {
+    "message": "Load feed images when they are reached",
+    "description": "Name of a Data Saver feature, in the settings list and the popup."
+  },
+  "coreFeatureSaveDataDescription": {
+    "message": "Sends the Save-Data header, which many image CDNs and some sites honour by serving smaller assets. Sites that ignore it are unaffected.",
+    "description": "What the \"Ask sites for the light version\" feature does. \"Save-Data\" is an HTTP header name and stays in English."
+  },
+  "coreFeatureSaveDataLabel": {
+    "message": "Ask sites for the light version",
+    "description": "Name of a Data Saver feature, in the settings list and the popup."
+  },
+  "coreFeatureSystemFontsDescription": {
+    "message": "Refuses downloadable fonts and falls back to what is already on the device. Usually a small first-visit saving because fonts are cached, so it is off by default.",
+    "description": "What the \"Use system fonts\" feature does, including why it ships switched off."
+  },
+  "coreFeatureSystemFontsLabel": {
+    "message": "Use system fonts",
+    "description": "Name of a Data Saver feature, in the settings list and the popup."
+  },
+  "coreFeatureTameMediaDescription": {
+    "message": "Turns off preloading and autoplay for video and audio that is not on screen. The heaviest single thing most pages do without being asked.",
+    "description": "What the \"Stop offscreen video pre-buffering\" feature does."
+  },
+  "coreFeatureTameMediaLabel": {
+    "message": "Stop offscreen video pre-buffering",
+    "description": "Name of a Data Saver feature, in the settings list and the popup."
+  },
+  "coreFeatureTrimSrcsetDescription": {
+    "message": "For images added after the page loads, asks for the smallest version that still covers the space it is shown in rather than one sized for a higher-density screen. Images in the initial HTML are already requested before any script can see them.",
+    "description": "What the \"Stop feeds over-ordering images\" feature does. The last sentence is a measured limitation, not hedging: Chrome dispatches images written into the first HTML before any extension code runs, so the feature only reaches content added later."
+  },
+  "coreFeatureTrimSrcsetLabel": {
+    "message": "Stop feeds over-ordering images",
+    "description": "Name of a Data Saver feature, in the settings list and the popup."
+  },
+  "corePackCloudinaryDescription": {
+    "message": "Adds automatic format and quality selection to unsigned Cloudinary photographs. Signed URLs, vectors, animations and documents are left alone.",
+    "description": "What the Cloudinary site pack does. The second sentence lists what it deliberately refuses to touch, because the same rewrite applied to a vector or an animation makes the file larger, not smaller."
+  },
+  "corePackCloudinaryLabel": {
+    "message": "Cloudinary images",
+    "description": "Name of a site pack — a rule that redirects one image host's requests to a smaller variant of the same picture."
+  },
+  "corePackPhotonDescription": {
+    "message": "Caps the Photon image proxy at 800px wide.",
+    "description": "What the WordPress.com / Jetpack site pack does. It caps the width and nothing else — do not add a claim about quality or compression, which the rule does not ask for."
+  },
+  "corePackPhotonLabel": {
+    "message": "WordPress.com and Jetpack images",
+    "description": "Name of a site pack — a rule that redirects one image host's requests to a smaller variant of the same picture. \"Photon\" is WordPress.com's image proxy."
+  },
+  "corePackShopifyDescription": {
+    "message": "Caps Shopify CDN images at 800px wide, in the sized-filename form.",
+    "description": "What the Shopify site pack does. \"Sized-filename form\" distinguishes it from the sibling pack below, which handles the URL shape where the width is a query parameter instead."
+  },
+  "corePackShopifyLabel": {
+    "message": "Shopify product images",
+    "description": "Name of a site pack — a rule that redirects one image host's requests to a smaller variant of the same picture."
+  },
+  "corePackShopifyWidthDescription": {
+    "message": "Caps Shopify CDN images at 800px wide when the theme asks by query parameter.",
+    "description": "What the second Shopify site pack does. It covers the URL shape modern themes emit, where the width is a query parameter rather than part of the filename."
+  },
+  "corePackShopifyWidthLabel": {
+    "message": "Shopify theme images",
+    "description": "Name of a site pack — a rule that redirects one image host's requests to a smaller variant of the same picture."
+  },
+  "corePackTwimgDescription": {
+    "message": "Asks pbs.twimg.com for the 680px variant instead of the 2048px one. Same image, same path.",
+    "description": "What the X / Twitter site pack does. \"pbs.twimg.com\" is a hostname and the pixel widths are literal; neither is translated."
+  },
+  "corePackTwimgLabel": {
+    "message": "X / Twitter images",
+    "description": "Name of a site pack — a rule that redirects one image host's requests to a smaller variant of the same picture."
+  },
+  "corePackWikimediaDescription": {
+    "message": "Asks Wikimedia for an 800px-wide thumbnail in place of one 1300px or wider. On a high-density screen a large image can come back looking softer.",
+    "description": "What the Wikimedia site pack does. The second sentence is the honest cost of the rewrite and must not be dropped."
+  },
+  "corePackWikimediaLabel": {
+    "message": "Wikipedia and Wikimedia images",
+    "description": "Name of a site pack — a rule that redirects one image host's requests to a smaller variant of the same picture."
+  },
+  "corePeriodCalendarMonth": {
+    "message": "This month · $SPAN$",
+    "description": "Says what the \"month\" period covers when it is anchored to the calendar month. The separator is a middle dot. Shown under the headline total.",
+    "placeholders": {
+      "span": {
+        "content": "$1",
+        "example": "Jul 1 – Jul 31"
+      }
+    }
+  },
+  "corePeriodCalendarWeek": {
+    "message": "This week · $SPAN$",
+    "description": "Says what the \"week\" period covers when it is anchored to the calendar week. The separator is a middle dot. Shown under the headline total.",
+    "placeholders": {
+      "span": {
+        "content": "$1",
+        "example": "Jul 27 – Jul 31"
+      }
+    }
+  },
+  "corePeriodOptionMonth": {
+    "message": "30 days",
+    "description": "Option text in the period selector for the month view. Sits in a four-up control, so keep it short. The exact window — calendar month or the trailing thirty days — is a setting and is spelled out underneath by corePeriodCalendarMonth or corePeriodRollingDays."
+  },
+  "corePeriodOptionSession": {
+    "message": "Session",
+    "description": "Option text in the period selector, meaning \"since this browser started\". Sits in a four-up control, so keep it short."
+  },
+  "corePeriodOptionToday": {
+    "message": "Today",
+    "description": "Option text in the period selector. Sits in a four-up control, so keep it short."
+  },
+  "corePeriodOptionWeek": {
+    "message": "7 days",
+    "description": "Option text in the period selector for the week view. Sits in a four-up control, so keep it short. The exact window — calendar week or the trailing seven days — is a setting and is spelled out underneath by corePeriodCalendarWeek or corePeriodRollingDays."
+  },
+  "corePeriodRollingDays": {
+    "message": "Last $DAYS$ days · $SPAN$",
+    "description": "Says what the \"week\" or \"month\" period covers when it is a rolling window ending today rather than a calendar one. Used for both, so DAYS is 7 or 30. The separator is a middle dot.",
+    "placeholders": {
+      "days": {
+        "content": "$1",
+        "example": "30"
+      },
+      "span": {
+        "content": "$2",
+        "example": "Jul 2 – Jul 31"
+      }
+    }
+  },
+  "corePeriodSession": {
+    "message": "Since this browser started",
+    "description": "Says what the \"session\" period covers. Shown under the headline total, next to the period selector."
+  },
+  "corePeriodSpan": {
+    "message": "$FROM$ – $TO$",
+    "description": "A date range, substituted into the period descriptions below. The separator is an en dash. Both dates are already formatted for the reader's locale.",
+    "placeholders": {
+      "from": {
+        "content": "$1",
+        "example": "Jul 25"
+      },
+      "to": {
+        "content": "$2",
+        "example": "Jul 31"
+      }
+    }
+  },
+  "corePeriodToday": {
+    "message": "$DATE$",
+    "description": "Says what the \"today\" period covers: a single date and nothing else. A translation may add words around the date if the language needs them.",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Jul 31"
+      }
+    }
+  },
+  "coreResourceTypeFont": {
+    "message": "Fonts",
+    "description": "Name of a network resource category in the type breakdown chart and legend. Downloadable web fonts."
+  },
+  "coreResourceTypeImage": {
+    "message": "Images",
+    "description": "Name of a network resource category in the type breakdown chart and legend."
+  },
+  "coreResourceTypeMainFrame": {
+    "message": "Pages",
+    "description": "Name of a network resource category in the type breakdown chart and legend. The HTML document of a page itself, as distinct from anything it then loads."
+  },
+  "coreResourceTypeMedia": {
+    "message": "Video & audio",
+    "description": "Name of a network resource category in the type breakdown chart and legend. Covers video and audio files and streaming segments."
+  },
+  "coreResourceTypeOther": {
+    "message": "Other",
+    "description": "Name of a network resource category in the type breakdown chart and legend. Anything that did not fall into one of the named categories."
+  },
+  "coreResourceTypePing": {
+    "message": "Beacons",
+    "description": "Name of a network resource category in the type breakdown chart and legend. Fire-and-forget analytics pings that a page sends without waiting for a reply."
+  },
+  "coreResourceTypeScript": {
+    "message": "Scripts",
+    "description": "Name of a network resource category in the type breakdown chart and legend. JavaScript files."
+  },
+  "coreResourceTypeStylesheet": {
+    "message": "Styles",
+    "description": "Name of a network resource category in the type breakdown chart and legend. CSS files."
+  },
+  "coreResourceTypeSubFrame": {
+    "message": "Frames",
+    "description": "Name of a network resource category in the type breakdown chart and legend. Documents loaded into an iframe."
+  },
+  "coreResourceTypeWebsocket": {
+    "message": "Sockets",
+    "description": "Name of a network resource category in the type breakdown chart and legend. WebSocket connections."
+  },
+  "coreResourceTypeXhr": {
+    "message": "Data (XHR/fetch)",
+    "description": "Name of a network resource category in the type breakdown chart and legend. Background data requests a page makes with XMLHttpRequest or fetch. The parenthetical names the two browser APIs and should stay in English."
+  },
+  "coreSiteAll": {
+    "message": "Everything",
+    "description": "Row label for a limit that applies across every site rather than to one. Shown wherever a site name would be."
+  },
+  "coreSiteBackground": {
+    "message": "Background & other",
+    "description": "Row label for bytes that belong to no browser tab — service workers, other extensions, browser services. Shown wherever a site name would be."
+  },
+  "coreSiteExtensions": {
+    "message": "Extensions",
+    "description": "Row label for bytes requested by installed extensions. Shown wherever a site name would be."
+  },
+  "coreTierLeanDescription": {
+    "message": "Also refuses images and web fonts. Layout survives; pictures do not.",
+    "description": "One-line consequence shown under the tier name. \"Also\" means in addition to the previous tier, which already refuses video and audio."
+  },
+  "coreTierLeanLabel": {
+    "message": "Skip video, images and fonts",
+    "description": "Name of the second enforcement tier: video, audio, images and downloadable fonts are refused."
+  },
+  "coreTierOffDescription": {
+    "message": "Everything loads normally.",
+    "description": "One-line consequence shown under the tier name, for the tier that refuses nothing."
+  },
+  "coreTierOffLabel": {
+    "message": "No limit",
+    "description": "Name of an enforcement tier: nothing is being refused on this site."
+  },
+  "coreTierStrictDescription": {
+    "message": "Refuses every subresource. The page's own HTML still loads so it can tell you what happened, but nothing else does.",
+    "description": "One-line consequence shown under the last tier's name. The point of the second sentence is that the page is deliberately not broken outright — the document loads so the site can explain itself."
+  },
+  "coreTierStrictLabel": {
+    "message": "Page shell only",
+    "description": "Name of the last enforcement tier: only the page's own HTML loads and every other request is refused."
+  },
+  "coreTierTrimDescription": {
+    "message": "Video and audio segments are refused. Players usually drop to a lower quality or pause.",
+    "description": "One-line consequence shown under the tier name. \"Segments\" is literal: streaming video arrives as many small requests, so refusing them cuts the stream at the next one rather than blocking a whole file."
+  },
+  "coreTierTrimLabel": {
+    "message": "Skip video and audio",
+    "description": "Name of the first enforcement tier: video and audio requests are refused."
+  },
+  "extensionActionTitle": {
+    "message": "Byte Budget",
+    "description": "Tooltip on the toolbar button. Same product name as extensionName."
+  },
+  "extensionDescription": {
+    "message": "See what each site costs you in data — session, today, week, month. Counts this Chrome profile only; nothing is uploaded.",
+    "description": "The extension's one-paragraph description in the store listing and in chrome://extensions. The second sentence is a scope claim, not a marketing line: the figures cover one Chrome profile on one machine, and nothing leaves the device. Keep both halves."
+  },
+  "extensionName": {
+    "message": "Byte Budget",
+    "description": "The extension's name, in the Chrome Web Store listing and in chrome://extensions. A product name; translate only if the name itself is being localised."
+  },
+  "extensionThrottleDescription": {
+    "message": "Byte Budget with a real per-tab speed cap. Chrome shows a debugging banner while a cap is active.",
+    "description": "Store-style description of the throttle build channel. The second sentence is a warning about a visible browser banner the user cannot dismiss; it must survive translation."
+  },
+  "extensionThrottleName": {
+    "message": "Byte Budget (throttle)",
+    "description": "Name of the second build channel, which is sideloaded rather than published. It declares Chrome's debugger permission so it can cap a tab's speed for real. Keep the parenthetical distinct from extensionName — the two can be installed side by side."
+  }
+}

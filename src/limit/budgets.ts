@@ -8,6 +8,7 @@
  */
 
 import { addDays, cycleResetsAt, dayKey, startOfCycle, startOfWeek } from "../core/period";
+import { t } from "../core/i18n";
 import { ALL_SITES, type Settings } from "../core/types";
 import type { Tier } from "./tiers";
 
@@ -29,10 +30,10 @@ export const BUDGET_PERIODS = ["session", "day", "week", "month"] as const;
 export type BudgetPeriod = (typeof BUDGET_PERIODS)[number];
 
 export const BUDGET_PERIOD_LABELS: Record<BudgetPeriod, string> = {
-  session: "per session",
-  day: "per day",
-  week: "per week",
-  month: "per month",
+  session: t("coreBudgetPeriodSession"),
+  day: t("coreBudgetPeriodDay"),
+  week: t("coreBudgetPeriodWeek"),
+  month: t("coreBudgetPeriodMonth"),
 };
 
 /**
@@ -46,8 +47,8 @@ export const BUDGET_SHAPES = ["progressive", "hard"] as const;
 export type BudgetShape = (typeof BUDGET_SHAPES)[number];
 
 export const BUDGET_SHAPE_LABELS: Record<BudgetShape, string> = {
-  progressive: "Shed weight as it fills",
-  hard: "Nothing until it runs out",
+  progressive: t("coreBudgetShapeProgressive"),
+  hard: t("coreBudgetShapeHard"),
 };
 
 export interface Budget {

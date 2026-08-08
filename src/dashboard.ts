@@ -7,9 +7,11 @@ import {
   faviconUrl,
   paintGroup,
   query,
+  queryAll,
   replaceChildren,
 } from "./core/dom";
 import { formatAgo, formatBytes, formatCount, formatPercent, splitBytes } from "./core/format";
+import { t } from "./core/i18n";
 import {
   errorMessage,
   sendRequest,
@@ -63,9 +65,9 @@ import {
 const RANGE_OPTIONS = [14, 30, 90] as const;
 type RangeOption = (typeof RANGE_OPTIONS)[number];
 const RANGE_LABELS: Record<RangeOption, string> = {
-  14: "2 weeks",
-  30: "30 days",
-  90: "3 months",
+  14: t("dashboardRangeTwoWeeks"),
+  30: t("dashboardRangeThirtyDays"),
+  90: t("dashboardRangeThreeMonths"),
 };
 
 /**
@@ -75,8 +77,10 @@ const RANGE_LABELS: Record<RangeOption, string> = {
  * total reads as "part of this total was saved", which is false — the two numbers do
  * not share a denominator. And the figure is part measured subtraction, part size
  * model, so the name has to carry that too or the chart quietly upgrades a guess.
+ * Both halves of that argument are in the message's description, because a translator
+ * shortening it to "saved" would undo them without ever seeing this comment.
  */
-const PREVENTED_LABEL = "prevented, partly estimated";
+const PREVENTED_LABEL = t("dashboardPreventedLabel");
 
 /** Rows drawn before the list is capped. Every row builds a favicon `<img>`. */
 const SITE_LIMIT = 25;
@@ -154,6 +158,43 @@ const planBody = query<HTMLDivElement>("#plan-body");
 const storageBody = query<HTMLDivElement>("#storage-body");
 const liveRegion = query<HTMLParagraphElement>("#live-region");
 
+/* ------------------------------------------------------------------ *
+ * Markup text
+ * ------------------------------------------------------------------ */
+
+/** `data-i18n-*` attribute → the attribute it fills. */
+const LOCALIZED_ATTRIBUTES: readonly (readonly [string, string])[] = [
+  ["data-i18n-title", "title"],
+  ["data-i18n-aria-label", "aria-label"],
+  ["data-i18n-placeholder", "placeholder"],
+];
+
+/**
+ * Fills `dashboard.html` from the catalogue.
+ *
+ * Chrome expands `__MSG_name__` in the manifest and in CSS but not in an extension's
+ * HTML, so the choice is between a runtime pass and a second English copy of every
+ * string kept in step with `i18n/dashboard.json` by hand. The markup names its message
+ * and carries no prose, which also means a renamed key shows as the key rather than as
+ * stale English that reads correct.
+ *
+ * Run synchronously at module scope, before the first render: the document is already
+ * parsed by the time a module script executes, so filling it here costs no frame in
+ * which the labels are visibly empty.
+ */
+function localizeMarkup(root: ParentNode = document): void {
+  for (const node of queryAll<HTMLElement>("[data-i18n]", root)) {
+    node.textContent = t(node.dataset.i18n ?? "");
+  }
+  for (const [source, target] of LOCALIZED_ATTRIBUTES) {
+    for (const node of queryAll<HTMLElement>(`[${source}]`, root)) {
+      node.setAttribute(target, t(node.getAttribute(source) ?? ""));
+    }
+  }
+}
+
+localizeMarkup();
+
 let period: Period = "today";
 let trendDays: RangeOption = 30;
 let units: Settings["units"] = "si";
@@ -183,8 +224,18 @@ function bytes(value: number): string {
   return formatBytes(value, units);
 }
 
-function plural(count: number, one: string, many: string): string {
-  return `${formatCount(count)} ${count === 1 ? one : many}`;
+/**
+ * "5 sites", as a whole message rather than a number glued to a noun.
+ *
+ * Chrome's message format has no plural rules, so each phrase ships as two complete
+ * messages and the count is a placeholder inside them. Concatenating a formatted
+ * number to a bare noun is the fragment a translator cannot reorder — several
+ * languages put the count after the noun, and several inflect the noun to match it.
+ * Two forms is still an English assumption; a language with more needs its own
+ * catalogue, which is a limit of the platform rather than a choice made here.
+ */
+function plural(count: number, oneKey: string, otherKey: string): string {
+  return t(count === 1 ? oneKey : otherKey, formatCount(count));
 }
 
 function focusWithin(node: Element): boolean {
@@ -304,7 +355,9 @@ function chartFrame(figure: HTMLElement, peak: number): HTMLElement {
 
 function chartInto(node: HTMLElement, series: readonly SeriesPoint[], caption: string): void {
   if (series.length === 0) {
-    replaceChildren(node, [element("p", { className: "stack-note", text: "Nothing recorded." })]);
+    replaceChildren(node, [
+      element("p", { className: "stack-note", text: t("dashboardChartNothingRecorded") }),
+    ]);
     return;
   }
   const points = pointsFrom(series);
@@ -333,15 +386,15 @@ function chartInto(node: HTMLElement, series: readonly SeriesPoint[], caption: s
 
 /** Short enough for a segment; `BUDGET_PERIOD_LABELS` goes in the tooltip. */
 const LIMIT_PERIOD_LABELS: Record<BudgetPeriod, string> = {
-  session: "Session",
-  day: "Day",
-  week: "Week",
-  month: "Month",
+  session: t("dashboardLimitPeriodSession"),
+  day: t("dashboardLimitPeriodDay"),
+  week: t("dashboardLimitPeriodWeek"),
+  month: t("dashboardLimitPeriodMonth"),
 };
 
 const LIMIT_SHAPE_LABELS: Record<BudgetShape, string> = {
-  progressive: "Shed weight",
-  hard: "Hard stop",
+  progressive: t("dashboardLimitShapeProgressive"),
+  hard: t("dashboardLimitShapeHard"),
 };
 
 function bindControls(): void {
@@ -366,7 +419,7 @@ function bindControls(): void {
       // This control also re-scopes the Data Saver results, which are several hundred
       // pixels below the fold from here. Saying so is the difference between a range
       // picker and a number that changed for no visible reason.
-      announce(`Daily usage and Data Saver results now cover the last ${RANGE_LABELS[value]}.`);
+      announce(t("dashboardRangeAnnouncement", RANGE_LABELS[value]));
       void loadTrend();
       void loadSavings();
     },
@@ -461,13 +514,19 @@ function statCard(label: string, value: string, options: StatCardOptions = {}): 
 function previousWindowLabel(payload: OverviewPayload): string {
   switch (payload.period) {
     case "session":
-      return "session";
+      return t("dashboardWindowSession");
     case "today":
-      return "day";
+      return t("dashboardWindowDay");
     case "week":
-      return payload.settings.weekMode === "calendar" ? "week" : "7 days";
+      return t(
+        payload.settings.weekMode === "calendar" ? "dashboardWindowWeek" : "dashboardWindowSevenDays",
+      );
     case "month":
-      return payload.settings.monthMode === "calendar" ? "month" : "30 days";
+      return t(
+        payload.settings.monthMode === "calendar"
+          ? "dashboardWindowMonth"
+          : "dashboardWindowThirtyDays",
+      );
   }
 }
 
@@ -490,9 +549,14 @@ function comparisonNote(payload: OverviewPayload): string | undefined {
   // Not named `window`: shadowing the DOM global reads as a mistake later, and
   // `forecast.ts` avoids the same collision for the same reason.
   const span = previousWindowLabel(payload);
-  if (Math.abs(delta) < 0.005) return `About the same as the previous ${span}`;
-  const direction = delta > 0 ? "more" : "less";
-  return `${formatPercent(Math.abs(delta))} ${direction} than the previous ${span}`;
+  if (Math.abs(delta) < 0.005) return t("dashboardComparisonSame", span);
+  // Two whole sentences rather than one with the direction substituted in: "more" and
+  // "less" are the verb of this line, and a language that inflects around them cannot
+  // be served by a message with a hole where the comparison should be.
+  return t(delta > 0 ? "dashboardComparisonMore" : "dashboardComparisonLess", [
+    formatPercent(Math.abs(delta)),
+    span,
+  ]);
 }
 
 /**
@@ -508,27 +572,27 @@ function projectionCard(payload: OverviewPayload): HTMLElement {
   const projection = payload.projection;
   if (!projection) {
     return payload.settings.planBytes === null
-      ? statCard("Projected", "No plan", {
-          hint: "Nothing to project against yet",
-          link: { text: "Set your plan size and reset day", href: "./settings.html" },
+      ? statCard(t("dashboardStatProjected"), t("dashboardProjectedNoPlan"), {
+          hint: t("dashboardProjectedNoPlanHint"),
+          link: { text: t("dashboardProjectedSetPlanLink"), href: "./settings.html" },
         })
-      : statCard("Projected", "Not yet", {
-          hint: "No day of this cycle has finished",
+      : statCard(t("dashboardStatProjected"), t("dashboardProjectedNotYet"), {
+          hint: t("dashboardProjectedNotYetHint"),
         });
   }
   if (!projection.confident) {
-    return statCard("Projected", "Too early", {
-      hint: "Too few finished days to state a figure",
+    return statCard(t("dashboardStatProjected"), t("dashboardProjectedTooEarly"), {
+      hint: t("dashboardProjectedTooEarlyHint"),
     });
   }
   const split = splitBytes(projection.projected, units);
   const under = Math.max(0, projection.planBytes - projection.projected);
-  return statCard("Projected", split.value, {
+  return statCard(t("dashboardStatProjected"), split.value, {
     unit: split.unit,
     hint:
       projection.overBy > 0
-        ? `${bytes(projection.overBy)} over your ${bytes(projection.planBytes)} plan`
-        : `${bytes(under)} under your ${bytes(projection.planBytes)} plan`,
+        ? t("dashboardProjectedOverPlan", [bytes(projection.overBy), bytes(projection.planBytes)])
+        : t("dashboardProjectedUnderPlan", [bytes(under), bytes(projection.planBytes)]),
     // The value is modelled and wears the token that says so, whatever it says.
     tone: "estimate",
     ...(projection.overBy > 0 ? { hintTone: "over" as const } : {}),
@@ -542,17 +606,17 @@ function renderProjectionBasis(payload: OverviewPayload): void {
     projectionBasis.textContent = "";
     return;
   }
-  const parts = [`Projected — ${projection.basis}`];
+  const parts = [t("dashboardProjectionBasis", projection.basis)];
   if (projection.exhaustedOn !== null) {
     const day = formatDayShort(dayKeyFromMs(projection.exhaustedOn));
     if (projection.exhaustedOn <= Date.now()) {
       // A crossing in the past was found by walking days that were recorded, so this
       // date is a measurement and survives an unconfident projection.
-      parts.push(`The plan was already spent, on ${day}.`);
+      parts.push(t("dashboardProjectionSpentOn", day));
     } else if (projection.confident) {
       // A crossing ahead is as modelled as the rest, so it goes wherever the figure
       // does — nowhere, while the rate cannot be established.
-      parts.push(`At that rate it runs out on ${day}.`);
+      parts.push(t("dashboardProjectionRunsOutOn", day));
     }
   }
   projectionBasis.textContent = parts.join(" ");
@@ -572,34 +636,33 @@ function renderStats(payload: OverviewPayload): void {
     // measured share is 1 - estimatedDown/down, which by construction excludes the
     // halved headers, the invisible WebSocket frames and the zero-counted cancelled
     // bodies. It is a qualifier on this number, so it lives on this card as one.
-    statCard("Data used", totalSplit.value, {
+    statCard(t("dashboardStatDataUsed"), totalSplit.value, {
       unit: totalSplit.unit,
-      hint: plural(payload.sites.length, "site", "sites"),
+      hint: plural(payload.sites.length, "dashboardSiteCountOne", "dashboardSiteCountOther"),
       pill: {
-        text: `${formatPercent(measured)} measured`,
-        title:
-          "Response bodies measured. Header overhead is estimated and halved, WebSocket frames are invisible to an extension, and a cancelled body counts as zero — see How Byte Budget measures usage.",
+        text: t("dashboardMeasuredPill", formatPercent(measured)),
+        title: t("dashboardMeasuredPillTitle"),
         ...(measured < 0.9 ? { tone: "estimate" as const } : {}),
       },
       ...(comparison ? { note: comparison } : {}),
     }),
-    statCard("Top site", top ? bytes(topBytes) : "–", {
+    statCard(t("dashboardStatTopSite"), top ? bytes(topBytes) : "–", {
       hint: top
         ? `${siteLabel(top.site)} · ${formatPercent(total > 0 ? topBytes / total : 0)}`
-        : "No usage yet",
+        : t("dashboardTopSiteNoUsage"),
     }),
     projectionCard(payload),
     // The savings panel's identically-labelled tile is gone; this one keeps the
     // period the rest of the row is on. Tilded, because it is a sum of a measured
     // subtraction and a modelled one — and the hint says how much of it is which,
     // rather than leaving a merged figure to be read as measured.
-    statCard("Data prevented", saved > 0 ? `~${bytes(saved)}` : "0 B", {
+    statCard(t("dashboardStatDataPrevented"), saved > 0 ? `~${bytes(saved)}` : "0 B", {
       hint:
         saved > 0
-          ? `${bytes(payload.totals.savedMeasured)} of it measured, the rest modelled`
+          ? t("dashboardPreventedHintSplit", bytes(payload.totals.savedMeasured))
           : payload.totals.cacheAvoided > 0
-            ? `Cache also avoided ~${bytes(payload.totals.cacheAvoided)}`
-            : "Turn on Data Saver or add a limit",
+            ? t("dashboardPreventedHintCache", bytes(payload.totals.cacheAvoided))
+            : t("dashboardPreventedHintNone"),
       ...(saved > 0 ? { tone: "saved" as const } : {}),
     }),
   ]);
@@ -621,7 +684,7 @@ function renderFreshness(): void {
   }
   const stale = Date.now() - at > STALE_AFTER_MS;
   updatedNote.hidden = !stale;
-  if (stale) updatedNote.textContent = `Showing figures from ${formatAgo(at)}.`;
+  if (stale) updatedNote.textContent = t("dashboardStaleNote", formatAgo(at));
 }
 
 /* ------------------------------------------------------------------ *
@@ -654,8 +717,11 @@ function renderSites(payload: OverviewPayload): void {
   const periodTotal = totalBytes(payload.totals);
 
   sitesNote.textContent = needle
-    ? `${formatCount(matching.length)} of ${formatCount(payload.sites.length)}`
-    : plural(payload.sites.length, "site", "sites");
+    ? t("dashboardSitesFilteredCount", [
+        formatCount(matching.length),
+        formatCount(payload.sites.length),
+      ])
+    : plural(payload.sites.length, "dashboardSiteCountOne", "dashboardSiteCountOther");
   sitesEmpty.hidden = matching.length > 0;
 
   replaceChildren(siteList, [
@@ -663,7 +729,7 @@ function renderSites(payload: OverviewPayload): void {
     matching.length > shown.length
       ? element("li", { className: "site-more" }, [
           button("ghost-button", {
-            text: `Show all ${formatCount(matching.length)} sites`,
+            text: t("dashboardShowAllSites", formatCount(matching.length)),
             onClick: () => {
               showAllSites = true;
               if (overview) renderSites(overview);
@@ -691,8 +757,8 @@ function siteRow(entry: SiteUsage, peak: number, periodTotal: number): HTMLButto
   const row = element("button", {
     className: "site-row",
     title: reserved
-      ? "Requests that did not belong to a tab: browser services, service workers and other extensions."
-      : `Open details for ${entry.site}`,
+      ? t("dashboardReservedRowTitle")
+      : t("dashboardOpenSiteDetails", entry.site),
     dataset: { site: entry.site },
   });
   row.type = "button";
@@ -724,11 +790,16 @@ function siteRow(entry: SiteUsage, peak: number, periodTotal: number): HTMLButto
     ]),
     element("span", { className: "site-figures" }, [
       element("span", { className: "site-bytes", text: bytes(own) }),
+      // The estimate qualifier is part of a second whole message rather than a clause
+      // appended to the first. A suffix bolted onto a translated phrase lands wherever
+      // English happened to put it, which in a language that fronts the qualifier is
+      // the wrong end of the line.
       element("span", {
         className: estimated ? "site-share site-estimate" : "site-share",
-        text:
-          `${formatPercent(periodTotal > 0 ? own / periodTotal : 0)} of total` +
-          (estimated ? " · includes estimates" : ""),
+        text: t(
+          estimated ? "dashboardSiteShareOfTotalEstimated" : "dashboardSiteShareOfTotal",
+          formatPercent(periodTotal > 0 ? own / periodTotal : 0),
+        ),
       }),
     ]),
     // The rows have always opened a panel and never looked like it.
@@ -767,7 +838,7 @@ async function openSite(
   if (!(await loadDetail(site))) return;
   // Announced whether or not the panel is new, because swapping the site inside an
   // already-open panel changes every figure in it and moves nothing on screen.
-  announce(`Site details for ${siteLabel(site)}.`);
+  announce(t("dashboardAnnounceSiteDetails", siteLabel(site)));
   if (opening) revealDetail();
 }
 
@@ -830,7 +901,7 @@ async function loadDetail(site: string): Promise<boolean> {
     renderDetail(payload);
     return true;
   } catch (error) {
-    announce(errorMessage(error, "Could not read that site."));
+    announce(errorMessage(error, t("dashboardErrorReadSite")));
     return false;
   }
 }
@@ -842,10 +913,13 @@ function renderDetail(payload: SiteDetailPayload): void {
   detailSite.textContent = siteLabel(payload.site);
 
   const pieces = [`${bytes(totalBytes(payload.totals))} · ${payload.description}`];
-  if (measuredShare(payload.totals) < 0.9) pieces.push("Includes some estimates");
+  if (measuredShare(payload.totals) < 0.9) pieces.push(t("dashboardDetailIncludesEstimates"));
   if (payload.visits.count > 0) {
     pieces.push(
-      `${plural(payload.visits.count, "page load", "page loads")} · typical ${bytes(payload.visits.medianDown)}`,
+      t("dashboardDetailVisitsSummary", [
+        plural(payload.visits.count, "dashboardPageLoadCountOne", "dashboardPageLoadCountOther"),
+        bytes(payload.visits.medianDown),
+      ]),
     );
   }
   detailSub.textContent = pieces.join(" · ");
@@ -853,14 +927,14 @@ function renderDetail(payload: SiteDetailPayload): void {
   renderDetailLimit();
   renderDetailSaver();
 
-  chartInto(detailHours, payload.hours, "Today by hour");
-  chartInto(detailDays, payload.days, "By day");
+  chartInto(detailHours, payload.hours, t("dashboardDetailHoursHeading"));
+  chartInto(detailDays, payload.days, t("dashboardDetailDaysHeading"));
   replaceChildren(detailTypes, [
     stackedBar({
       segments: typeSegments(payload.byType),
       format: (value) => bytes(value),
       minShare: 0.02,
-      caption: "Type of data",
+      caption: t("dashboardTypeOfData"),
     }),
   ]);
 
@@ -871,9 +945,7 @@ function renderDetail(payload: SiteDetailPayload): void {
   const noHosts = payload.hosts.length === 0;
   detailHostsEmpty.hidden = !(hostsOff || noHosts);
   detailHostsTable.hidden = hostsOff || noHosts;
-  detailHostsEmpty.textContent = hostsOff
-    ? "Per-host detail is switched off, so nothing was recorded to show here."
-    : "No host detail for this period yet.";
+  detailHostsEmpty.textContent = t(hostsOff ? "dashboardHostsOff" : "dashboardHostsEmpty");
 
   replaceChildren(
     detailHostsBody,
@@ -882,7 +954,7 @@ function renderDetail(payload: SiteDetailPayload): void {
         element("td", {}, [
           element("span", { className: "host-name", text: host.host, title: host.host }),
           host.thirdParty
-            ? element("span", { className: "host-tag", text: "third party" })
+            ? element("span", { className: "host-tag", text: t("dashboardHostThirdParty") })
             : undefined,
         ]),
         element("td", { className: "numeric", text: bytes(host.down + host.up) }),
@@ -898,10 +970,10 @@ function renderDetail(payload: SiteDetailPayload): void {
 
 /** The window a share is a share *of*, as a status rather than as a mechanism. */
 const LIMIT_WINDOW_LABELS: Record<BudgetPeriod, string> = {
-  session: "this session's limit",
-  day: "today's limit",
-  week: "this week's limit",
-  month: "this month's limit",
+  session: t("dashboardLimitWindowSession"),
+  day: t("dashboardLimitWindowDay"),
+  week: t("dashboardLimitWindowWeek"),
+  month: t("dashboardLimitWindowMonth"),
 };
 
 /**
@@ -919,9 +991,9 @@ const LIMIT_PRESETS: Record<BudgetPeriod, readonly number[]> = {
 };
 
 function statusWord(share: number): string {
-  if (share >= 1) return "Over limit";
-  if (share >= 0.85) return "Nearly full";
-  return "Within limit";
+  if (share >= 1) return t("dashboardLimitStatusOver");
+  if (share >= 0.85) return t("dashboardLimitStatusNearlyFull");
+  return t("dashboardLimitStatusWithin");
 }
 
 function renderDetailLimit(): void {
@@ -935,10 +1007,7 @@ function renderDetailLimit(): void {
     detailLimitControls.hidden = true;
     replaceChildren(detailPresets, []);
     replaceChildren(detailLimitStatus, [
-      element("p", {
-        className: "field-hint",
-        text: "These requests have no site of their own for a rule to name, so they cannot be limited individually. A limit over Everything covers them along with the rest.",
-      }),
+      element("p", { className: "field-hint", text: t("dashboardReservedNoLimit") }),
     ]);
     detailLimitHint.textContent = "";
     return;
@@ -956,27 +1025,29 @@ function renderDetailLimit(): void {
       ? element("div", { className: "detail-presets" }, [
           status.snoozed
             ? button("ghost-button", {
-                text: "Resume now",
-                onClick: () => void limitAction({ type: "RESUME_BUDGET", site }, "Limit resumed."),
+                text: t("dashboardResumeNow"),
+                onClick: () =>
+                  void limitAction(
+                    { type: "RESUME_BUDGET", site },
+                    t("dashboardAnnounceLimitResumed"),
+                  ),
               })
             : button("ghost-button", {
-                text: "Pause 1 hour",
+                text: t("dashboardPauseOneHour"),
                 onClick: () =>
                   void limitAction(
                     { type: "SNOOZE_BUDGET", site, minutes: 60 },
-                    "Limit paused for an hour.",
+                    t("dashboardAnnounceLimitPaused"),
                   ),
               }),
           button("ghost-button", {
-            text: "Remove limit",
+            text: t("dashboardRemoveLimit"),
             dataset: { danger: "true" },
-            onClick: () => void limitAction({ type: "REMOVE_BUDGET", site }, "Limit removed."),
+            onClick: () =>
+              void limitAction({ type: "REMOVE_BUDGET", site }, t("dashboardAnnounceLimitRemoved")),
           }),
         ])
-      : element("p", {
-          className: "field-hint",
-          text: "No limit on this site. A limit refuses requests before they are sent, so the bytes are never spent.",
-        }),
+      : element("p", { className: "field-hint", text: t("dashboardNoLimitHint") }),
   ]);
 
   replaceChildren(
@@ -984,19 +1055,27 @@ function renderDetailLimit(): void {
     LIMIT_PRESETS[detailPeriod].map((size) =>
       button("ghost-button", {
         text: bytes(size),
-        title: `Limit ${site} to ${bytes(size)} ${BUDGET_PERIOD_LABELS[detailPeriod]} — ${BUDGET_SHAPE_LABELS[detailShape].toLowerCase()}`,
+        title: t("dashboardPresetTitle", [
+          site,
+          bytes(size),
+          BUDGET_PERIOD_LABELS[detailPeriod],
+          BUDGET_SHAPE_LABELS[detailShape].toLowerCase(),
+        ]),
         onClick: () => void applyLimit(site, size),
       }),
     ),
   );
 
-  const consequence =
-    detailShape === "hard"
-      ? "A hard stop refuses every subresource the moment the allowance runs out. The page's own HTML still loads, so the site can say why it looks broken."
-      : "Shedding weight drops video and audio at 60% of the allowance, images and web fonts at 85%, and everything but the page shell at 100%.";
-  detailLimitHint.textContent = status
-    ? `${consequence} Choosing a size replaces the current limit on this site.`
-    : `${consequence} For an exact figure, use the limit form in Settings.`;
+  // The consequence goes in as a placeholder rather than being concatenated in front:
+  // the two sentences are one line of copy, and a language that wants the shorter one
+  // first cannot get there by string addition.
+  const consequence = t(
+    detailShape === "hard" ? "dashboardConsequenceHard" : "dashboardConsequenceProgressive",
+  );
+  detailLimitHint.textContent = t(
+    status ? "dashboardLimitHintReplaces" : "dashboardLimitHintExact",
+    consequence,
+  );
 }
 
 function limitStatusBlock(status: BudgetStatus): HTMLElement {
@@ -1004,19 +1083,35 @@ function limitStatusBlock(status: BudgetStatus): HTMLElement {
   const resumesAt = status.budget.snoozedUntil;
   const resets =
     status.resetsAt === null
-      ? "runs until this browser session ends"
-      : `resets ${formatAgo(status.resetsAt)}`;
+      ? t("dashboardLimitResetsNever")
+      : t("dashboardLimitResetsAt", formatAgo(status.resetsAt));
+
+  // The paused case is two whole messages, not one with an optional clause spliced into
+  // the middle: the resume time lands mid-sentence, and a fragment inserted by string
+  // interpolation is exactly what a translator cannot move.
+  const hint = !status.snoozed
+    ? TIER_DESCRIPTIONS[status.tier]
+    : resumesAt
+      ? t("dashboardLimitPausedHintResumes", [
+          formatAgo(resumesAt),
+          TIER_DESCRIPTIONS[status.wouldBe],
+        ])
+      : t("dashboardLimitPausedHint", TIER_DESCRIPTIONS[status.wouldBe]);
 
   return element("div", { className: "limit-status" }, [
     element("div", { className: "limit-status-head" }, [
       element("span", {
         className: "state-chip",
-        text: status.snoozed ? "Paused" : statusWord(status.share),
+        text: status.snoozed ? t("dashboardLimitStatusPaused") : statusWord(status.share),
         dataset: status.snoozed ? { tone: "paused" } : over ? { tone: "enforcing" } : {},
       }),
       element("span", {
         className: "limit-status-figure",
-        text: `${formatPercent(status.share)} of ${LIMIT_WINDOW_LABELS[status.budget.period]} · ${resets}`,
+        text: t("dashboardLimitStatusFigure", [
+          formatPercent(status.share),
+          LIMIT_WINDOW_LABELS[status.budget.period],
+          resets,
+        ]),
       }),
     ]),
     element("div", { className: "limit-meter" }, [
@@ -1029,22 +1124,21 @@ function limitStatusBlock(status: BudgetStatus): HTMLElement {
       ]),
       element("span", {
         className: "panel-note",
-        text: `${bytes(status.used)} of ${bytes(status.allowance)}`,
+        text: t("dashboardLimitMeterFigure", [bytes(status.used), bytes(status.allowance)]),
       }),
     ]),
-    element("p", {
-      className: "field-hint",
-      text: status.snoozed
-        ? `Nothing is being refused while it is paused${resumesAt ? `; it resumes ${formatAgo(resumesAt)}` : ""}. Without the pause: ${TIER_DESCRIPTIONS[status.wouldBe]}`
-        : TIER_DESCRIPTIONS[status.tier],
-    }),
+    element("p", { className: "field-hint", text: hint }),
   ]);
 }
 
 async function applyLimit(site: string, size: number): Promise<void> {
   await limitAction(
     { type: "PUT_BUDGET", site, bytes: size, period: detailPeriod, shape: detailShape },
-    `${siteLabel(site)} limited to ${bytes(size)} ${BUDGET_PERIOD_LABELS[detailPeriod]}.`,
+    t("dashboardAnnounceLimitApplied", [
+      siteLabel(site),
+      bytes(size),
+      BUDGET_PERIOD_LABELS[detailPeriod],
+    ]),
   );
 }
 
@@ -1060,7 +1154,7 @@ async function limitAction(request: LimitRequest, success: string): Promise<void
     detailError = null;
     announce(success);
   } catch (error) {
-    detailError = errorMessage(error, "That did not work.");
+    detailError = errorMessage(error, t("dashboardErrorGeneric"));
     announce(detailError);
   }
   rerenderKeepingFocus(detailLimitBlock, renderDetailLimit);
@@ -1076,10 +1170,7 @@ function renderDetailSaver(): void {
 
   if (isReservedSite(site)) {
     replaceChildren(detailSaver, [
-      element("p", {
-        className: "field-hint",
-        text: "Data Saver acts on requests belonging to a page, so it does not reach these.",
-      }),
+      element("p", { className: "field-hint", text: t("dashboardSaverReserved") }),
     ]);
     detailAdvice.hidden = true;
     return;
@@ -1087,7 +1178,7 @@ function renderDetailSaver(): void {
 
   if (!settings) {
     replaceChildren(detailSaver, [
-      element("p", { className: "field-hint", text: "Data Saver settings could not be read." }),
+      element("p", { className: "field-hint", text: t("dashboardSaverUnreadable") }),
     ]);
     detailAdvice.hidden = true;
     return;
@@ -1097,11 +1188,10 @@ function renderDetailSaver(): void {
     // Naming the mechanism and the exit, rather than "turn it on for a lighter
     // profile": the whole of what it does and the whole of how to undo it.
     replaceChildren(detailSaver, [
-      element("p", {
-        className: "field-hint",
-        text: "Data Saver is off everywhere. It rewrites image requests to known CDNs so they return a smaller variant, refuses analytics beacons, and defers offscreen images and video. It applies to every site except the ones you exclude, and the switch that turns it on turns it back off.",
-      }),
-      element("p", { className: "detail-presets" }, [linkButton("Open Data Saver settings", "./settings.html#optimize-panel")]),
+      element("p", { className: "field-hint", text: t("dashboardSaverOffEverywhere") }),
+      element("p", { className: "detail-presets" }, [
+        linkButton(t("dashboardSaverOpenSettings"), "./settings.html#optimize-panel"),
+      ]),
     ]);
     renderDetailAdvice();
     return;
@@ -1122,14 +1212,12 @@ function renderDetailSaver(): void {
       element("span", { className: "switch-track", ariaHidden: true }, [element("span")]),
       element("span", {
         className: "switch-label",
-        text: excluded ? `Data Saver is off for ${site}` : `Data Saver is on for ${site}`,
+        text: t(excluded ? "dashboardSaverOffForSite" : "dashboardSaverOnForSite", site),
       }),
     ]),
     element("p", {
       className: "field-hint",
-      text: excluded
-        ? "This site is on the never-optimize list: nothing here is rewritten, deferred or refused by Data Saver. Its page loads are also left out of the comparison table below."
-        : "Image requests to known CDNs are asked for a smaller variant, analytics beacons are refused, and offscreen images and video wait until they are reached.",
+      text: t(excluded ? "dashboardSaverExcludedHint" : "dashboardSaverIncludedHint"),
     }),
   ]);
   renderDetailAdvice();
@@ -1145,9 +1233,9 @@ async function setSiteOptimize(site: string, optimize: boolean): Promise<void> {
   try {
     const result = await sendRequest({ type: "SET_SITE_OPTIMIZE", site, optimize });
     detailOptimize = result.optimize;
-    announce(optimize ? `Data Saver on for ${site}.` : `Data Saver off for ${site}.`);
+    announce(t(optimize ? "dashboardAnnounceSaverOn" : "dashboardAnnounceSaverOff", site));
   } catch (error) {
-    announce(errorMessage(error, "Could not change Data Saver for that site."));
+    announce(errorMessage(error, t("dashboardErrorSetSiteOptimize")));
   }
   rerenderKeepingFocus(detailSaver, renderDetailSaver);
 }
@@ -1184,14 +1272,22 @@ function adviceFor(byType: TypeBytes): string | null {
   const share = value / total;
   if (share < ADVICE_SHARE) return null;
 
+  // One message per outcome, carrying both sentences. The line used to be built from a
+  // type name, a percentage, a feature name and the bare word "on" or "off", which is
+  // four fragments in a fixed English order — and "on"/"off" in particular is the kind
+  // of one-word hole a translator cannot fill without seeing the sentence around it.
+  // The type name is deliberately passed twice rather than repeated in code, so the
+  // no-feature line can place its second mention wherever the language needs it.
   const label = RESOURCE_TYPE_LABELS[type].toLowerCase();
-  const lead = `${formatPercent(share)} of this site's bytes are ${label}.`;
+  const percent = formatPercent(share);
   const feature = ADVICE_FEATURE[type];
   const info = feature ? FEATURES_BY_ID.get(feature) : undefined;
-  if (!info) {
-    return `${lead} Nothing in Data Saver removes ${label}, so a limit is the only lever here.`;
-  }
-  return `${lead} The Data Saver setting aimed at that is "${info.label}", which is ${info.defaultOn ? "on" : "off"} by default.`;
+  if (!info) return t("dashboardAdviceNoFeature", [percent, label]);
+  return t(info.defaultOn ? "dashboardAdviceFeatureOn" : "dashboardAdviceFeatureOff", [
+    percent,
+    label,
+    info.label,
+  ]);
 }
 
 /* ------------------------------------------------------------------ *
@@ -1202,7 +1298,7 @@ async function loadSavings(): Promise<void> {
   try {
     renderSavings(await sendRequest({ type: "GET_SAVINGS", days: trendDays }));
   } catch (error) {
-    savingsNote.textContent = errorMessage(error, "Could not read the savings.");
+    savingsNote.textContent = errorMessage(error, t("dashboardErrorReadSavings"));
   }
 }
 
@@ -1216,33 +1312,36 @@ function renderSavings(report: SavingsReport): void {
   const measured = splitBytes(report.savedMeasured, units);
   const modelled = splitBytes(report.savedModelled, units);
   replaceChildren(savingsStats, [
-    statCard("Measured", measured.value, {
+    statCard(t("dashboardSavingsMeasuredLabel"), measured.value, {
       unit: measured.unit,
-      hint: "Original sizes on file, minus what the smaller version cost",
+      hint: t("dashboardSavingsMeasuredHint"),
       ...(report.savedMeasured > 0 ? { tone: "saved" as const } : {}),
     }),
-    statCard("Estimated", `~${modelled.value}`, {
+    statCard(t("dashboardSavingsEstimatedLabel"), `~${modelled.value}`, {
       unit: modelled.unit,
-      hint: "The size model's guess for requests refused before they had a size",
+      hint: t("dashboardSavingsEstimatedHint"),
       tone: "estimate",
     }),
   ]);
 
   savingsHint.textContent = report.optimize.enabled
-    ? `${plural(report.blocked, "request refused", "requests refused")} · ${plural(report.rewritten, "request made smaller", "requests made smaller")} · ${plural(report.baselines, "original size on file", "original sizes on file")}`
-    : "Data Saver is off, so nothing was refused or rewritten in this window. The figures above cover whatever was recorded while it was on.";
+    ? [
+        plural(report.blocked, "dashboardRequestsRefusedOne", "dashboardRequestsRefusedOther"),
+        plural(report.rewritten, "dashboardRequestsSmallerOne", "dashboardRequestsSmallerOther"),
+        plural(report.baselines, "dashboardOriginalSizesOne", "dashboardOriginalSizesOther"),
+      ].join(" · ")
+    : t("dashboardSavingsHintOff");
 
   savingsCompareNote.textContent =
     report.optimize.holdoutPercent > 0
-      ? `A ${report.optimize.holdoutPercent}% sample of page loads is deliberately left unoptimized, so both columns are real page loads rather than a model. The ± is the 95% interval; a site whose interval crosses zero is left out, because a difference that could be zero is not a saving.`
-      : "The unoptimized control sample is switched off, so no new comparisons are being collected. Anything below was recorded while it was on.";
+      ? t("dashboardSavingsCompareNoteOn", String(report.optimize.holdoutPercent))
+      : t("dashboardSavingsCompareNoteOff");
 
   savingsEmpty.hidden = report.deltas.length > 0;
   savingsTable.hidden = report.deltas.length === 0;
-  savingsEmpty.textContent =
-    report.optimize.holdoutPercent > 0
-      ? "No site has enough loads on both sides yet. A comparison needs at least five optimized loads and one unoptimized one on the same site."
-      : "No comparisons are on file, and none are being collected while the control sample is off.";
+  savingsEmpty.textContent = t(
+    report.optimize.holdoutPercent > 0 ? "dashboardSavingsEmptyOn" : "dashboardSavingsEmptyOff",
+  );
 
   replaceChildren(
     savingsBody,
@@ -1261,20 +1360,24 @@ function renderSavings(report: SavingsReport): void {
         element("td", {
           className: "numeric",
           text: `${formatCount(delta.optimizedCount)} / ${formatCount(delta.controlCount)}`,
-          title: "optimized loads / control loads",
+          title: t("dashboardSavingsLoadsCellTitle"),
         }),
       ]),
     ),
   );
 
-  savingsExplainer.textContent =
-    "Three different kinds of number, kept apart. A page-load comparison is the difference between two sets of real loads, from the control sample above. An observed original is arithmetic: the size of the un-rewritten variant, seen before, minus what the smaller one cost now. An estimate is the size model's guess at a request that was refused before it had a size, and it is the only one of the three that depends on this extension's own arithmetic about bytes that never arrived.";
+  savingsExplainer.textContent = t("dashboardSavingsExplainer");
 }
 
 /** Never `savedPerVisit` bare: the spread is what stops it reading as precise. */
 function savedPerLoad(delta: VisitDeltaView): string {
-  const magnitude = `${bytes(Math.abs(delta.savedPerVisit))} ± ${bytes(delta.savedPerVisitSpread)}`;
-  return delta.savedPerVisit >= 0 ? magnitude : `${magnitude} heavier`;
+  // Both directions are whole messages. "heavier" appended to a formatted magnitude is
+  // a word with no sentence around it, and the reading it changes is the one that says
+  // the optimizer made things worse.
+  return t(delta.savedPerVisit >= 0 ? "dashboardSavedPerLoad" : "dashboardSavedPerLoadHeavier", [
+    bytes(Math.abs(delta.savedPerVisit)),
+    bytes(delta.savedPerVisitSpread),
+  ]);
 }
 
 /* ------------------------------------------------------------------ *
@@ -1301,7 +1404,7 @@ async function loadPlan(): Promise<void> {
     const everything = budgets.statuses.find((status) => status.budget.site === ALL_SITES) ?? null;
     renderPlan(settings, used, elapsedDays, totalDays, everything);
   } catch (error) {
-    planNote.textContent = errorMessage(error, "Could not read the cycle.");
+    planNote.textContent = errorMessage(error, t("dashboardErrorReadCycle"));
   }
 }
 
@@ -1315,29 +1418,32 @@ function renderPlan(
   const from = formatDayShort(cycleRange(settings).from);
   const resetsAt = cycleResetsAt(settings);
   const resetDay = formatDayShort(dayKeyFromMs(resetsAt));
-  planNote.textContent = `Day ${elapsedDays} of ${totalDays} · began ${from}`;
+  planNote.textContent = t("dashboardPlanNote", [String(elapsedDays), String(totalDays), from]);
 
   const plan = settings.planBytes;
 
   if (plan === null) {
-    const anchor =
+    // Whole sentence per case rather than an anchor phrase dropped into a shared one:
+    // "the calendar month" and "the 17th of the month" are not interchangeable in
+    // languages that inflect around a date, and neither can be built from the other.
+    const cycleNote =
       settings.cycleStartDay === 0
-        ? "the calendar month"
-        : `the ${settings.cycleStartDay}${ordinalSuffix(settings.cycleStartDay)} of the month`;
+        ? t("dashboardCycleNoteCalendar")
+        : t(
+            "dashboardCycleNoteDay",
+            `${settings.cycleStartDay}${ordinalSuffix(settings.cycleStartDay)}`,
+          );
     // Says what it will say, and why it cannot yet. The alternative — rendering the
     // plan as 0 B, 0% or 100% — is three different lies about a question nobody asked.
     replaceChildren(planBody, [
-      element("p", { className: "plan-figure", text: `${bytes(used)} used since ${from}` }),
       element("p", {
-        className: "field-hint",
-        text: `No plan set, so there is nothing to measure that against. Given a plan size, this becomes how much of the cycle is spent, how much a day the rest of it allows, and where the cycle ends at the current rate.`,
+        className: "plan-figure",
+        text: t("dashboardPlanUsedSince", [bytes(used), from]),
       }),
-      element("p", {
-        className: "field-hint",
-        text: `The cycle above runs from ${anchor}. Most carrier cycles do not reset on the 1st, and a figure anchored to the wrong day is never the figure on the bill.`,
-      }),
+      element("p", { className: "field-hint", text: t("dashboardPlanNoPlanHint") }),
+      element("p", { className: "field-hint", text: cycleNote }),
       element("p", { className: "detail-presets" }, [
-        linkButton("Set your plan in Settings", "./settings.html"),
+        linkButton(t("dashboardPlanSetLink"), "./settings.html"),
       ]),
     ]);
     return;
@@ -1353,7 +1459,7 @@ function renderPlan(
       : undefined,
     element("p", {
       className: "plan-figure",
-      text: `${bytes(used)} of ${bytes(plan)}`,
+      text: t("dashboardPlanFigure", [bytes(used), bytes(plan)]),
     }),
     element("div", { className: "limit-meter" }, [
       element("span", { className: "limit-meter-track", ariaHidden: true }, [
@@ -1365,7 +1471,11 @@ function renderPlan(
       ]),
       element("span", {
         className: "panel-note",
-        text: `${formatPercent(share)} of the plan · resets ${formatAgo(resetsAt)}, on ${resetDay}`,
+        text: t("dashboardPlanMeterNote", [
+          formatPercent(share),
+          formatAgo(resetsAt),
+          resetDay,
+        ]),
       }),
     ]),
     element("p", {
@@ -1374,8 +1484,12 @@ function renderPlan(
       // fact about the plan rather than a claim about the days ahead.
       text:
         remaining > 0
-          ? `${bytes(remaining)} left. Spread evenly over the ${plural(daysLeft, "day", "days")} remaining, that is ${bytes(remaining / daysLeft)} a day.`
-          : `The plan is spent. Everything from here is over it.`,
+          ? t("dashboardPlanRemaining", [
+              bytes(remaining),
+              plural(daysLeft, "dashboardDayCountOne", "dashboardDayCountOther"),
+              bytes(remaining / daysLeft),
+            ])
+          : t("dashboardPlanSpent"),
     }),
     planEnforcementBlock(plan, everything, resetsAt),
   ]);
@@ -1396,25 +1510,20 @@ function planEnforcementBlock(
 ): HTMLElement {
   if (everything && everything.budget.bytes === plan) {
     return element("div", { className: "plan-enforcement" }, [
-      element("p", {
-        className: "field-hint",
-        text: "A limit over Everything matches this plan, so alerts fire at 75%, 90% and 100% of it and requests are refused past 100%.",
-      }),
+      element("p", { className: "field-hint", text: t("dashboardPlanEnforced") }),
       windowMismatchNote(everything, cycleResets),
     ]);
   }
 
   const message = everything
-    ? `The limit over Everything is set to ${bytes(everything.budget.bytes)}, and your plan is ${bytes(plan)}. Alerts and enforcement follow the limit, not the plan.`
-    : "Nothing is enforcing this plan. A limit over Everything is what turns it into alerts at 75%, 90% and 100%, and into refused requests past 100%.";
+    ? t("dashboardPlanMismatch", [bytes(everything.budget.bytes), bytes(plan)])
+    : t("dashboardPlanUnenforced");
 
   return element("div", { className: "plan-enforcement" }, [
     element("p", { className: "field-hint", text: message }),
     element("p", { className: "detail-presets" }, [
       button("ghost-button", {
-        text: everything
-          ? `Set it to ${bytes(plan)} a month`
-          : `Limit everything to ${bytes(plan)} a month`,
+        text: t(everything ? "dashboardPlanAlignSet" : "dashboardPlanAlignCreate", bytes(plan)),
         onClick: () => void alignPlanBudget(plan),
       }),
     ]),
@@ -1439,7 +1548,7 @@ function windowMismatchNote(everything: BudgetStatus, cycleResets: number): HTML
   if (limitDay === cycleDay) return undefined;
   return element("p", {
     className: "field-hint",
-    text: `The two windows do not line up: the limit's allowance resets on ${formatDayShort(limitDay)} and your cycle resets on ${formatDayShort(cycleDay)}. A monthly limit runs on the calendar month, so what it refuses against is the calendar month's total, not this cycle's.`,
+    text: t("dashboardWindowMismatch", [formatDayShort(limitDay), formatDayShort(cycleDay)]),
   });
 }
 
@@ -1447,14 +1556,25 @@ async function alignPlanBudget(plan: number): Promise<void> {
   try {
     await sendRequest({ type: "PUT_BUDGET", site: ALL_SITES, bytes: plan, period: "month" });
     planError = null;
-    announce(`Everything is now limited to ${bytes(plan)} a month.`);
+    announce(t("dashboardAnnouncePlanAligned", bytes(plan)));
   } catch (error) {
-    planError = errorMessage(error, "Could not set that limit.");
+    planError = errorMessage(error, t("dashboardErrorSetLimit"));
     announce(planError);
   }
   await loadPlan();
 }
 
+/**
+ * English ordinal suffixes, deliberately not in the message catalogue.
+ *
+ * "17th" is built by a rule, not looked up, and the rule is English: other languages
+ * inflect the ordinal by gender, case or the noun that follows, and several write it as
+ * a digit and a full stop. Four one- and two-letter messages would let a translator
+ * change the letters without being able to change the rule that picks between them,
+ * which is a worse lie than leaving it visibly English. A real fix is
+ * `Intl.PluralRules` with `type: "ordinal"` plus a per-locale form table, and it
+ * changes what the page says — so it is a change of its own, not part of extraction.
+ */
 function ordinalSuffix(day: number): string {
   if (day % 100 >= 11 && day % 100 <= 13) return "th";
   if (day % 10 === 1) return "st";
@@ -1472,7 +1592,10 @@ async function loadStorage(): Promise<void> {
     renderStorage(await sendRequest({ type: "GET_STORAGE_REPORT" }));
   } catch (error) {
     replaceChildren(storageBody, [
-      element("p", { className: "empty", text: errorMessage(error, "Could not read storage.") }),
+      element("p", {
+        className: "empty",
+        text: errorMessage(error, t("dashboardErrorReadStorage")),
+      }),
     ]);
   }
 }
@@ -1489,32 +1612,47 @@ function renderStorage(report: StorageReport): void {
     // it claims to measure, and this is the only surface that can admit it.
     report.lastFlushError
       ? element("p", { className: "form-status", dataset: { tone: "error" } }, [
-          `Some measurements were not written to disk. The last failure was ${formatAgo(report.lastFlushError.at)}: ${report.lastFlushError.message}. Totals from around then are lower than the traffic they describe.`,
+          t("dashboardStorageFlushError", [
+            formatAgo(report.lastFlushError.at),
+            report.lastFlushError.message,
+          ]),
         ])
       : undefined,
     element("table", { className: "table storage-table" }, [
       element("tbody", {}, [
-        storageRow("Daily totals", plural(report.dailyRows, "row", "rows")),
-        storageRow("Hourly totals", plural(report.hourlyRows, "row", "rows")),
-        storageRow("Per-host detail", plural(report.hostRows, "row", "rows")),
-        storageRow("Page loads", plural(report.visitRows, "row", "rows")),
-        storageRow("Learned request sizes", plural(report.sizeModelRows, "key", "keys")),
         storageRow(
-          "Original image sizes",
-          report.baselineRows === undefined
-            ? "not reported"
-            : plural(report.baselineRows, "key", "keys"),
+          t("dashboardStorageDailyTotals"),
+          plural(report.dailyRows, "dashboardRowCountOne", "dashboardRowCountOther"),
         ),
         storageRow(
-          "Disk in use",
-          report.bytesUsed === null ? "Chrome does not report it" : bytes(report.bytesUsed),
+          t("dashboardStorageHourlyTotals"),
+          plural(report.hourlyRows, "dashboardRowCountOne", "dashboardRowCountOther"),
+        ),
+        storageRow(
+          t("dashboardStorageHostDetail"),
+          plural(report.hostRows, "dashboardRowCountOne", "dashboardRowCountOther"),
+        ),
+        storageRow(
+          t("dashboardStoragePageLoads"),
+          plural(report.visitRows, "dashboardRowCountOne", "dashboardRowCountOther"),
+        ),
+        storageRow(
+          t("dashboardStorageSizeModel"),
+          plural(report.sizeModelRows, "dashboardKeyCountOne", "dashboardKeyCountOther"),
+        ),
+        storageRow(
+          t("dashboardStorageBaselines"),
+          report.baselineRows === undefined
+            ? t("dashboardStorageNotReported")
+            : plural(report.baselineRows, "dashboardKeyCountOne", "dashboardKeyCountOther"),
+        ),
+        storageRow(
+          t("dashboardStorageDiskInUse"),
+          report.bytesUsed === null ? t("dashboardStorageDiskUnknown") : bytes(report.bytesUsed),
         ),
       ]),
     ]),
-    element("p", {
-      className: "field-hint",
-      text: "Page-load rows hold the site and the origin, never a path or a query. Original image sizes are capped by count rather than by age, so they are the one store a shorter retention setting does not shorten.",
-    }),
+    element("p", { className: "field-hint", text: t("dashboardStorageNote") }),
   ]);
 }
 
@@ -1525,9 +1663,9 @@ function renderStorage(report: StorageReport): void {
 async function loadTrend(): Promise<void> {
   try {
     const { points } = await sendRequest({ type: "GET_SERIES", days: trendDays });
-    chartInto(trendSlot, points, `Daily usage over ${RANGE_LABELS[trendDays]}`);
+    chartInto(trendSlot, points, t("dashboardTrendCaption", RANGE_LABELS[trendDays]));
   } catch (error) {
-    announce(errorMessage(error, "Could not read the daily series."));
+    announce(errorMessage(error, t("dashboardErrorReadSeries")));
   }
 }
 
@@ -1560,7 +1698,7 @@ async function load(): Promise<void> {
         segments: typeSegments(payload.byType),
         format: (value) => bytes(value),
         minShare: 0.015,
-        caption: "Type of data",
+        caption: t("dashboardTypeOfData"),
       }),
     ]);
     // Skipped while the user is inside the panel: a refresh rebuilds the limit
@@ -1568,7 +1706,7 @@ async function load(): Promise<void> {
     // is the popup's focus defect on a slower clock.
     if (selectedSite && !focusWithin(detailPanel)) await loadDetail(selectedSite);
   } catch (error) {
-    const message = errorMessage(error, "Could not read usage.");
+    const message = errorMessage(error, t("dashboardErrorReadUsage"));
     announce(message);
     renderFreshness();
     // The basis describes cards that are no longer on screen.

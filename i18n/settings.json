@@ -1,0 +1,1153 @@
+{
+  "settingsPageTitle": {
+    "message": "Byte Budget — settings",
+    "description": "Browser tab title for the options page."
+  },
+  "settingsBrandTitle": {
+    "message": "Settings",
+    "description": "Page heading, under the product name in the page header."
+  },
+  "settingsBrandSub": {
+    "message": "Your plan, your limits, and what this keeps.",
+    "description": "One-line summary of the options page, under its heading. \"what this keeps\" means the recorded data described in the Privacy & data panel."
+  },
+  "settingsNavLabel": {
+    "message": "Main navigation",
+    "description": "Accessible name for the two-link navigation bar (Dashboard, Settings). Not shown on screen."
+  },
+  "settingsNavDashboard": {
+    "message": "Dashboard",
+    "description": "Navigation link to the full-tab dashboard page."
+  },
+  "settingsNavSettings": {
+    "message": "Settings",
+    "description": "Navigation link to this options page. It is the current page."
+  },
+
+  "settingsPlanKicker": {
+    "message": "Start here",
+    "description": "Small label above the \"Your data plan\" heading, marking it as the first thing to fill in."
+  },
+  "settingsPlanTitle": {
+    "message": "Your data plan",
+    "description": "Heading of the panel where the user enters their carrier's data allowance and the day it resets."
+  },
+  "settingsPlanIntro": {
+    "message": "How much data your plan allows, and the day it resets. These two numbers are what the cycle figures and the projection on the dashboard are measured against. Byte Budget sees one Chrome profile on this device, so its total is always lower than a carrier's — often by a lot.",
+    "description": "Introduction to the plan panel. The last sentence is a scope disclosure: the extension cannot see other browsers, profiles or devices, so its figure is not the carrier's figure. Keep that admission — do not soften it."
+  },
+  "settingsPlanSizeLabel": {
+    "message": "Plan size",
+    "description": "Label for the text field holding the plan's total allowance, e.g. \"15 GB\"."
+  },
+  "settingsPlanSizePlaceholder": {
+    "message": "15 GB",
+    "description": "Placeholder in the plan size field, showing the shape of an answer. Byte units are the ones the extension prints elsewhere."
+  },
+  "settingsPlanCycleLabel": {
+    "message": "Resets on",
+    "description": "Label for the picker choosing which day of the month the plan's cycle restarts."
+  },
+  "settingsPlanCycleHint": {
+    "message": "Up to the 28th only: every month has a 28th, so the reset date never moves.",
+    "description": "Hint under the reset-day picker, giving the reason the choice stops at 28: a cycle anchored to the 31st would move in February, and the reset date is the value a person checks against a paper bill."
+  },
+  "settingsPlanCycleCalendar": {
+    "message": "The 1st (calendar month)",
+    "description": "First option in the reset-day picker: the cycle follows the calendar month rather than a chosen day."
+  },
+  "settingsPlanCycleDay": {
+    "message": "The $DAY$",
+    "description": "One reset-day option, e.g. \"The 17th\". The ordinal suffix is formed in English by the page; a language that does not use one can render the placeholder alone.",
+    "placeholders": {
+      "day": { "content": "$1", "example": "17th" }
+    }
+  },
+  "settingsOrdinalFirst": {
+    "message": "$DAY$st",
+    "description": "English ordinal for a day ending in 1 (but not 11), e.g. \"21st\". Return the number alone in a language with no ordinal suffix.",
+    "placeholders": {
+      "day": { "content": "$1", "example": "21" }
+    }
+  },
+  "settingsOrdinalSecond": {
+    "message": "$DAY$nd",
+    "description": "English ordinal for a day ending in 2 (but not 12), e.g. \"22nd\". Return the number alone in a language with no ordinal suffix.",
+    "placeholders": {
+      "day": { "content": "$1", "example": "22" }
+    }
+  },
+  "settingsOrdinalThird": {
+    "message": "$DAY$rd",
+    "description": "English ordinal for a day ending in 3 (but not 13), e.g. \"23rd\". Return the number alone in a language with no ordinal suffix.",
+    "placeholders": {
+      "day": { "content": "$1", "example": "23" }
+    }
+  },
+  "settingsOrdinalOther": {
+    "message": "$DAY$th",
+    "description": "English ordinal for every other day, e.g. \"17th\". Return the number alone in a language with no ordinal suffix.",
+    "placeholders": {
+      "day": { "content": "$1", "example": "17" }
+    }
+  },
+  "settingsPlanSave": {
+    "message": "Save plan",
+    "description": "Submit button for the plan size form."
+  },
+  "settingsPlanShapeLabel": {
+    "message": "As the plan fills",
+    "description": "Label for the choice of what the plan does as it is spent: measure only, shed weight, or stop."
+  },
+  "settingsPlanShapeWatch": {
+    "message": "Just measure",
+    "description": "Option: keep counting against the plan but never refuse a request. The honest name for having no allowance at all."
+  },
+  "settingsPlanShapeProgressive": {
+    "message": "Shed weight",
+    "description": "Option: as the plan fills, refuse progressively more kinds of request across every site."
+  },
+  "settingsPlanShapeHard": {
+    "message": "Hard stop",
+    "description": "Option: change nothing until the plan is spent, then refuse everything but the page itself."
+  },
+  "settingsPlanShapeWatchHint": {
+    "message": "Nothing is ever refused, and there is no allowance for an alert to check — so plan alerts stay quiet. The dashboard still measures the cycle against the plan.",
+    "description": "Hint shown when \"Just measure\" is chosen. It names the consequence — plan alerts cannot fire — because that setting is on by default."
+  },
+  "settingsPlanShapeProgressiveHint": {
+    "message": "Across every site: video and audio stop at 60% of the plan, images and web fonts at 85%, everything but the page itself at 100%.",
+    "description": "Hint shown when \"Shed weight\" is chosen, listing the three thresholds and what each refuses."
+  },
+  "settingsPlanShapeHardHint": {
+    "message": "Nothing changes until the plan is spent. After that only pages themselves load, until the allowance rolls over, or you pause it, or you add bytes to this window.",
+    "description": "Hint shown when \"Hard stop\" is chosen, naming the three ways out of it."
+  },
+  "settingsPlanEchoEmpty": {
+    "message": "Empty removes the plan.",
+    "description": "Shown under the plan size field while it is empty, so clearing it is understood as a deliberate action rather than a blank."
+  },
+  "settingsPlanEchoUnreadable": {
+    "message": "Cannot read that as a size.",
+    "description": "Shown under the plan size field when what has been typed cannot be parsed as a byte figure."
+  },
+  "settingsPlanEchoReads": {
+    "message": "Reads as $SIZE$.",
+    "description": "Echoes back the size the field was parsed as, on every keystroke. This exists because \"1,5 GB\" means 1.5 GB in some locales and 15 GB in some parsers, and a size field must never take a number and mean a different one.",
+    "placeholders": {
+      "size": { "content": "$1", "example": "1.5 GB" }
+    }
+  },
+  "settingsPlanSizeUnreadable": {
+    "message": "Could not read \"$INPUT$\" as a size. Try 15 GB or 500 MB.",
+    "description": "Error on saving the plan when the typed size cannot be parsed. Quotes back exactly what was typed.",
+    "placeholders": {
+      "input": { "content": "$1", "example": "fifteen gigs" }
+    }
+  },
+  "settingsPlanNoteUnset": {
+    "message": "No plan set",
+    "description": "Note in the plan panel header when no plan size has been entered."
+  },
+  "settingsPlanNote": {
+    "message": "$SIZE$ · resets $WHEN$",
+    "description": "Note in the plan panel header once a plan is set: its size and when the cycle next restarts.",
+    "placeholders": {
+      "size": { "content": "$1", "example": "15 GB" },
+      "when": { "content": "$2", "example": "in 9 days" }
+    }
+  },
+  "settingsPlanSavedCalendar": {
+    "message": "Plan saved: $SIZE$, resetting on the 1st.",
+    "description": "Confirmation after saving a plan whose cycle follows the calendar month.",
+    "placeholders": {
+      "size": { "content": "$1", "example": "15 GB" }
+    }
+  },
+  "settingsPlanSavedDay": {
+    "message": "Plan saved: $SIZE$, resetting on $DAY$.",
+    "description": "Confirmation after saving a plan whose cycle restarts on a chosen day of the month.",
+    "placeholders": {
+      "size": { "content": "$1", "example": "15 GB" },
+      "day": { "content": "$2", "example": "17th" }
+    }
+  },
+  "settingsPlanRemoved": {
+    "message": "Plan removed.",
+    "description": "Confirmation after clearing the plan size field and saving."
+  },
+  "settingsPlanSaveError": {
+    "message": "Could not save the plan.",
+    "description": "Fallback error when saving the plan fails and the failure carries no message of its own."
+  },
+  "settingsPlanNeedsSize": {
+    "message": "Set a plan size for this to apply to.",
+    "description": "Shown when the user chooses what the plan does as it fills, but no plan size has been entered yet."
+  },
+  "settingsAllowanceChangeError": {
+    "message": "Could not change the allowance.",
+    "description": "Fallback error when writing the allowance that covers every site fails."
+  },
+  "settingsPlanEmpty": {
+    "message": "No plan set. Until there is one the dashboard can only show totals: no share of a plan, no projection, and nothing for a plan alert to check.",
+    "description": "Empty state in the plan panel, listing exactly which figures stay unavailable while no plan is set."
+  },
+  "settingsPlanCycleLine": {
+    "message": "This cycle started $FROM$ — day $ELAPSED$ of $TOTAL$, resets $WHEN$.",
+    "description": "Where the current billing cycle has got to.",
+    "placeholders": {
+      "from": { "content": "$1", "example": "17 Jul" },
+      "elapsed": { "content": "$2", "example": "9" },
+      "total": { "content": "$3", "example": "31" },
+      "when": { "content": "$4", "example": "in 22 days" }
+    }
+  },
+  "settingsPlanNoAllowance": {
+    "message": "$CHOICE$ is selected, so there is no allowance over everything. Nothing is refused and plan alerts have nothing to measure against.",
+    "description": "Shown when a plan size is set but the user chose to measure only. CHOICE is the name of that option, so the sentence names the control the reader would change.",
+    "placeholders": {
+      "choice": { "content": "$1", "example": "Just measure" }
+    }
+  },
+  "settingsAllowanceLabel": {
+    "message": "Allowance over everything",
+    "description": "Heading of the card showing the budget that covers every site, as opposed to a single-site limit."
+  },
+  "settingsAllowanceResets": {
+    "message": "$PERIOD$ · resets $WHEN$",
+    "description": "Note beside the allowance-over-everything heading: the window the allowance covers, and when it restarts.",
+    "placeholders": {
+      "period": { "content": "$1", "example": "per month" },
+      "when": { "content": "$2", "example": "in 22 days" }
+    }
+  },
+  "settingsAllowanceTier": {
+    "message": "$TIER$ — $DETAIL$",
+    "description": "What the allowance is currently refusing: the short name of the step, then the sentence explaining what it costs.",
+    "placeholders": {
+      "tier": { "content": "$1", "example": "Skip video and audio" },
+      "detail": {
+        "content": "$2",
+        "example": "Video and audio segments are refused. Players usually drop to a lower quality or pause."
+      }
+    }
+  },
+
+  "settingsSaverKicker": {
+    "message": "Off until you switch it on",
+    "description": "Small label above the Data Saver heading, stating that the feature ships off."
+  },
+  "settingsSaverTitle": {
+    "message": "Data Saver",
+    "description": "Heading of the panel holding the page and network optimizers."
+  },
+  "settingsSaverSwitchLabel": {
+    "message": "Data Saver",
+    "description": "Label on the master on/off switch in the Data Saver panel header. Same words as the panel heading, on the control rather than the heading."
+  },
+  "settingsSaverIntro": {
+    "message": "Changes to what a page is allowed to ask for, each switchable on its own and listed below by how much you will notice it.",
+    "description": "Introduction to the Data Saver panel, explaining that the features are listed in order of visibility."
+  },
+  "settingsGroupInvisibleTitle": {
+    "message": "Nothing on the page changes",
+    "description": "Heading for the group of optimizers whose effect is not visible on the page."
+  },
+  "settingsGroupInvisibleNote": {
+    "message": "Only what the page is allowed to ask for changes. If one of these breaks something, it is a bug.",
+    "description": "Note under the \"Nothing on the page changes\" group heading."
+  },
+  "settingsGroupSubtleTitle": {
+    "message": "You may notice these",
+    "description": "Heading for the group of optimizers whose effect is sometimes visible."
+  },
+  "settingsGroupSubtleNote": {
+    "message": "Content can arrive later than it would have, or at a lower resolution than the page asked for.",
+    "description": "Note under the \"You may notice these\" group heading."
+  },
+  "settingsGroupNoticeableTitle": {
+    "message": "You will see these",
+    "description": "Heading for the group of optimizers whose effect is always visible."
+  },
+  "settingsGroupNoticeableNote": {
+    "message": "These change what a page looks like or how it behaves. They save the most.",
+    "description": "Note under the \"You will see these\" group heading."
+  },
+  "settingsGroupCount": {
+    "message": "$ON$ of $TOTAL$ on",
+    "description": "How many optimizers in one visibility group are switched on.",
+    "placeholders": {
+      "on": { "content": "$1", "example": "2" },
+      "total": { "content": "$2", "example": "4" }
+    }
+  },
+  "settingsImpactLow": {
+    "message": "Low",
+    "description": "Relative amount of data one optimizer is expected to save. Relative, not a percentage — the actual saving depends on the site."
+  },
+  "settingsImpactMedium": {
+    "message": "Medium",
+    "description": "Relative amount of data one optimizer is expected to save. Relative, not a percentage — the actual saving depends on the site."
+  },
+  "settingsImpactHigh": {
+    "message": "High",
+    "description": "Relative amount of data one optimizer is expected to save. Relative, not a percentage — the actual saving depends on the site."
+  },
+  "settingsImpactAria": {
+    "message": "Expected data savings: $LEVEL$",
+    "description": "Accessible name for the three-segment meter beside an optimizer. Not shown on screen; the level word beside it is.",
+    "placeholders": {
+      "level": { "content": "$1", "example": "High" }
+    }
+  },
+  "settingsFeatureSaveDataNote": {
+    "message": "Cost: it also makes this browser easier to recognise. Desktop Chrome has no setting that sends this header, so sending it is a rare, stable signal a tracker can use. It is on by default; the image services below remove the same kind of bytes without announcing anything.",
+    "description": "Privacy disclosure attached to the Save-Data optimizer, stating what sending the header costs. The privacy policy describes this control, so the wording has to keep saying that the header is a fingerprinting signal. Do not soften it."
+  },
+  "settingsExceptionsLabel": {
+    "message": "Website exceptions",
+    "description": "Heading for the list of sites Data Saver leaves completely alone."
+  },
+  "settingsExceptionsIntro": {
+    "message": "Leave a site completely alone: no rules, no page script, no rewritten images. This is the first thing to try if a site looks wrong.",
+    "description": "Explains what excluding a site does, and offers it as the first remedy for a broken page."
+  },
+  "settingsExceptionsPlaceholder": {
+    "message": "example.com",
+    "description": "Placeholder in the field for adding a site to leave alone. A domain name."
+  },
+  "settingsExceptionsInputLabel": {
+    "message": "Website to leave alone",
+    "description": "Accessible name for the field that adds a site to the exception list. Not shown on screen."
+  },
+  "settingsExceptionsAdd": {
+    "message": "Add exception",
+    "description": "Submit button for the form adding a site to the exception list."
+  },
+  "settingsExclusionsNone": {
+    "message": "None",
+    "description": "Count beside the \"Website exceptions\" heading when no site is excepted."
+  },
+  "settingsExclusionsCount": {
+    "message": "$COUNT$ excluded",
+    "description": "Count beside the \"Website exceptions\" heading when at least one site is excepted.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "3" }
+    }
+  },
+  "settingsExclusionsEmpty": {
+    "message": "No exceptions.",
+    "description": "Shown in place of the exception list when it is empty."
+  },
+  "settingsExclusionRemoveAria": {
+    "message": "Use Data Saver on $SITE$ again",
+    "description": "Accessible name for the button that removes one site from the exception list. Names what pressing it does, not what the site currently is.",
+    "placeholders": {
+      "site": { "content": "$1", "example": "youtube.com" }
+    }
+  },
+  "settingsExclusionDuplicate": {
+    "message": "$SITE$ is already an exception.",
+    "description": "Shown when the site typed into the exception form is already on the list.",
+    "placeholders": {
+      "site": { "content": "$1", "example": "youtube.com" }
+    }
+  },
+  "settingsAdvancedSummary": {
+    "message": "Advanced",
+    "description": "Label on the collapsed disclosure holding the per-image-service switches and the savings measurement rate."
+  },
+  "settingsAdvancedSummaryNote": {
+    "message": "image services, and how savings are measured",
+    "description": "Note beside the \"Advanced\" disclosure label, saying what is inside it. Lower case, as a continuation of the label."
+  },
+  "settingsPacksIntro": {
+    "message": "Image services that serve a smaller version of the same file from the same path. Byte Budget rewrites the request before it is sent, so the smaller file is what crosses the wire. If pictures from one service look wrong, switch that service off rather than excluding the whole site.",
+    "description": "Introduction to the per-image-service switches, ending with the remedy for a service that returns a wrong-looking image."
+  },
+  "settingsPackHosts": {
+    "message": "Only $HOSTS$.",
+    "description": "The hostnames one image service rule is allowed to touch, listed under its description so the scope is legible.",
+    "placeholders": {
+      "hosts": { "content": "$1", "example": "upload.wikimedia.org" }
+    }
+  },
+  "settingsHoldoutLabel": {
+    "message": "Measuring what this saves",
+    "description": "Label for the choice of how many page loads are deliberately left unoptimized so savings can be measured by comparison."
+  },
+  "settingsHoldoutOff": {
+    "message": "Off",
+    "description": "Option in the savings-measurement picker: hold no page loads back at all."
+  },
+  "settingsHoldoutPercent": {
+    "message": "$PERCENT$%",
+    "description": "Option in the savings-measurement picker: the share of page loads deliberately left unoptimized.",
+    "placeholders": {
+      "percent": { "content": "$1", "example": "10" }
+    }
+  },
+  "settingsHoldoutOffHint": {
+    "message": "No page loads are held back. Savings are then the estimator's guess at what a refused request weighed, plus arithmetic wherever the original size of a rewritten image is already on file. The dashboard says which part is which.",
+    "description": "Hint shown when no page loads are held back. States what the savings figure is then made of — a model, plus arithmetic where an original size is known — because the product's central claim is that measured and modelled figures are kept apart."
+  },
+  "settingsHoldoutOnHint": {
+    "message": "$PERCENT$% of page loads are deliberately left unoptimized, so \"saved\" can be the difference between two sets of real page loads rather than a model of one. A held-back load costs the bytes the optimizer would have removed — real money on a metered connection. A site also gets up to three of them before this rate applies, so there is something to compare against at all.",
+    "description": "CONSENT DISCLOSURE, not marketing copy. This is the only place the user is told that measuring the extension's own savings spends their data, and the sentence naming that cost — a held-back load costs the bytes the optimizer would have removed, real money on a metered connection — must stay as blunt as it is here. Do not soften it, do not drop it, do not move it behind the benefit.",
+    "placeholders": {
+      "percent": { "content": "$1", "example": "10" }
+    }
+  },
+  "settingsOptimizeReadError": {
+    "message": "Could not read Data Saver.",
+    "description": "Fallback error when the Data Saver settings cannot be loaded."
+  },
+  "settingsOptimizeSaveError": {
+    "message": "Could not save Data Saver.",
+    "description": "Fallback error when a Data Saver change cannot be written."
+  },
+  "settingsOptimizeLoading": {
+    "message": "Data Saver settings are still loading.",
+    "description": "Shown when a site is added to the exception list before the settings have arrived."
+  },
+
+  "settingsLimitsKicker": {
+    "message": "One site at a time",
+    "description": "Small label above the \"Site limits\" heading, distinguishing per-site limits from the allowance over everything."
+  },
+  "settingsLimitsTitle": {
+    "message": "Site limits",
+    "description": "Heading of the panel listing per-site allowances."
+  },
+  "settingsLimitsIntro": {
+    "message": "An allowance for one heavy site, over a session, a day, a week or a month. Click an allowance in the table to change it.",
+    "description": "Introduction to the site limits panel, including how to edit an existing limit."
+  },
+  "settingsLimitsNoteOne": {
+    "message": "$COUNT$ limit",
+    "description": "Count of site limits, shown beside the panel heading, when there is exactly one.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "1" }
+    }
+  },
+  "settingsLimitsNoteMany": {
+    "message": "$COUNT$ limits",
+    "description": "Count of site limits, shown beside the panel heading, when there is more than one.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "4" }
+    }
+  },
+  "settingsLimitsColSite": {
+    "message": "Site",
+    "description": "Column heading in the limits table: the website the limit is on. Repeated on each cell in the narrow one-card-per-limit layout."
+  },
+  "settingsLimitsColLimit": {
+    "message": "Limit",
+    "description": "Column heading in the limits table: the allowance and the window it covers. Repeated on each cell in the narrow one-card-per-limit layout."
+  },
+  "settingsLimitsColUsed": {
+    "message": "Used",
+    "description": "Column heading in the limits table: how much of the allowance has been spent. Repeated on each cell in the narrow one-card-per-limit layout."
+  },
+  "settingsLimitsColStatus": {
+    "message": "Status",
+    "description": "Column heading in the limits table: whether the site is within, near or over its limit. Repeated on each cell in the narrow one-card-per-limit layout."
+  },
+  "settingsLimitsColResets": {
+    "message": "Resets",
+    "description": "Column heading in the limits table: when the allowance next restarts. Repeated on each cell in the narrow one-card-per-limit layout."
+  },
+  "settingsLimitsColActions": {
+    "message": "Actions",
+    "description": "Column heading for the buttons column in the limits table. Read by screen readers only; the column has no visible heading."
+  },
+  "settingsLimitsEmpty": {
+    "message": "No site limits yet. Add one below, or set one from the popup while you are on the site.",
+    "description": "Empty state shown in place of the limits table, naming both ways to add a limit."
+  },
+  "settingsLimitSiteLabel": {
+    "message": "Website",
+    "description": "Label for the field naming the site a new limit applies to."
+  },
+  "settingsLimitSitePlaceholder": {
+    "message": "youtube.com",
+    "description": "Placeholder in the website field of the add-limit form. A domain name."
+  },
+  "settingsLimitSizeLabel": {
+    "message": "Allowance",
+    "description": "Label for the field holding how many bytes a new limit allows."
+  },
+  "settingsLimitSizePlaceholder": {
+    "message": "500 MB",
+    "description": "Placeholder in the allowance field of the add-limit form. Byte units are the ones the extension prints elsewhere."
+  },
+  "settingsLimitPeriodLabel": {
+    "message": "Per",
+    "description": "Label for the choice of window a new limit's allowance covers, read as \"Per: Day\"."
+  },
+  "settingsLimitPeriodTitle": {
+    "message": "Allowance $PERIOD$",
+    "description": "Tooltip on one option of the window picker, spelling out the abbreviated option label.",
+    "placeholders": {
+      "period": { "content": "$1", "example": "per day" }
+    }
+  },
+  "settingsPeriodSession": {
+    "message": "Session",
+    "description": "Option in the window picker: the allowance covers this browsing session and resets when Chrome closes."
+  },
+  "settingsPeriodDay": {
+    "message": "Day",
+    "description": "Option in the window picker: the allowance covers one day."
+  },
+  "settingsPeriodWeek": {
+    "message": "Week",
+    "description": "Option in the window picker: the allowance covers one week."
+  },
+  "settingsPeriodMonth": {
+    "message": "Month",
+    "description": "Option in the window picker: the allowance covers one month."
+  },
+  "settingsLimitHardLabel": {
+    "message": "Hard cap",
+    "description": "Switch on the add-limit form choosing a limit that refuses nothing until the allowance is spent, instead of shedding weight as it fills."
+  },
+  "settingsLimitHardHint": {
+    "message": "$SHAPE$.",
+    "description": "Hint under the hard cap switch. SHAPE is the shared description of that limit shape; this message only adds the full stop the sentence needs here.",
+    "placeholders": {
+      "shape": { "content": "$1", "example": "Nothing until it runs out" }
+    }
+  },
+  "settingsLimitAdd": {
+    "message": "Set limit",
+    "description": "Submit button for the add-limit form."
+  },
+  "settingsLimitSizeUnreadable": {
+    "message": "Could not read \"$INPUT$\" as a size. Try 500 MB or 1.5 GB.",
+    "description": "Error when the allowance typed into the add-limit form cannot be parsed. Quotes back exactly what was typed.",
+    "placeholders": {
+      "input": { "content": "$1", "example": "half a gig" }
+    }
+  },
+  "settingsLimitCreated": {
+    "message": "Limit set for $SITE$: $SIZE$ $PERIOD$, $SHAPE$.",
+    "description": "Confirmation after adding a limit. Names the site key that was actually stored, which is the only signal that a pasted address was trimmed to a domain.",
+    "placeholders": {
+      "site": { "content": "$1", "example": "youtube.com" },
+      "size": { "content": "$2", "example": "500 MB" },
+      "period": { "content": "$3", "example": "per day" },
+      "shape": { "content": "$4", "example": "shed weight as it fills" }
+    }
+  },
+  "settingsLimitReplaced": {
+    "message": "Replaced the limit on $SITE$: $SIZE$ $PERIOD$, $SHAPE$.",
+    "description": "Confirmation after adding a limit for a site that already had one. Saying it was replaced matters: the form used to overwrite silently.",
+    "placeholders": {
+      "site": { "content": "$1", "example": "youtube.com" },
+      "size": { "content": "$2", "example": "500 MB" },
+      "period": { "content": "$3", "example": "per day" },
+      "shape": { "content": "$4", "example": "shed weight as it fills" }
+    }
+  },
+  "settingsLimitsReadError": {
+    "message": "Could not read the limits.",
+    "description": "Fallback error when the list of limits cannot be loaded."
+  },
+  "settingsLimitChangeError": {
+    "message": "Could not change that limit.",
+    "description": "Fallback error when pausing, resuming, granting bytes to, editing or removing a limit fails."
+  },
+  "settingsStatusPaused": {
+    "message": "Paused",
+    "description": "Status of a limit that is not currently refusing anything, when the resume time is not known."
+  },
+  "settingsStatusPausedUntil": {
+    "message": "Paused · resumes $WHEN$",
+    "description": "Status of a limit that is not currently refusing anything, and when it starts again.",
+    "placeholders": {
+      "when": { "content": "$1", "example": "in 43 minutes" }
+    }
+  },
+  "settingsStatusOver": {
+    "message": "Over limit",
+    "description": "Status of a limit whose allowance is fully spent."
+  },
+  "settingsStatusNearly": {
+    "message": "Nearly full",
+    "description": "Status of a limit at or above 85% of its allowance."
+  },
+  "settingsStatusWithin": {
+    "message": "Within limit",
+    "description": "Status of a limit below 85% of its allowance."
+  },
+  "settingsMeter": {
+    "message": "$USED$ of $ALLOWANCE$ · $PERCENT$",
+    "description": "Text label on the progress bar for one limit.",
+    "placeholders": {
+      "used": { "content": "$1", "example": "1.1 MB" },
+      "allowance": { "content": "$2", "example": "800 kB" },
+      "percent": { "content": "$3", "example": "132%" }
+    }
+  },
+  "settingsGrantSession": {
+    "message": "+$SIZE$ this session",
+    "description": "Button adding bytes to a limit's current window, where the window is this browsing session.",
+    "placeholders": {
+      "size": { "content": "$1", "example": "100 MB" }
+    }
+  },
+  "settingsGrantDay": {
+    "message": "+$SIZE$ today",
+    "description": "Button adding bytes to a limit's current window, where the window is one day.",
+    "placeholders": {
+      "size": { "content": "$1", "example": "100 MB" }
+    }
+  },
+  "settingsGrantWeek": {
+    "message": "+$SIZE$ this week",
+    "description": "Button adding bytes to a limit's current window, where the window is one week.",
+    "placeholders": {
+      "size": { "content": "$1", "example": "100 MB" }
+    }
+  },
+  "settingsGrantMonth": {
+    "message": "+$SIZE$ this month",
+    "description": "Button adding bytes to a limit's current window, where the window is one month.",
+    "placeholders": {
+      "size": { "content": "$1", "example": "100 MB" }
+    }
+  },
+  "settingsGrantTitleSession": {
+    "message": "Raises the allowance to $TOTAL$ until it resets. Only for this session.",
+    "description": "Tooltip on the add-bytes button for a session limit, stating the resulting allowance before the click.",
+    "placeholders": {
+      "total": { "content": "$1", "example": "600 MB" }
+    }
+  },
+  "settingsGrantTitleWindow": {
+    "message": "Raises the allowance to $TOTAL$ until it resets. Only for this window.",
+    "description": "Tooltip on the add-bytes button for a day, week or month limit, stating the resulting allowance before the click.",
+    "placeholders": {
+      "total": { "content": "$1", "example": "600 MB" }
+    }
+  },
+  "settingsResume": {
+    "message": "Resume",
+    "description": "Button that starts enforcing a paused limit again."
+  },
+  "settingsResumeTitle": {
+    "message": "Start enforcing this limit again now",
+    "description": "Tooltip on the Resume button."
+  },
+  "settingsPause": {
+    "message": "Pause 1 h",
+    "description": "Button that suspends a limit for one hour. Abbreviated to fit a row of buttons."
+  },
+  "settingsPauseTitle": {
+    "message": "Stop refusing anything for an hour. The counter keeps running.",
+    "description": "Tooltip on the Pause button. The second sentence matters: pausing does not stop the measurement."
+  },
+  "settingsRemove": {
+    "message": "Remove",
+    "description": "Button that deletes a limit."
+  },
+  "settingsRemoveTitle": {
+    "message": "Deletes the limit and lifts anything it is refusing right now",
+    "description": "Tooltip on the Remove button. Says the refusals stop immediately, because Remove is the user's escape hatch from a site that has stopped working."
+  },
+  "settingsLimitAllowanceButton": {
+    "message": "$SIZE$ $PERIOD$",
+    "description": "The allowance cell in the limits table, which is also the button that opens the editor.",
+    "placeholders": {
+      "size": { "content": "$1", "example": "500 MB" },
+      "period": { "content": "$2", "example": "per day" }
+    }
+  },
+  "settingsLimitEditAria": {
+    "message": "Change the allowance for $SITE$",
+    "description": "Accessible name for the allowance button in one row, since the visible label is a size and does not say which site it belongs to.",
+    "placeholders": {
+      "site": { "content": "$1", "example": "youtube.com" }
+    }
+  },
+  "settingsLimitEditTitle": {
+    "message": "Change this allowance",
+    "description": "Tooltip on the allowance button in the limits table."
+  },
+  "settingsResetsOnClose": {
+    "message": "on browser close",
+    "description": "Value in the Resets column for a session limit, which has no fixed reset time."
+  },
+  "settingsEditAmountAria": {
+    "message": "Allowance for $SITE$",
+    "description": "Accessible name for the number field in the inline allowance editor.",
+    "placeholders": {
+      "site": { "content": "$1", "example": "youtube.com" }
+    }
+  },
+  "settingsEditUnitAria": {
+    "message": "Unit",
+    "description": "Accessible name for the byte-unit dropdown beside the number field in the inline allowance editor."
+  },
+  "settingsEditSave": {
+    "message": "Save",
+    "description": "Submit button in the inline allowance editor."
+  },
+  "settingsCancel": {
+    "message": "Cancel",
+    "description": "Button that abandons an edit or a pending deletion without changing anything."
+  },
+  "settingsEditSizeInvalid": {
+    "message": "Give the allowance a size above zero.",
+    "description": "Error when the inline allowance editor is submitted with a blank, zero or negative number."
+  },
+  "settingsEditSaved": {
+    "message": "$SITE$ is now $SIZE$ $PERIOD$.",
+    "description": "Confirmation after changing an existing allowance in place.",
+    "placeholders": {
+      "site": { "content": "$1", "example": "youtube.com" },
+      "size": { "content": "$2", "example": "1 GB" },
+      "period": { "content": "$3", "example": "per day" }
+    }
+  },
+  "settingsTierSummary": {
+    "message": "What a limit does as it fills",
+    "description": "Label on the collapsed disclosure holding the table of what each step of a limit refuses."
+  },
+  "settingsTierExplainer": {
+    "message": "\"$SHED$\" walks down these steps as the allowance fills. \"$STOP$\" skips all of them until 100%, and then applies the last one.",
+    "description": "Explains how the two limit shapes relate to the table of steps below it.",
+    "placeholders": {
+      "shed": { "content": "$1", "example": "Shed weight as it fills" },
+      "stop": { "content": "$2", "example": "Nothing until it runs out" }
+    }
+  },
+  "settingsTierColAt": {
+    "message": "At",
+    "description": "Column heading: the share of the allowance at which this step begins."
+  },
+  "settingsTierColRefuses": {
+    "message": "Refuses",
+    "description": "Column heading: what this step of a limit stops loading."
+  },
+  "settingsTierColSee": {
+    "message": "What you see",
+    "description": "Column heading: what the step looks like on the page."
+  },
+  "settingsTierNote": {
+    "message": "The page's own HTML always loads, at every step, so the site can say what happened instead of showing a browser error. Pause a limit for an hour, add bytes to the current window, or remove it, at any time.",
+    "description": "Note under the table of limit steps. The first sentence is the reason the document is never blocked; the second lists the ways out of a limit."
+  },
+
+  "settingsAlertsTitle": {
+    "message": "Alerts",
+    "description": "Heading of the panel choosing which allowances raise a desktop notification."
+  },
+  "settingsAlertsIntro": {
+    "message": "A desktop notification when an allowance is running out, said once per window and not again for that window.",
+    "description": "Introduction to the alerts panel, bounding how often a notification can arrive."
+  },
+  "settingsAlertPlanLabel": {
+    "message": "My whole plan",
+    "description": "Switch turning on notifications for the allowance that covers every site."
+  },
+  "settingsAlertPlanHint": {
+    "message": "The allowance over everything, from the plan above. On by default: a plan running out is the thing nobody is watching for.",
+    "description": "Hint under the plan alerts switch, giving the reason it ships on."
+  },
+  "settingsAlertSitesLabel": {
+    "message": "A single site's limit",
+    "description": "Switch turning on notifications for per-site limits."
+  },
+  "settingsAlertSitesHint": {
+    "message": "Off by default: a limit you typed on a site you chose is one you expect to reach.",
+    "description": "Hint under the per-site alerts switch, giving the reason it ships off."
+  },
+  "settingsAlertsThresholds": {
+    "message": "Thresholds are fixed at $THRESHOLDS$, and only the highest one crossed is sent — one large download cannot produce three notifications at once.",
+    "description": "States when a notification is sent. The thresholds are printed from the alerting module rather than typed, so the sentence cannot come to describe a ladder that is no longer used.",
+    "placeholders": {
+      "thresholds": { "content": "$1", "example": "75%, 90%, 100%" }
+    }
+  },
+  "settingsAlertsNoAllowance": {
+    "message": "Plan alerts are on, but there is no allowance over everything for them to measure: set a plan size above and choose \"$SHED$\" or \"$STOP$\".",
+    "description": "Appended to the threshold sentence when plan alerts are on with nothing to alert on — the default state of a fresh install. SHED and STOP name the two options that create an allowance.",
+    "placeholders": {
+      "shed": { "content": "$1", "example": "Shed weight" },
+      "stop": { "content": "$2", "example": "Hard stop" }
+    }
+  },
+  "settingsAlertsReadError": {
+    "message": "Could not read the alert settings.",
+    "description": "Fallback error when the alert settings cannot be loaded."
+  },
+  "settingsAlertsSaveError": {
+    "message": "Could not save the alert settings.",
+    "description": "Fallback error when an alert setting cannot be written."
+  },
+
+  "settingsPreferencesTitle": {
+    "message": "Appearance & units",
+    "description": "Heading of the panel holding theme, toolbar badge, units and how weeks and months are counted."
+  },
+  "settingsThemeLabel": {
+    "message": "Theme",
+    "description": "Label for the light/dark/system picker."
+  },
+  "settingsThemeAuto": {
+    "message": "System",
+    "description": "Theme option: follow whatever the operating system is set to."
+  },
+  "settingsThemeLight": {
+    "message": "Light",
+    "description": "Theme option: always light."
+  },
+  "settingsThemeDark": {
+    "message": "Dark",
+    "description": "Theme option: always dark."
+  },
+  "settingsBadgeLabel": {
+    "message": "Toolbar badge",
+    "description": "Label for the picker choosing what figure is drawn on the extension's toolbar icon."
+  },
+  "settingsBadgeOff": {
+    "message": "Off",
+    "description": "Toolbar badge option: draw nothing on the icon."
+  },
+  "settingsBadgeSession": {
+    "message": "Session",
+    "description": "Toolbar badge option: show the total for this browsing session."
+  },
+  "settingsBadgeToday": {
+    "message": "Today",
+    "description": "Toolbar badge option: show today's total."
+  },
+  "settingsUnitsLabel": {
+    "message": "Units",
+    "description": "Label for the decimal/binary byte units picker."
+  },
+  "settingsUnitsHint": {
+    "message": "A data plan is quoted in decimal units (1 GB = 1000 MB); a file manager counts binary ones (1 GiB = 1024 MiB). The same bytes read as 15 GB or 14 GiB, which is why the unit is always printed.",
+    "description": "Hint under the units picker, explaining why the two options exist and why the unit symbol is always shown."
+  },
+  "settingsPeriodsSummary": {
+    "message": "How weeks and months are counted",
+    "description": "Label on the collapsed disclosure holding the week-start and rolling/calendar window choices."
+  },
+  "settingsWeekStartLabel": {
+    "message": "A week starts on",
+    "description": "Label for the choice of which weekday a calendar week begins on."
+  },
+  "settingsWeekSunday": {
+    "message": "Sunday",
+    "description": "Week-start option."
+  },
+  "settingsWeekMonday": {
+    "message": "Monday",
+    "description": "Week-start option."
+  },
+  "settingsWeekModeLabel": {
+    "message": "\"7 days\" means",
+    "description": "Label for the choice of what the week period on the other surfaces covers. The quoted phrase is the label those surfaces use."
+  },
+  "settingsWeekRolling": {
+    "message": "The last 7 days",
+    "description": "Week window option: a rolling seven days ending today."
+  },
+  "settingsWeekCalendar": {
+    "message": "This week so far",
+    "description": "Week window option: from the start of the current calendar week."
+  },
+  "settingsMonthModeLabel": {
+    "message": "\"30 days\" means",
+    "description": "Label for the choice of what the month period on the other surfaces covers. The quoted phrase is the label those surfaces use."
+  },
+  "settingsMonthModeHint": {
+    "message": "A calendar month is not the same window as your plan's cycle. The cycle is the one the projection uses.",
+    "description": "Hint under the month window choice, keeping it distinct from the billing cycle set in the plan panel."
+  },
+  "settingsMonthRolling": {
+    "message": "The last 30 days",
+    "description": "Month window option: a rolling thirty days ending today."
+  },
+  "settingsMonthCalendar": {
+    "message": "This month so far",
+    "description": "Month window option: from the start of the current calendar month."
+  },
+  "settingsSaving": {
+    "message": "Saving…",
+    "description": "Shown while a change is being written. Trailing character is a single ellipsis."
+  },
+  "settingsSaved": {
+    "message": "Saved",
+    "description": "Shown after a change is written, in the small status slots beside a panel heading, where nothing else is a sentence."
+  },
+  "settingsSavedSentence": {
+    "message": "Saved.",
+    "description": "Shown after a change is written, in the plan panel's status line, where the surrounding messages are sentences."
+  },
+  "settingsSaveError": {
+    "message": "Could not save that setting.",
+    "description": "Fallback error when a preference cannot be written."
+  },
+  "settingsReadError": {
+    "message": "Could not read settings.",
+    "description": "Fallback error when the preferences cannot be loaded."
+  },
+
+  "settingsDataTitle": {
+    "message": "Privacy & data",
+    "description": "Heading of the panel describing what is stored, and holding export and delete."
+  },
+  "settingsStorageNote": {
+    "message": "Stored on this device",
+    "description": "Note beside the Privacy & data heading."
+  },
+  "settingsPrivacyBlurb": {
+    "message": "Byte Budget records bytes per site per day and per hour, which hosts a site's bytes came from, and one row per page load holding the site and origin — never a path or a query string. It has no account, no server and makes no network request of its own. Preferences follow you through Chrome sync; site names, limits and exceptions do not leave this profile. All of it covers this Chrome profile on this device: other profiles, other browsers, other devices on the same connection and everything outside Chrome are invisible to an extension.",
+    "description": "PRIVACY DISCLOSURE. States exactly what is recorded, what leaves the profile, and the scope limit of every figure in the product. It matches the published privacy policy, so nothing here may be generalised, shortened or made more reassuring."
+  },
+  "settingsRetentionLabel": {
+    "message": "Keep daily usage for",
+    "description": "Label for how long daily rows are kept before being deleted."
+  },
+  "settingsRetentionHint": {
+    "message": "Hourly detail is kept for 3 days whatever this says. Shortening it deletes the days outside the window at the next tidy-up, which runs every six hours.",
+    "description": "Hint under the retention picker, naming what the setting does not cover and when a shortened window takes effect."
+  },
+  "settingsRetentionDays": {
+    "message": "$DAYS$ days",
+    "description": "One retention option, and the way the current retention is named in the delete warning.",
+    "placeholders": {
+      "days": { "content": "$1", "example": "90" }
+    }
+  },
+  "settingsRetentionForever": {
+    "message": "Forever",
+    "description": "Retention option: never delete daily rows on age."
+  },
+  "settingsTrackHostsLabel": {
+    "message": "Record which hosts a site's bytes came from",
+    "description": "Switch for per-host detail inside each site."
+  },
+  "settingsTrackHostsHint": {
+    "message": "Off makes the per-site drill-down poorer and the database smaller. Rows already recorded stay until they age out.",
+    "description": "Hint under the per-host switch, naming both what is lost and what switching it off does not do."
+  },
+  "settingsExportLabel": {
+    "message": "Export",
+    "description": "Heading for the export controls."
+  },
+  "settingsExportHint": {
+    "message": "One row per site per day, as stored: the date, the site, bytes down and up, requests, and how much of the down figure was estimated rather than measured.",
+    "description": "Describes the shape of an exported file, column by column."
+  },
+  "settingsExportRangeLabel": {
+    "message": "Export range",
+    "description": "Accessible name for the dropdown choosing how many days an export covers. Not shown on screen."
+  },
+  "settingsExportRangeDays": {
+    "message": "Last $DAYS$ days",
+    "description": "One option in the export range dropdown.",
+    "placeholders": {
+      "days": { "content": "$1", "example": "30" }
+    }
+  },
+  "settingsExportCsv": {
+    "message": "Export CSV",
+    "description": "Button downloading the usage table as a CSV file."
+  },
+  "settingsExportJson": {
+    "message": "Export JSON",
+    "description": "Button downloading the usage table as a JSON file."
+  },
+  "settingsExportWrote": {
+    "message": "Wrote $FILE$.",
+    "description": "Confirmation after an export, naming the file that was downloaded.",
+    "placeholders": {
+      "file": { "content": "$1", "example": "byte-budget-30d.csv" }
+    }
+  },
+  "settingsExportError": {
+    "message": "Could not export.",
+    "description": "Fallback error when an export fails."
+  },
+  "settingsDeleteLabel": {
+    "message": "Delete recorded usage",
+    "description": "Heading for the delete controls."
+  },
+  "settingsDeleteScope": {
+    "message": "This deletes every recorded byte count in this profile: the daily and hourly rows, the per-host rows, one row per page load, the learned size estimator and the observed image sizes. Limits, exceptions and the settings on this page are kept. To remove only the older days instead, shorten \"$SETTING$\" above.",
+    "description": "Says what deletion removes and what it leaves, and offers the narrower alternative. SETTING is the name of the retention control, so the sentence points at a control the reader can see.",
+    "placeholders": {
+      "setting": { "content": "$1", "example": "Keep daily usage for" }
+    }
+  },
+  "settingsDeleteScopeKept": {
+    "message": "This deletes every recorded byte count in this profile: the daily and hourly rows, the per-host rows, one row per page load, the learned size estimator and the observed image sizes. Limits, exceptions and the settings on this page are kept. To remove only the older days instead, shorten \"$SETTING$\" above — it is $KEPT$ now.",
+    "description": "The same sentence as settingsDeleteScope, with the current retention value appended. Kept as one whole message rather than a sentence plus a tail, so the clause can be placed wherever the language needs it.",
+    "placeholders": {
+      "setting": { "content": "$1", "example": "Keep daily usage for" },
+      "kept": { "content": "$2", "example": "90 days" }
+    }
+  },
+  "settingsDeleteButton": {
+    "message": "Delete all recorded usage",
+    "description": "Button that arms the deletion. It does not delete on its own — a second button confirms."
+  },
+  "settingsDeleteConfirm": {
+    "message": "Yes, delete everything recorded",
+    "description": "Second button, which performs the deletion. Worded so it cannot be pressed by reflex."
+  },
+  "settingsDeleteWarning": {
+    "message": "This cannot be undone, and nothing is exported first.",
+    "description": "Shown once deletion is armed. Two steps in the page rather than a modal dialog, because a dialog is read as boilerplate."
+  },
+  "settingsDeleting": {
+    "message": "Deleting…",
+    "description": "Shown while the deletion is running."
+  },
+  "settingsDeleted": {
+    "message": "Deleted. Every limit now starts its current window from zero.",
+    "description": "Confirmation after deletion. The second sentence is a consequence, not reassurance: the counters limits are checked against have restarted."
+  },
+  "settingsDeleteError": {
+    "message": "Could not delete.",
+    "description": "Fallback error when the deletion fails."
+  },
+  "settingsStorageSummary": {
+    "message": "What this is costing on disk",
+    "description": "Label on the collapsed disclosure holding the row counts and disk estimate."
+  },
+  "settingsStorageReading": {
+    "message": "Reading…",
+    "description": "Shown while the storage report is being counted. It is read on demand because counting every store is real work."
+  },
+  "settingsStorageError": {
+    "message": "Could not read the storage report.",
+    "description": "Fallback error when the storage report cannot be read."
+  },
+  "settingsStorageColStore": {
+    "message": "Store",
+    "description": "Column heading in the storage report: the name of one store."
+  },
+  "settingsStorageColRows": {
+    "message": "Rows",
+    "description": "Column heading in the storage report: how many rows that store holds."
+  },
+  "settingsStorageColHolds": {
+    "message": "What it holds",
+    "description": "Column heading in the storage report: what one row of that store is."
+  },
+  "settingsStorageDailyLabel": {
+    "message": "Days of usage",
+    "description": "Storage report row: the daily totals store."
+  },
+  "settingsStorageDailyDesc": {
+    "message": "One row per site per day",
+    "description": "What one row of the daily store is."
+  },
+  "settingsStorageHourlyLabel": {
+    "message": "Hours of usage",
+    "description": "Storage report row: the hourly totals store."
+  },
+  "settingsStorageHourlyDesc": {
+    "message": "One row per site per hour, kept 3 days",
+    "description": "What one row of the hourly store is, and how long it survives."
+  },
+  "settingsStorageHostsLabel": {
+    "message": "Host rows",
+    "description": "Storage report row: the per-host detail store."
+  },
+  "settingsStorageHostsDesc": {
+    "message": "Which hosts a site's bytes came from",
+    "description": "What one row of the per-host store is."
+  },
+  "settingsStorageVisitsLabel": {
+    "message": "Page loads",
+    "description": "Storage report row: the one-row-per-page-load store."
+  },
+  "settingsStorageVisitsDesc": {
+    "message": "Site and origin only — no path, no query",
+    "description": "What one page-load row holds. The exclusion is the point: it is what keeps this from being a browsing history."
+  },
+  "settingsStorageModelLabel": {
+    "message": "Learned sizes",
+    "description": "Storage report row: the learned size estimator."
+  },
+  "settingsStorageModelDesc": {
+    "message": "The estimator, per host and type",
+    "description": "What one row of the size estimator is."
+  },
+  "settingsStorageBaselinesLabel": {
+    "message": "Observed image sizes",
+    "description": "Storage report row: recorded sizes of image variants an image-service rule can rewrite."
+  },
+  "settingsStorageBaselinesDesc": {
+    "message": "Original sizes of images a pack can rewrite. Not covered by the retention setting.",
+    "description": "What one baseline row is. The second sentence is a disclosure: this store ages out on its own schedule, not on the retention chosen above."
+  },
+  "settingsStorageNotReported": {
+    "message": "not reported",
+    "description": "Shown in the Rows column when the worker did not return a count for that store."
+  },
+  "settingsStorageNoEstimate": {
+    "message": "The browser does not report how much disk this is using.",
+    "description": "Shown instead of a disk figure when the browser gives no estimate."
+  },
+  "settingsStorageEstimate": {
+    "message": "The browser estimates $SIZE$ on disk for this extension, rounded for privacy and including the settings.",
+    "description": "The disk figure, with both of its caveats: the browser rounds it deliberately, and it covers more than the stores listed above.",
+    "placeholders": {
+      "size": { "content": "$1", "example": "4.2 MB" }
+    }
+  },
+  "settingsFlushErrorChip": {
+    "message": "Some counts did not land",
+    "description": "Chip introducing the report of a failed write to the ledger."
+  },
+  "settingsFlushError": {
+    "message": "The last write that failed was $WHEN$: $REASON$. Those counts were put back in the buffer and retried, so they are not lost — but every total read between then and the retry was low by that much.",
+    "description": "Admission that a write to the ledger failed. REASON is the browser's own error text and is not translated. Keep the last clause: it says the figures on screen were wrong for a while, which is the part a reader needs.",
+    "placeholders": {
+      "when": { "content": "$1", "example": "6 minutes ago" },
+      "reason": { "content": "$2", "example": "Transaction aborted" }
+    }
+  },
+
+  "settingsSiteErrorEmpty": {
+    "message": "Which website is it for?",
+    "description": "Error when the website field is empty, or holds something with no hostname in it at all."
+  },
+  "settingsSiteErrorScheme": {
+    "message": "Only http and https addresses can be used here.",
+    "description": "Error when a pasted address uses a scheme the extension cannot meter, e.g. ftp: or file:."
+  },
+  "settingsSiteErrorIpv6": {
+    "message": "Byte Budget matches sites by name, so an IPv6 address cannot be used.",
+    "description": "Error when an IPv6 literal is typed. Names the reason: rules are matched by domain name, so such a limit would exist and never fire."
+  },
+  "settingsSiteErrorShape": {
+    "message": "\"$INPUT$\" is not a website address. One looks like example.com.",
+    "description": "Error when what was typed cannot be a hostname at all. Quotes back exactly what was typed and shows the shape of a valid answer.",
+    "placeholders": {
+      "input": { "content": "$1", "example": "my videos!" }
+    }
+  },
+  "settingsSiteErrorNoEnding": {
+    "message": "\"$HOST$\" has no domain ending. Try \"$HOST$.com\", or paste the address.",
+    "description": "Error when a bare name was typed with no dot in it. Suggests the correction rather than silently creating a limit that can never match a request. HOST appears twice on purpose: once as typed, once inside the suggestion.",
+    "placeholders": {
+      "host": { "content": "$1", "example": "youtube" }
+    }
+  },
+  "settingsSiteErrorBadEnding": {
+    "message": "\"$HOST$\" does not end in something like .com or .org.",
+    "description": "Error when the last label of what was typed cannot be a top-level domain.",
+    "placeholders": {
+      "host": { "content": "$1", "example": "example.123" }
+    }
+  }
+}

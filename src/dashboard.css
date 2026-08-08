@@ -5,10 +5,19 @@ html {
 }
 
 body {
+  /* A gradient position has no logical form, so the corner is a variable and
+     `:dir(rtl)` moves it — the glow sits behind the end of the page head, which
+     follows the inline direction. */
+  --glow-x: 100%;
+
   min-height: 100vh;
   background:
-    radial-gradient(88% 36% at 100% 0%, var(--bg-glow) 0%, transparent 62%),
+    radial-gradient(88% 36% at var(--glow-x) 0%, var(--bg-glow) 0%, transparent 62%),
     var(--bg);
+}
+
+:dir(rtl) body {
+  --glow-x: 0%;
 }
 
 .page {
@@ -219,7 +228,7 @@ section[id],
 }
 
 .stat-value .unit {
-  margin-left: 3px;
+  margin-inline-start: 3px;
   font-size: 13px;
   font-weight: 650;
   color: var(--text-soft);
@@ -364,6 +373,14 @@ section[id],
   grid-template-columns: auto minmax(0, 1fr);
   gap: 8px;
   align-items: start;
+  /*
+   * Pinned for the same reason as `.chart` in app.css, and it has to be said again
+   * here: grid tracks are placed along the inline direction, so under `dir="rtl"`
+   * the axis column would move to the far side of a plot that is not mirroring with
+   * it — a scale detached from the bars it measures. `.chart-axis` below keeps its
+   * physical `text-align: right` for the same reason.
+   */
+  direction: ltr;
 }
 
 .dashboard-chart .chart-frame {
@@ -385,9 +402,17 @@ section[id],
   color: var(--text-muted);
   font-size: 9px;
   line-height: 1;
+  /* Physical, not `end`: the labels hug the plot, and the plot does not move — see
+     the note in `.chart-frame`. */
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+
+/* The frame pins its own direction and direction inherits; these three labels are
+   text, so they get it back. See `.chart-bar-tick` in app.css. */
+:dir(rtl) .chart-axis {
+  direction: rtl;
 }
 
 .chart-plot {
@@ -453,7 +478,7 @@ section[id],
 }
 
 .summary-note {
-  margin-left: 5px;
+  margin-inline-start: 5px;
   color: var(--text-muted);
   font-weight: 500;
 }
@@ -470,6 +495,14 @@ section[id],
 }
 
 .site-go {
+  /*
+   * How far the chevron leans on hover, and which way. The glyph is U+203A, which
+   * is Bidi_Mirrored, so it turns around by itself in an RTL run — but a transform
+   * is geometry and does not, and a chevron pointing one way while nudging the
+   * other is a control that looks broken rather than one that looks eager.
+   */
+  --go-nudge: 2px;
+
   color: var(--text-muted);
   font-size: 15px;
   line-height: 1;
@@ -477,10 +510,14 @@ section[id],
   transition: opacity 120ms ease, transform 120ms ease;
 }
 
+:dir(rtl) .site-go {
+  --go-nudge: -2px;
+}
+
 .site-row:hover .site-go,
 .site-row:focus-visible .site-go {
   opacity: 1;
-  transform: translateX(2px);
+  transform: translateX(var(--go-nudge));
 }
 
 .site-row:hover .site-name {
@@ -643,7 +680,7 @@ section[id],
 .table td {
   padding: 7px 8px;
   border-bottom: 1px solid var(--border);
-  text-align: left;
+  text-align: start;
 }
 
 .table th {
@@ -655,7 +692,9 @@ section[id],
 }
 
 .table .numeric {
-  text-align: right;
+  /* `end`, not a pinned `right`: a figures column aligns against the opposite edge
+     from the labels beside it, and both edges swap together. */
+  text-align: end;
   font-variant-numeric: tabular-nums;
 }
 
@@ -673,7 +712,7 @@ section[id],
 }
 
 .host-tag {
-  margin-left: 6px;
+  margin-inline-start: 6px;
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--surface-3);
@@ -871,6 +910,15 @@ section[id],
 }
 
 .switch-track {
+  /*
+   * How far the knob travels, and which way. The track is a flex row, so the knob
+   * already rests at the inline start and the "on" end is the opposite one — but
+   * the travel is a transform, and a transform is geometry that does not follow the
+   * inline direction. Left unmirrored, a switch under `dir="rtl"` would move the
+   * knob out of the track when it was turned on.
+   */
+  --knob-travel: 19px;
+
   display: flex;
   width: 44px;
   height: 25px;
@@ -880,6 +928,10 @@ section[id],
   border-radius: 999px;
   background: var(--surface-3);
   transition: background 140ms ease, border-color 140ms ease;
+}
+
+:dir(rtl) .switch-track {
+  --knob-travel: -19px;
 }
 
 .switch-track span {
@@ -897,7 +949,7 @@ section[id],
 }
 
 .switch-control input:checked + .switch-track span {
-  transform: translateX(19px);
+  transform: translateX(var(--knob-travel));
 }
 
 .switch-control input:focus-visible + .switch-track {
@@ -1053,7 +1105,9 @@ section[id],
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  text-align: right;
+  /* The label is the last item in the meter's flex row, and its 41px column is wider
+     than the word in it; `end` keeps it against the outer edge as the row swaps. */
+  text-align: end;
   text-transform: uppercase;
 }
 
@@ -1093,7 +1147,10 @@ section[id],
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 3px 2px 10px;
+  /* Asymmetric: the hostname needs a full inset, the 24px remove button after it
+     brings its own. Both follow the text, so both are inline values. */
+  padding-block: 2px;
+  padding-inline: 10px 3px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--surface-2);
@@ -1374,7 +1431,7 @@ section[id],
     gap: 12px;
     padding: 3px 0;
     border: 0;
-    text-align: left;
+    text-align: start;
   }
 
   #limits-table td[data-label]::before {
@@ -1388,7 +1445,7 @@ section[id],
   }
 
   #limits-table td.numeric {
-    text-align: left;
+    text-align: start;
   }
 
   #limits-table .limit-meter {

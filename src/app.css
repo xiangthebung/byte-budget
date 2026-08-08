@@ -413,6 +413,21 @@ ol {
   justify-content: center;
   gap: 2px;
   height: 76px;
+  /*
+   * The bars are deliberately not mirrored.
+   *
+   * These bars are a time axis, and the series is built oldest-first: `barChart`
+   * puts its padding spacers ahead of the bars so the newest bucket is always the
+   * last child (`core/chart.ts`). A flex row follows the inline direction, so under
+   * `dir="rtl"` today would move to the left and the empty padding to the right —
+   * and a reader would be looking at a chart of the same numbers in the opposite
+   * order with nothing on screen saying so. Bar charts are conventionally not
+   * mirrored, so the axis stays physical.
+   *
+   * This is the whole of the exception, not a start on one: `.chart-bar-tick` below
+   * puts the direction back for the label text, which is text and does mirror.
+   */
+  direction: ltr;
 }
 
 .chart-bar {
@@ -479,6 +494,17 @@ button.chart-bar:hover .chart-bar-fill {
 }
 
 /*
+ * `.chart` pins the bar order to left-to-right with `direction`, and direction
+ * inherits — so without this the tick labels would be laid out LTR too, which is a
+ * claim about the text rather than about the axis. `:dir()` reads the document's
+ * declared directionality, not the inherited CSS `direction`, so it still matches
+ * inside the pinned box.
+ */
+:dir(rtl) .chart-bar-tick {
+  direction: rtl;
+}
+
+/*
  * The key for the two-tone bar, drawn only when something is in the second band.
  * A legend for a colour that is not on screen teaches the reader to look for one
  * that is not there.
@@ -524,6 +550,14 @@ button.chart-bar:hover .chart-bar-fill {
   white-space: nowrap;
 }
 
+/*
+ * This one does follow the inline direction, unlike `.chart` above.
+ *
+ * It is a proportion of a whole rather than a run of time, and every meter on both
+ * surfaces is a plain `width` percentage, which already starts at the inline edge.
+ * A share bar that filled from the opposite end to the meters around it would read
+ * as a measurement of something else.
+ */
 .stack-track {
   display: flex;
   overflow: hidden;
@@ -619,7 +653,7 @@ button.chart-bar:hover .chart-bar-fill {
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  text-align: left;
+  text-align: start;
 }
 
 .site-row:hover {

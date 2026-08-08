@@ -3,7 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Byte Budget — data usage</title>
+    <!--
+      No prose in this file, only `data-i18n*` attributes naming a message.
+
+      Chrome expands `__MSG_name__` in the manifest and in CSS but not in an
+      extension's HTML, so English left inline here would be a second copy of every
+      string in `i18n/dashboard.json` with nothing keeping the two in step. The pass
+      at the top of `dashboard.ts` fills them before the first render, which also
+      means a key that was renamed shows as the key rather than as stale English.
+    -->
+    <title data-i18n="dashboardPageTitle"></title>
   </head>
   <body>
     <div class="page dashboard-page">
@@ -11,9 +20,9 @@
         <div class="brand">
           <img class="brand-mark" src="./icon.svg" alt="" width="40" height="40" />
           <div class="brand-copy">
-            <p class="brand-eyebrow">Byte Budget</p>
-            <h1 class="brand-title">Your data usage</h1>
-            <p class="brand-sub" id="period-description">Loading…</p>
+            <p class="brand-eyebrow" data-i18n="dashboardBrandEyebrow"></p>
+            <h1 class="brand-title" data-i18n="dashboardBrandTitle"></h1>
+            <p class="brand-sub" id="period-description" data-i18n="dashboardLoading"></p>
             <!-- Shown only once the payload on screen is older than the poll can
                  explain; `dashboard.ts` owns the threshold. -->
             <p class="brand-stale" id="updated-note" hidden></p>
@@ -25,16 +34,20 @@
           role promises a keyboard contract that the hand-wired version never had.
           `bindGroup` in core/dom.ts makes both real radio groups at startup.
         -->
-        <div class="segmented" aria-label="Usage period" id="period-tabs"></div>
+        <div
+          class="segmented"
+          data-i18n-aria-label="dashboardPeriodGroupLabel"
+          id="period-tabs"
+        ></div>
       </header>
 
-      <nav class="section-nav" aria-label="Main navigation">
-        <a href="./dashboard.html" aria-current="page">Dashboard</a>
-        <a href="./settings.html">Settings</a>
+      <nav class="section-nav" data-i18n-aria-label="dashboardNavLabel">
+        <a href="./dashboard.html" aria-current="page" data-i18n="dashboardNavDashboard"></a>
+        <a href="./settings.html" data-i18n="dashboardNavSettings"></a>
       </nav>
 
       <main class="page-main">
-        <section id="overview" aria-label="Usage overview">
+        <section id="overview" data-i18n-aria-label="dashboardOverviewLabel">
           <div class="stats" id="stats"></div>
           <!--
             The projection's basis, in full and in prose.
@@ -49,24 +62,24 @@
 
         <section class="panel" aria-labelledby="sites-title">
           <div class="panel-head">
-            <h2 class="panel-title" id="sites-title">Where your data went</h2>
+            <h2 class="panel-title" id="sites-title" data-i18n="dashboardSitesTitle"></h2>
             <div class="panel-tools">
+              <!-- One message for both: an accessible name that has drifted from the
+                   placeholder beside it describes a different control. -->
               <input
                 class="search-input"
                 id="site-search"
                 type="search"
                 autocomplete="off"
                 spellcheck="false"
-                placeholder="Find a site"
-                aria-label="Find a site"
+                data-i18n-placeholder="dashboardSiteSearchLabel"
+                data-i18n-aria-label="dashboardSiteSearchLabel"
               />
               <span class="panel-note" id="sites-note"></span>
             </div>
           </div>
           <ol class="site-list" id="site-list"></ol>
-          <p class="empty" id="sites-empty" hidden>
-            No usage yet. Browse normally and sites will appear here.
-          </p>
+          <p class="empty" id="sites-empty" data-i18n="dashboardSitesEmpty" hidden></p>
         </section>
 
         <!--
@@ -82,8 +95,13 @@
           aria-labelledby="detail-title"
         >
           <div class="panel-head">
-            <h2 class="panel-title" id="detail-title">Site details</h2>
-            <button class="ghost-button" id="detail-close" type="button">Close</button>
+            <h2 class="panel-title" id="detail-title" data-i18n="dashboardDetailTitle"></h2>
+            <button
+              class="ghost-button"
+              id="detail-close"
+              type="button"
+              data-i18n="dashboardDetailClose"
+            ></button>
           </div>
           <div class="detail-headline">
             <img class="site-icon" id="detail-icon" alt="" width="28" height="28" />
@@ -100,11 +118,15 @@
           -->
           <div class="detail-actions">
             <div class="detail-action" id="detail-limit-block">
-              <h3 class="detail-heading">Limit this site</h3>
+              <h3 class="detail-heading" data-i18n="dashboardDetailLimitHeading"></h3>
               <div id="detail-limit-status"></div>
               <div class="detail-controls" id="detail-limit-controls">
                 <div class="detail-control">
-                  <span class="field-label" id="detail-period-label">Window</span>
+                  <span
+                    class="field-label"
+                    id="detail-period-label"
+                    data-i18n="dashboardDetailWindowLabel"
+                  ></span>
                   <div
                     class="segmented"
                     id="detail-period"
@@ -112,7 +134,11 @@
                   ></div>
                 </div>
                 <div class="detail-control">
-                  <span class="field-label" id="detail-shape-label">When it runs out</span>
+                  <span
+                    class="field-label"
+                    id="detail-shape-label"
+                    data-i18n="dashboardDetailShapeLabel"
+                  ></span>
                   <div
                     class="segmented"
                     id="detail-shape"
@@ -125,7 +151,7 @@
             </div>
 
             <div class="detail-action">
-              <h3 class="detail-heading">Data Saver</h3>
+              <h3 class="detail-heading" data-i18n="dashboardDetailSaverHeading"></h3>
               <div id="detail-saver"></div>
               <p class="field-hint" id="detail-advice" hidden></p>
             </div>
@@ -133,25 +159,25 @@
 
           <div class="detail-grid">
             <div class="detail-block">
-              <h3 class="detail-heading">Today by hour</h3>
+              <h3 class="detail-heading" data-i18n="dashboardDetailHoursHeading"></h3>
               <div id="detail-hours"></div>
             </div>
             <div class="detail-block">
-              <h3 class="detail-heading">By day</h3>
+              <h3 class="detail-heading" data-i18n="dashboardDetailDaysHeading"></h3>
               <div id="detail-days"></div>
             </div>
             <div class="detail-block">
-              <h3 class="detail-heading">Type of data</h3>
+              <h3 class="detail-heading" data-i18n="dashboardTypeOfData"></h3>
               <div id="detail-types"></div>
             </div>
             <div class="detail-block">
-              <h3 class="detail-heading">Source hosts</h3>
+              <h3 class="detail-heading" data-i18n="dashboardDetailHostsHeading"></h3>
               <table class="table" id="detail-hosts">
                 <thead>
                   <tr>
-                    <th scope="col">Host</th>
-                    <th scope="col" class="numeric">Data</th>
-                    <th scope="col" class="numeric">Requests</th>
+                    <th scope="col" data-i18n="dashboardHostsColumnHost"></th>
+                    <th scope="col" class="numeric" data-i18n="dashboardHostsColumnData"></th>
+                    <th scope="col" class="numeric" data-i18n="dashboardHostsColumnRequests"></th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -164,12 +190,12 @@
         <div class="columns">
           <section class="panel dashboard-chart" aria-labelledby="trend-title">
             <div class="panel-head">
-              <h2 class="panel-title" id="trend-title">Daily usage</h2>
+              <h2 class="panel-title" id="trend-title" data-i18n="dashboardTrendTitle"></h2>
               <!-- The label names both panels this control scopes: it also re-scopes
                    the Data Saver results several hundred pixels further down. -->
               <div
                 class="segmented"
-                aria-label="Range for the daily chart and the Data Saver results"
+                data-i18n-aria-label="dashboardRangeGroupLabel"
                 id="range-tabs"
               ></div>
             </div>
@@ -178,7 +204,7 @@
 
           <section class="panel" aria-labelledby="types-title">
             <div class="panel-head">
-              <h2 class="panel-title" id="types-title">Type of data</h2>
+              <h2 class="panel-title" id="types-title" data-i18n="dashboardTypeOfData"></h2>
               <span class="panel-note" id="types-note"></span>
             </div>
             <div id="types-slot"></div>
@@ -186,36 +212,28 @@
         </div>
 
         <details class="method-details">
-          <summary>How Byte Budget measures usage</summary>
-          <p>
-            Totals use the best information available from Chrome and each site. If an
-            exact size is unavailable, Byte Budget makes a clearly labelled estimate.
-          </p>
-          <p>
-            The measured percentage covers response bodies and nothing else. Header
-            overhead is counted from the names and values and then halved, because
-            HTTP/2 compresses headers by an amount Chrome does not report; WebSocket
-            frames are invisible to an extension; a cancelled response counts as zero.
-            So 100% measured means every body was measured, not that the total is exact.
-          </p>
-          <p>
-            Every figure here covers this Chrome profile. A second profile, another
-            browser, a native app, an operating system update and every other device on
-            the same connection are invisible to an extension — there is no API that
-            would show them. A carrier's figure can be several times larger, and the
-            difference is not an error in this one.
-          </p>
+          <summary data-i18n="dashboardMethodSummary"></summary>
+          <p data-i18n="dashboardMethodBodyOne"></p>
+          <p data-i18n="dashboardMethodBodyTwo"></p>
+          <p data-i18n="dashboardMethodBodyThree"></p>
         </details>
 
         <section class="panel" id="savings-panel" aria-labelledby="savings-title">
           <div class="panel-head">
-            <h2 class="panel-title" id="savings-title">Data Saver results</h2>
+            <h2 class="panel-title" id="savings-title" data-i18n="dashboardSavingsTitle"></h2>
             <div class="panel-tools">
               <span class="panel-note" id="savings-note"></span>
-              <button class="ghost-button" id="savings-range" type="button">
-                Change range
-              </button>
-              <a class="panel-link" href="./settings.html#optimize-panel">Manage Data Saver</a>
+              <button
+                class="ghost-button"
+                id="savings-range"
+                type="button"
+                data-i18n="dashboardSavingsRangeButton"
+              ></button>
+              <a
+                class="panel-link"
+                href="./settings.html#optimize-panel"
+                data-i18n="dashboardManageSaverLink"
+              ></a>
             </div>
           </div>
           <!--
@@ -227,17 +245,21 @@
           <p class="field-hint" id="savings-hint"></p>
 
           <div class="savings-compare">
-            <h3 class="detail-heading">The same sites, with Data Saver and without</h3>
+            <h3 class="detail-heading" data-i18n="dashboardSavingsCompareHeading"></h3>
             <p class="field-hint" id="savings-compare-note"></p>
             <div class="table-scroll">
               <table class="table" id="savings-table">
                 <thead>
                   <tr>
-                    <th scope="col">Site</th>
-                    <th scope="col" class="numeric">With</th>
-                    <th scope="col" class="numeric">Without</th>
-                    <th scope="col" class="numeric">Saved per load</th>
-                    <th scope="col" class="numeric">Loads</th>
+                    <th scope="col" data-i18n="dashboardSavingsColumnSite"></th>
+                    <th scope="col" class="numeric" data-i18n="dashboardSavingsColumnWith"></th>
+                    <th scope="col" class="numeric" data-i18n="dashboardSavingsColumnWithout"></th>
+                    <th
+                      scope="col"
+                      class="numeric"
+                      data-i18n="dashboardSavingsColumnSavedPerLoad"
+                    ></th>
+                    <th scope="col" class="numeric" data-i18n="dashboardSavingsColumnLoads"></th>
                   </tr>
                 </thead>
                 <tbody></tbody>
@@ -247,7 +269,7 @@
           </div>
 
           <details class="inline-details savings-details">
-            <summary>Where these numbers come from</summary>
+            <summary data-i18n="dashboardSavingsDetailsSummary"></summary>
             <p class="field-hint" id="savings-explainer"></p>
           </details>
         </section>
@@ -255,7 +277,7 @@
         <div class="bottom-grid">
           <section class="panel" id="plan-panel" aria-labelledby="plan-title">
             <div class="panel-head">
-              <h2 class="panel-title" id="plan-title">Plan and cycle</h2>
+              <h2 class="panel-title" id="plan-title" data-i18n="dashboardPlanTitle"></h2>
               <span class="panel-note" id="plan-note"></span>
             </div>
             <div id="plan-body"></div>
@@ -263,8 +285,12 @@
 
           <section class="panel" id="storage-panel" aria-labelledby="storage-title">
             <div class="panel-head">
-              <h2 class="panel-title" id="storage-title">Stored on this device</h2>
-              <a class="panel-link" href="./settings.html#data-panel">Export or delete</a>
+              <h2 class="panel-title" id="storage-title" data-i18n="dashboardStorageTitle"></h2>
+              <a
+                class="panel-link"
+                href="./settings.html#data-panel"
+                data-i18n="dashboardStorageLink"
+              ></a>
             </div>
             <div id="storage-body"></div>
           </section>

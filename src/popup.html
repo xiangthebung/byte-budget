@@ -8,6 +8,13 @@
   <!--
     Every fixed element on this surface is written here rather than built in script.
 
+    Their text is not: a `data-i18n` attribute names a message and `popup.ts` writes it
+    in before anything else runs. Chrome substitutes `__MSG_name__` in the manifest and
+    in CSS but not in an extension page's HTML, so there is no declarative way to do it,
+    and an element left holding English here would be the one string a translation never
+    reaches. `data-i18n-title` and `data-i18n-label` cover `title` and `aria-label`,
+    which are the whole of this surface for a screen-reader user.
+
     The popup polls every two seconds, and the old code answered each poll by calling
     `replaceChildren` over three whole subtrees. A keyboard user had under two seconds
     to reach "Pause 1 hour" before the button was destroyed and focus fell to <body>,
@@ -34,8 +41,8 @@
             class="icon-button"
             id="dashboard-button"
             type="button"
-            aria-label="Open the full dashboard"
-            title="Open the full dashboard"
+            data-i18n-label="popupOpenDashboard"
+            data-i18n-title="popupOpenDashboard"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path
@@ -51,8 +58,8 @@
             class="icon-button"
             id="settings-button"
             type="button"
-            aria-label="Open settings"
-            title="Open settings"
+            data-i18n-label="popupOpenSettings"
+            data-i18n-title="popupOpenSettings"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.9" />
@@ -80,7 +87,7 @@
           role="progressbar"
           aria-valuemin="0"
           aria-valuemax="100"
-          aria-label="Plan used"
+          data-i18n-label="popupPlanMeterLabel"
         >
           <span class="plan-meter-fill" id="plan-meter-fill"></span>
           <span class="plan-meter-pace" id="plan-meter-pace" aria-hidden="true"></span>
@@ -89,8 +96,13 @@
       </div>
 
       <p class="plan-cta" id="plan-cta" hidden>
-        <span class="plan-cta-copy">No plan set, so this total has no denominator.</span>
-        <button class="ghost-button" id="plan-cta-button" type="button">Set your plan</button>
+        <span class="plan-cta-copy" data-i18n="popupPlanCtaCopy"></span>
+        <button
+          class="ghost-button"
+          id="plan-cta-button"
+          type="button"
+          data-i18n="popupPlanCtaButton"
+        ></button>
       </p>
 
       <!--
@@ -101,22 +113,43 @@
       -->
       <section class="plan-alerts" id="plan-alerts" hidden aria-labelledby="plan-alerts-title">
         <span class="plan-alerts-copy">
-          <span class="plan-alerts-title" id="plan-alerts-title">Nothing is watching this plan</span>
+          <span
+            class="plan-alerts-title"
+            id="plan-alerts-title"
+            data-i18n="popupPlanAlertsTitle"
+          ></span>
           <span class="plan-alerts-hint" id="plan-alerts-hint"></span>
         </span>
-        <button class="ghost-button" id="plan-alerts-button" type="button">Turn on</button>
+        <button
+          class="ghost-button"
+          id="plan-alerts-button"
+          type="button"
+          data-i18n="popupPlanAlertsButton"
+        ></button>
       </section>
 
       <section class="projection" id="projection" hidden aria-labelledby="projection-heading">
-        <h2 class="projection-heading" id="projection-heading">Projection</h2>
+        <h2
+          class="projection-heading"
+          id="projection-heading"
+          data-i18n="popupProjectionHeading"
+        ></h2>
         <p class="projection-figure" id="projection-figure" hidden></p>
+        <!--
+          The basis sentence is composed in the worker by `core/forecast.ts` and arrives
+          as data, so it is written from the payload rather than from a message here.
+        -->
         <p class="projection-basis" id="projection-basis"></p>
-        <button class="link-button" id="projection-toggle" type="button" aria-expanded="false">
-          Show how this is worked out
-        </button>
+        <button
+          class="link-button"
+          id="projection-toggle"
+          type="button"
+          aria-expanded="false"
+          data-i18n="popupProjectionShow"
+        ></button>
       </section>
 
-      <div class="tabs" id="period-tabs" aria-label="Period"></div>
+      <div class="tabs" id="period-tabs" data-i18n-label="popupPeriodLabel"></div>
 
       <p class="meta-line" id="meta-line"></p>
 
@@ -127,12 +160,17 @@
       -->
       <p class="action-error" id="action-error" role="alert" hidden>
         <span class="action-error-text" id="action-error-text"></span>
-        <button class="link-button" id="action-error-dismiss" type="button">Dismiss</button>
+        <button
+          class="link-button"
+          id="action-error-dismiss"
+          type="button"
+          data-i18n="popupErrorDismiss"
+        ></button>
       </p>
 
       <section class="limit" id="limit-card" hidden aria-labelledby="limit-heading">
         <div class="limit-head">
-          <h2 class="limit-heading" id="limit-heading">Data limit</h2>
+          <h2 class="limit-heading" id="limit-heading" data-i18n="popupLimitHeading"></h2>
           <span class="limit-scope" id="limit-scope"></span>
         </div>
         <p class="limit-status" id="limit-status" hidden></p>
@@ -147,10 +185,20 @@
         <div class="limit-actions" id="limit-actions" hidden>
           <button class="ghost-button" id="limit-grant" type="button"></button>
           <button class="ghost-button" id="limit-pause" type="button"></button>
-          <button class="ghost-button" id="limit-remove" type="button">Remove</button>
+          <button
+            class="ghost-button"
+            id="limit-remove"
+            type="button"
+            data-i18n="popupLimitRemove"
+          ></button>
         </div>
         <div class="limit-actions" id="limit-presets" hidden></div>
-        <button class="link-button" id="limit-more" type="button">Manage limits in settings</button>
+        <button
+          class="link-button"
+          id="limit-more"
+          type="button"
+          data-i18n="popupLimitMore"
+        ></button>
       </section>
 
       <!--
@@ -171,8 +219,8 @@
             class="icon-button optimize-dismiss"
             id="optimize-dismiss"
             type="button"
-            aria-label="Hide this suggestion"
-            title="Hide this suggestion. Data Saver stays reachable in settings."
+            data-i18n-label="popupOptimizeDismissLabel"
+            data-i18n-title="popupOptimizeDismissTitle"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path
@@ -189,7 +237,7 @@
 
       <section class="panel" id="chart-panel" aria-labelledby="chart-title">
         <div class="panel-head">
-          <h2 class="panel-title" id="chart-title">Over time</h2>
+          <h2 class="panel-title" id="chart-title" data-i18n="popupChartTitle"></h2>
           <span class="panel-note" id="chart-note"></span>
         </div>
         <div class="chart-slot" id="chart-slot"></div>
@@ -198,7 +246,7 @@
 
       <main class="panel" id="sites-panel" aria-labelledby="sites-title">
         <div class="panel-head">
-          <h2 class="panel-title" id="sites-title">Sites</h2>
+          <h2 class="panel-title" id="sites-title" data-i18n="popupSitesTitle"></h2>
           <span class="panel-note" id="sites-note"></span>
         </div>
         <ol class="site-list" id="site-list"></ol>
@@ -208,10 +256,7 @@
       <p class="empty" id="empty-state" hidden></p>
 
       <footer class="footer">
-        <span class="footer-note" id="footer-note">
-          One Chrome profile, on this device. Other browsers, other profiles, apps and
-          anything else sharing the connection are not counted.
-        </span>
+        <span class="footer-note" id="footer-note" data-i18n="popupFooterNote"></span>
       </footer>
 
       <p class="live-region" id="live-region" role="status" aria-live="polite"></p>

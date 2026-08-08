@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 
 const projectRoot = fileURLToPath(new URL(".", import.meta.url));
@@ -73,10 +73,186 @@ function prefixPaths(value: unknown, prefix: string): unknown {
  * `dist/` is still the only thing that gets packaged and published. This file is
  * generated, gitignored, and never appears in an archive — the packaging script reads
  * `dist/` and nothing else, so the two cannot disagree about what shipped.
+ *
+ * One thing here cannot be redirected into `dist/`: Chrome looks for `_locales` beside
+ * the manifest and follows no path to it. The `merge-locales` plugin therefore writes a
+ * second copy of the catalogue next to this file. It is generated the same way and
+ * packaged the same way — never.
  */
 function writeRootManifest(distManifest: unknown): void {
   const rooted = prefixPaths(distManifest, "dist") as Record<string, unknown>;
   writeFileSync(`${projectRoot}/manifest.json`, `${JSON.stringify(rooted, null, 2)}\n`);
+}
+
+/* ------------------------------------------------------------------ *
+ * Message catalogues
+ * ------------------------------------------------------------------ */
+
+/**
+ * The locale the catalogue is written in, and the only one that exists today.
+ *
+ * Chrome requires `default_locale` the moment a `_locales` directory is present and
+ * refuses to load the extension if the two disagree, so this constant names the
+ * directory that gets written *and* is checked against the built manifest below.
+ * A build that produced `_locales/en/` under a manifest saying `en_GB` would be a
+ * clean build and an extension that will not install.
+ */
+const DEFAULT_LOCALE = "en";
+
+/**
+ * Where the per-surface partials live, before they are merged.
+ *
+ * `_locales/en/messages.json` is generated and nobody edits it. Each surface writes
+ * its own file here instead — `core.json`, `popup.json`, `dashboard.json`,
+ * `settings.json`, `welcome.json` — because a single 300-entry catalogue is a merge
+ * conflict every time two people add a string, and the conflict resolution is where
+ * a string quietly loses its `description` or gets clobbered.
+ *
+ * Keys carry their surface as a prefix (`popupPlanRemaining`, `coreTierStrictLabel`)
+ * so a collision means a genuine mistake rather than two surfaces naming the same
+ * idea. The merge below does not trust that convention; it proves it.
+ */
+const LOCALE_PARTIALS = `${projectRoot}/i18n`;
+
+/** Chrome's own rule for a message name. A `.` or a `-` makes the extension unloadable. */
+const MESSAGE_NAME = /^[A-Za-z0-9_@]+$/;
+
+/**
+ * A named placeholder reference inside a message, as `$SPAN$`.
+ *
+ * Chrome also accepts bare `$1`-style positional substitution, which mostly cannot
+ * match here because it has no closing `$` — but two of them adjacent can, so a
+ * purely numeric name is skipped below rather than demanded as a declaration.
+ */
+const NAMED_PLACEHOLDER = /\$([A-Za-z0-9_]+)\$/g;
+
+/** A `__MSG_key__` reference in a manifest field Chrome will localise. */
+const MANIFEST_MESSAGE_REFERENCE = /__MSG_([A-Za-z0-9_@]+)__/g;
+
+interface LocaleMessage {
+  message: string;
+  description?: string;
+  placeholders?: Record<string, { content: string; example?: string }>;
+}
+
+/**
+ * Every `$NAME$` a message refers to, lowercased the way Chrome compares them.
+ *
+ * `$$` is Chrome's escape for a literal dollar sign and is removed first, so a
+ * message that prints `$$5` is not read as opening a placeholder.
+ */
+function namedPlaceholdersIn(message: string): string[] {
+  const found: string[] = [];
+  for (const match of message.replace(/\$\$/g, "").matchAll(NAMED_PLACEHOLDER)) {
+    const name = match[1];
+    // `$1$` is positional substitution, not a named placeholder, and declares nothing.
+    if (name !== undefined && !/^\d+$/.test(name)) found.push(name.toLowerCase());
+  }
+  return found;
+}
+
+/**
+ * Checks one entry, and throws naming the file so the message can be found.
+ *
+ * `description` is required rather than encouraged. It is the entire context a
+ * translator gets — they see the string and this sentence, never the call site — so a
+ * message without one is a string that will come back translated for the wrong sense
+ * of the word, and nothing in the build would have said so.
+ */
+function assertMessage(key: string, entry: LocaleMessage, file: string): void {
+  if (!MESSAGE_NAME.test(key)) {
+    throw new Error(
+      `${file}: "${key}" is not a legal message name. Chrome allows [A-Za-z0-9_@] ` +
+        `only, and rejects the whole extension at load if a name is outside it.`,
+    );
+  }
+  if (typeof entry?.message !== "string" || entry.message === "") {
+    throw new Error(`${file}: "${key}" has no "message".`);
+  }
+  if (typeof entry.description !== "string" || entry.description.trim() === "") {
+    throw new Error(
+      `${file}: "${key}" has no "description". It is what a translator reads ` +
+        `instead of the source file, so it is required.`,
+    );
+  }
+  const declared = new Set(
+    Object.keys(entry.placeholders ?? {}).map((name) => name.toLowerCase()),
+  );
+  for (const name of namedPlaceholdersIn(entry.message)) {
+    if (!declared.has(name)) {
+      throw new Error(
+        `${file}: "${key}" uses the placeholder $${name.toUpperCase()}$ but does not ` +
+          `declare it. Chrome leaves an undeclared placeholder in the output verbatim.`,
+      );
+    }
+  }
+}
+
+/**
+ * Folds every partial into one catalogue, refusing to guess at a collision.
+ *
+ * A duplicate key is not merged and not warned about: whichever file the directory
+ * listing reached second would win, so the string a surface renders would depend on
+ * a filename. That is a bug whose symptom is one label reading as another label, on
+ * one surface, and it is invisible in review — so it fails the build, naming both
+ * files.
+ *
+ * Output is sorted by key so the generated file is stable across builds and a diff
+ * of it shows what actually changed.
+ */
+function mergeLocalePartials(): Record<string, LocaleMessage> {
+  const files = readdirSync(LOCALE_PARTIALS)
+    .filter((name) => name.endsWith(".json"))
+    .sort();
+  if (files.length === 0) {
+    throw new Error(
+      `${LOCALE_PARTIALS} holds no message partials, but the manifest declares ` +
+        `"default_locale". Chrome will not load an extension whose catalogue is empty.`,
+    );
+  }
+
+  const merged = new Map<string, LocaleMessage>();
+  const declaredIn = new Map<string, string>();
+  for (const name of files) {
+    const file = `i18n/${name}`;
+    const partial = JSON.parse(
+      readFileSync(`${LOCALE_PARTIALS}/${name}`, "utf8"),
+    ) as Record<string, LocaleMessage>;
+    for (const [key, entry] of Object.entries(partial)) {
+      const first = declaredIn.get(key);
+      if (first !== undefined) {
+        throw new Error(
+          `duplicate message key "${key}": declared in ${first} and again in ${file}. ` +
+            `Prefix it with the surface that owns it so the two cannot collide.`,
+        );
+      }
+      assertMessage(key, entry, file);
+      declaredIn.set(key, file);
+      merged.set(key, entry);
+    }
+  }
+
+  return Object.fromEntries([...merged].sort(([a], [b]) => (a < b ? -1 : 1)));
+}
+
+/**
+ * Every `__MSG_key__` the manifest asks Chrome to substitute.
+ *
+ * Chrome refuses to load an extension whose manifest names a message the catalogue
+ * does not hold, and the error it gives points at the manifest rather than at the
+ * missing key. Cheaper to find here.
+ */
+function manifestMessageReferences(value: unknown, found: Set<string> = new Set()): Set<string> {
+  if (typeof value === "string") {
+    for (const match of value.matchAll(MANIFEST_MESSAGE_REFERENCE)) {
+      if (match[1] !== undefined) found.add(match[1]);
+    }
+  } else if (Array.isArray(value)) {
+    for (const entry of value) manifestMessageReferences(entry, found);
+  } else if (value && typeof value === "object") {
+    for (const entry of Object.values(value)) manifestMessageReferences(entry, found);
+  }
+  return found;
 }
 
 /**
@@ -129,9 +305,13 @@ export default defineConfig(({ mode }) => {
           }
 
           if (isThrottleBuild) {
-            manifest.name = "Byte Budget (throttle)";
-            manifest.description =
-              "Byte Budget with a real per-tab speed cap. Chrome shows a debugging banner while a cap is active.";
+            // `__MSG_` references rather than literals, because these two strings are
+            // read by a person in `chrome://extensions` exactly like the store
+            // channel's are. Chrome substitutes them from `_locales` on load; the
+            // English sits in `i18n/core.json` beside `extensionName`, and
+            // `merge-locales` below fails the build if either key goes missing.
+            manifest.name = "__MSG_extensionThrottleName__";
+            manifest.description = "__MSG_extensionThrottleDescription__";
             if (!manifest.permissions.includes("debugger")) {
               manifest.permissions = [...manifest.permissions, "debugger"];
             }
@@ -143,6 +323,63 @@ export default defineConfig(({ mode }) => {
           writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
 
           if (!isThrottleBuild) writeRootManifest(manifest);
+        },
+      },
+      {
+        /*
+         * Runs after `manifest-channel` on purpose: it checks the manifest that
+         * shipped, not the one in `public/`. The throttle channel replaces `name`
+         * and `description` with its own `__MSG_` references a few lines above, and
+         * a check against the source manifest would never see them.
+         */
+        name: "merge-locales",
+        writeBundle() {
+          const messages = mergeLocalePartials();
+          const catalogue = `${JSON.stringify(messages, null, 2)}\n`;
+
+          // Chrome resolves `_locales` relative to the manifest and nowhere else, so
+          // the path is fixed: `<manifest dir>/_locales/<default_locale>/messages.json`.
+          const localeDirectory = `${outputDirectory}/_locales/${DEFAULT_LOCALE}`;
+          mkdirSync(localeDirectory, { recursive: true });
+          writeFileSync(`${localeDirectory}/messages.json`, catalogue);
+
+          const manifest = JSON.parse(
+            readFileSync(`${outputDirectory}/manifest.json`, "utf8"),
+          ) as Record<string, unknown>;
+
+          if (manifest.default_locale !== DEFAULT_LOCALE) {
+            throw new Error(
+              `the build wrote _locales/${DEFAULT_LOCALE}/ but the manifest declares ` +
+                `default_locale ${JSON.stringify(manifest.default_locale)}. Chrome ` +
+                `refuses to load an extension where those disagree.`,
+            );
+          }
+
+          const missing = [...manifestMessageReferences(manifest)].filter(
+            (key) => !(key in messages),
+          );
+          if (missing.length > 0) {
+            throw new Error(
+              `the manifest references messages that no i18n/ partial declares: ` +
+                `${missing.join(", ")}`,
+            );
+          }
+
+          /*
+           * The dev-load convenience needs its own copy, for the same reason the root
+           * manifest exists at all — and it cannot point into `dist/` the way every
+           * other path in that manifest does, because `_locales` is the one directory
+           * Chrome will not follow a relative path to. Without this, loading the
+           * project root gives an extension whose catalogue is empty: `t()` returns
+           * its keys, and every label on every surface reads `coreTierStrictLabel`.
+           *
+           * Generated and never packaged, exactly like the root manifest beside it.
+           */
+          if (!isThrottleBuild) {
+            const rootLocaleDirectory = `${projectRoot}/_locales/${DEFAULT_LOCALE}`;
+            mkdirSync(rootLocaleDirectory, { recursive: true });
+            writeFileSync(`${rootLocaleDirectory}/messages.json`, catalogue);
+          }
         },
       },
       {

@@ -35,10 +35,12 @@ import {
   faviconUrl,
   paintGroup,
   query,
+  queryAll,
   replaceChildren,
   type Child,
 } from "./core/dom";
 import { formatAgo, formatBytes, formatCount, formatPercent, splitBytes } from "./core/format";
+import { t } from "./core/i18n";
 import {
   errorMessage,
   sendRequest,
@@ -98,6 +100,37 @@ const POLL_FAILURES_STOP = 10;
 const REMOVE_CONFIRM_MS = 5000;
 const PERIOD_STORAGE_KEY = "ui.period";
 const OPTIMIZE_DISMISSED_KEY = "ui.optimizeDismissed";
+
+/* ------------------------------------------------------------------ *
+ * Fixed strings
+ * ------------------------------------------------------------------ */
+
+/**
+ * Writes the text that popup.html names but does not hold.
+ *
+ * Chrome substitutes `__MSG_name__` in the manifest and in CSS but not in an
+ * extension page's HTML, so this loop is the only way those strings can be
+ * translated at all. It runs at module scope, before the lookups below and well
+ * before the first paint, so a key is never on screen.
+ *
+ * `title` and `aria-label` are swept alongside text. They carry the entire top bar
+ * and the plan meter for a screen-reader user, and an attribute is the string an
+ * extraction pass forgets. `welcome.ts` holds the twin of this loop rather than
+ * sharing one: `core/i18n.ts` is the cross-surface contract and holds `t` alone.
+ */
+function applyFixedStrings(): void {
+  for (const node of queryAll<HTMLElement>("[data-i18n]")) {
+    node.textContent = t(node.dataset.i18n ?? "");
+  }
+  for (const node of queryAll<HTMLElement>("[data-i18n-title]")) {
+    node.title = t(node.dataset.i18nTitle ?? "");
+  }
+  for (const node of queryAll<HTMLElement>("[data-i18n-label]")) {
+    node.setAttribute("aria-label", t(node.dataset.i18nLabel ?? ""));
+  }
+}
+
+applyFixedStrings();
 
 /* ------------------------------------------------------------------ *
  * Elements
@@ -219,18 +252,18 @@ function setData(node: Element, name: string, value: string | null): void {
 
 /** Reads after a percentage: "132% of today's limit". */
 const BUDGET_WINDOW_LABELS: Record<BudgetPeriod, string> = {
-  session: "this session's limit",
-  day: "today's limit",
-  week: "this week's limit",
-  month: "this month's limit",
+  session: t("popupBudgetWindowSession"),
+  day: t("popupBudgetWindowDay"),
+  week: t("popupBudgetWindowWeek"),
+  month: t("popupBudgetWindowMonth"),
 };
 
 /** Reads after a byte figure on the grant button: "+50 MB today". */
 const GRANT_WINDOW_LABELS: Record<BudgetPeriod, string> = {
-  session: "this session",
-  day: "today",
-  week: "this week",
-  month: "this month",
+  session: t("popupGrantWindowSession"),
+  day: t("popupGrantWindowDay"),
+  week: t("popupGrantWindowWeek"),
+  month: t("popupGrantWindowMonth"),
 };
 
 /**
@@ -241,10 +274,10 @@ const GRANT_WINDOW_LABELS: Record<BudgetPeriod, string> = {
  * naming a length would be wrong in exactly the mode that cares about calendars.
  */
 const PREVIOUS_WINDOW_LABELS: Record<Period, string> = {
-  session: "the session before",
-  today: "yesterday",
-  week: "the period before",
-  month: "the period before",
+  session: t("popupPreviousWindowSession"),
+  today: t("popupPreviousWindowToday"),
+  week: t("popupPreviousWindowWeek"),
+  month: t("popupPreviousWindowMonth"),
 };
 
 /**
@@ -253,6 +286,10 @@ const PREVIOUS_WINDOW_LABELS: Record<Period, string> = {
  * A byte count typed into a 420px panel is a chore, and the three sizes people
  * actually reach for are "enough for a normal day", "enough with some video", and
  * "stop me before a boxset". Anything finer belongs in settings.
+ *
+ * `label` is a fixed size rather than prose, so it is not a message: it is the value
+ * the button writes, and the sentences it appears in are `popupLimitPresetLabel` and
+ * `popupLimitPresetTitle`.
  */
 const LIMIT_PRESETS: readonly { label: string; bytes: number }[] = [
   { label: "100 MB", bytes: 100_000_000 },
@@ -324,7 +361,7 @@ function renderHeadline(payload: OverviewPayload): void {
   // "4.2 of 15 GB" when both land on the same unit, "820 MB of 15 GB" when they do
   // not — a bare "820 of 15 GB" would be off by three orders of magnitude.
   totalValue.textContent = used.unit === cap.unit ? used.value : `${used.value} ${used.unit}`;
-  totalUnit.textContent = `of ${cap.value} ${cap.unit}`;
+  totalUnit.textContent = t("popupHeadlineOf", `${cap.value} ${cap.unit}`);
   planCta.hidden = true;
   planBlock.hidden = false;
 
@@ -341,10 +378,20 @@ function renderHeadline(payload: OverviewPayload): void {
   planMeter.setAttribute("aria-valuenow", String(Math.round(Math.min(100, share * 100))));
   planMeter.setAttribute(
     "aria-valuetext",
-    `${bytes(cycleUsed)} of ${bytes(plan)}, ${formatPercent(share)} of the plan, day ${elapsedDays} of ${totalDays}`,
+    t("popupPlanMeterValueText", [
+      bytes(cycleUsed),
+      bytes(plan),
+      formatPercent(share),
+      String(elapsedDays),
+      String(totalDays),
+    ]),
   );
-  planMeter.title = `Spending the plan evenly would put you at ${formatPercent(pace)} by now — that is the mark on the bar.`;
-  planLine.textContent = `Day ${elapsedDays} of ${totalDays} · resets ${formatAgo(resetsAt)}`;
+  planMeter.title = t("popupPlanMeterTitle", formatPercent(pace));
+  planLine.textContent = t("popupPlanLine", [
+    String(elapsedDays),
+    String(totalDays),
+    formatAgo(resetsAt),
+  ]);
 }
 
 /**
@@ -364,16 +411,23 @@ function renderPace(payload: OverviewPayload): void {
   const delta = totalBytes(payload.totals) / previous - 1;
   const against = PREVIOUS_WINDOW_LABELS[payload.period];
   paceLine.hidden = false;
-  paceLine.title = `${bytes(totalBytes(payload.totals))} this period against ${bytes(previous)} in the window of the same length immediately before it. Both measured the same way.`;
+  paceLine.title = t("popupPaceTitle", [bytes(totalBytes(payload.totals)), bytes(previous)]);
   // Under a twentieth either way is noise dressed up as a finding, and a popup that
   // reports "3% more than yesterday" every day teaches people to ignore the line.
   if (Math.abs(delta) < 0.05) {
     setData(paceLine, "data-tone", null);
-    paceLine.textContent = `About the same as ${against}`;
+    paceLine.textContent = t("popupPaceSame", against);
     return;
   }
   setData(paceLine, "data-tone", delta > 0 ? "up" : "down");
-  paceLine.textContent = `${formatPercent(Math.abs(delta))} ${delta > 0 ? "more" : "less"} than ${against}`;
+  // Two whole sentences rather than one with "more"/"less" substituted in. A
+  // comparative is not a noun that can be dropped into a slot: substituting it forces
+  // every translation to keep English word order, which is the bug this wave exists
+  // to remove.
+  paceLine.textContent = t(delta > 0 ? "popupPaceMore" : "popupPaceLess", [
+    formatPercent(Math.abs(delta)),
+    against,
+  ]);
 }
 
 /**
@@ -392,11 +446,7 @@ function renderPlanAlerts(payload: OverviewPayload): void {
     return;
   }
   planAlerts.hidden = false;
-  planAlertsHint.textContent =
-    `Alerts come from a limit over everything, not from the plan figure on its own. ` +
-    `Turning them on creates one at ${bytes(plan)} a month and tells you at 75%, 90% and 100%. ` +
-    `It also enforces: video is refused from 60% of the plan and images and fonts from 85%. ` +
-    `A page's own HTML always loads.`;
+  planAlertsHint.textContent = t("popupPlanAlertsHint", bytes(plan));
 }
 
 function renderProjection(payload: OverviewPayload): void {
@@ -408,6 +458,9 @@ function renderProjection(payload: OverviewPayload): void {
     return;
   }
   projectionCard.hidden = false;
+  // Composed in the worker by `core/forecast.ts` and shipped as prose, so it arrives
+  // already built and passes straight through. It is the one user-visible sentence on
+  // this surface that is not a message here.
   projectionBasis.textContent = projection.basis;
 
   // Too few finished days for the rate to mean anything. `basis` already says so in
@@ -419,21 +472,31 @@ function renderProjection(payload: OverviewPayload): void {
   }
 
   const endsOn = formatDayShort(dayKeyFromMs(cycleResetsAt(payload.settings) - 1));
-  const parts: Child[] = [`Projected ${bytes(projection.projected)} by ${endsOn}`, " · "];
+  // The middle dots stay in code because the clause between them is a coloured span,
+  // not text: over-plan and spare are the same sentence in two tones, and merging the
+  // three into one message would cost the colour that distinguishes them.
+  const parts: Child[] = [
+    t("popupProjectionFigure", [bytes(projection.projected), endsOn]),
+    " · ",
+  ];
   parts.push(
     projection.overBy > 0
       ? element("span", {
           className: "projection-over",
-          text: `${bytes(projection.overBy)} over your plan`,
+          text: t("popupProjectionOver", bytes(projection.overBy)),
         })
       : element("span", {
           className: "projection-spare",
-          text: `${bytes(projection.planBytes - projection.projected)} spare`,
+          text: t("popupProjectionSpare", bytes(projection.planBytes - projection.projected)),
         }),
   );
   if (projection.exhaustedOn !== null) {
-    const past = projection.exhaustedOn <= Date.now();
-    parts.push(` · ${past ? "ran out" : "runs out"} ${formatAgo(projection.exhaustedOn)}`);
+    // Past and future are two messages, not one with the verb substituted: a tense is
+    // not a noun, and a translation that has to receive one through a slot is stuck
+    // with English word order.
+    const key =
+      projection.exhaustedOn <= Date.now() ? "popupProjectionRanOut" : "popupProjectionRunsOut";
+    parts.push(` · ${t(key, formatAgo(projection.exhaustedOn))}`);
   }
   projectionFigure.hidden = false;
   replaceChildren(projectionFigure, parts);
@@ -443,8 +506,7 @@ function renderProjection(payload: OverviewPayload): void {
  * Meta line
  * ------------------------------------------------------------------ */
 
-const MEASURED_TITLE =
-  "Chrome does not tell an extension how big a response was. Content-Length and the page's own resource timing cover most of it; whatever they cannot, a learned per-host estimate fills in. This says how much of that happened.";
+const MEASURED_TITLE = t("popupMeasuredTitle");
 
 /**
  * How much of the figure was measured, in bands.
@@ -456,18 +518,20 @@ const MEASURED_TITLE =
  * gets the estimate colour.
  */
 function measuredNote(totals: OverviewPayload["totals"]): HTMLElement {
-  if (totals.down <= 0) return element("span", { text: "Nothing measured yet", title: MEASURED_TITLE });
+  if (totals.down <= 0) return element("span", { text: t("popupMeasuredNone"), title: MEASURED_TITLE });
   const share = measuredShare(totals);
-  if (share >= 0.97) return element("span", { text: "Measured, not estimated", title: MEASURED_TITLE });
-  if (share >= 0.8) return element("span", { text: "Nearly all measured", title: MEASURED_TITLE });
+  if (share >= 0.97) return element("span", { text: t("popupMeasuredAll"), title: MEASURED_TITLE });
+  if (share >= 0.8) return element("span", { text: t("popupMeasuredNearlyAll"), title: MEASURED_TITLE });
   return element("span", {
     className: "meta-flag",
-    text: `${formatPercent(1 - share)} of this is estimated`,
+    text: t("popupMeasuredEstimatedShare", formatPercent(1 - share)),
     title: MEASURED_TITLE,
   });
 }
 
 function renderMeta(payload: OverviewPayload): void {
+  // `description` names the window and is composed in the worker, so it arrives as
+  // prose and passes through rather than being looked up here.
   const parts: HTMLElement[] = [element("span", { text: payload.description })];
 
   // With a plan the headline belongs to the cycle, so the period figure the tabs
@@ -484,9 +548,8 @@ function renderMeta(payload: OverviewPayload): void {
   if (payload.totals.cacheAvoided > 0) {
     parts.push(
       element("span", {
-        text: `Cache saved ~${bytes(payload.totals.cacheAvoided)}`,
-        title:
-          "These responses came from the browser cache and cost no network bytes. What they would have cost is the estimator's figure, which is why it is tilded.",
+        text: t("popupCacheSaved", bytes(payload.totals.cacheAvoided)),
+        title: t("popupCacheSavedTitle"),
       }),
     );
   }
@@ -499,9 +562,8 @@ function renderMeta(payload: OverviewPayload): void {
     parts.push(
       element("span", {
         className: "meta-flag",
-        text: `Read ${formatAgo(payload.generatedAt)}`,
-        title:
-          "The background worker has not answered since then, which is ordinary after an idle gap. These are the last figures it sent, not live ones.",
+        text: t("popupReadAgo", formatAgo(payload.generatedAt)),
+        title: t("popupStaleTitle"),
       }),
     );
   }
@@ -528,7 +590,7 @@ function renderMeta(payload: OverviewPayload): void {
  * is part measured (a rewrite whose original is on file) and part modelled (the
  * estimator's price for a request that was never sent). The label says both.
  */
-const OVERLAY_LABEL = "prevented, partly estimated";
+const OVERLAY_LABEL = t("popupOverlayLabel");
 
 function renderChart(payload: OverviewPayload): void {
   const series = withoutFutureHours(payload.series);
@@ -542,7 +604,7 @@ function renderChart(payload: OverviewPayload): void {
 
   if (series.length === 0) {
     replaceChildren(chartSlot, [
-      element("p", { className: "stack-note", text: "No history for this period yet." }),
+      element("p", { className: "stack-note", text: t("popupChartEmpty") }),
     ]);
     chartNote.textContent = "";
     return;
@@ -556,7 +618,7 @@ function renderChart(payload: OverviewPayload): void {
     overlay: point.saved,
   }));
   const peak = points.reduce((max, point) => Math.max(max, point.value), 0);
-  chartNote.textContent = peak > 0 ? `peak ${bytes(peak)}` : "";
+  chartNote.textContent = peak > 0 ? t("popupChartPeak", bytes(peak)) : "";
   replaceChildren(chartSlot, [
     barChart({
       points,
@@ -585,7 +647,7 @@ function renderTypes(payload: OverviewPayload): void {
       segments,
       format: (value) => bytes(value),
       minShare: 0.04,
-      caption: "What the bytes were",
+      caption: t("popupTypesCaption"),
     }),
   ]);
 }
@@ -628,7 +690,7 @@ function createSiteRow(site: string): SiteRowNodes {
     text: siteLabel(site),
     dataset: reserved ? { reserved: "true" } : {},
   });
-  const tag = element("span", { className: "site-tag", text: "This tab" });
+  const tag = element("span", { className: "site-tag", text: t("popupSiteTagCurrent") });
   tag.hidden = true;
   const fill = element("span", { className: "site-bar-fill" });
   const figure = element("span", { className: "site-bytes" });
@@ -661,15 +723,16 @@ function updateSiteRow(
   nodes.tag.hidden = !isCurrent;
   if (isCurrent) nodes.row.setAttribute("aria-current", "true");
   else nodes.row.removeAttribute("aria-current");
-  nodes.row.title = reserved
-    ? "Requests that did not belong to a tab: browser services, service workers and other extensions."
-    : `${name} — open in the dashboard`;
+  nodes.row.title = reserved ? t("popupSiteReservedTitle") : t("popupSiteOpenTitle", name);
   nodes.fill.style.width = `${peak > 0 ? Math.max(2, (own / peak) * 100) : 0}%`;
   nodes.figure.textContent = bytes(own);
   nodes.share.className = estimated ? "site-share site-estimate" : "site-share";
-  nodes.share.textContent =
-    `${formatPercent(periodTotal > 0 ? own / periodTotal : 0)} of total` +
-    (estimated ? " · part estimated" : "");
+  // The caveat is part of a whole sentence rather than a suffix bolted onto the
+  // share, because a translation has to be free to put it in front.
+  nodes.share.textContent = t(
+    estimated ? "popupSiteShareEstimated" : "popupSiteShare",
+    formatPercent(periodTotal > 0 ? own / periodTotal : 0),
+  );
 }
 
 /**
@@ -695,15 +758,21 @@ function renderSites(payload: OverviewPayload): void {
   const periodTotal = totalBytes(payload.totals);
   const count = payload.sites.length;
 
-  sitesNote.textContent = count > 0 ? `${formatCount(count)} ${count === 1 ? "site" : "sites"}` : "";
+  // Two whole messages rather than a count with a noun appended: Chrome's message
+  // format has no plural rules, so the singular and the plural are separate strings
+  // and the choice between them is made here.
+  sitesNote.textContent =
+    count > 0
+      ? t(count === 1 ? "popupSitesCountOne" : "popupSitesCountOther", formatCount(count))
+      : "";
 
   if (count > shown.length) {
     sitesExpand.hidden = false;
     // A silent truncation at 6 of 40 is the popup deciding the other 34 do not exist.
-    sitesExpand.textContent =
-      siteLimit < SITE_ROWS_EXPANDED
-        ? `Show all ${formatCount(count)} sites`
-        : `See all ${formatCount(count)} in the dashboard`;
+    sitesExpand.textContent = t(
+      siteLimit < SITE_ROWS_EXPANDED ? "popupSitesShowAll" : "popupSitesSeeAll",
+      formatCount(count),
+    );
   } else {
     sitesExpand.hidden = true;
   }
@@ -801,11 +870,11 @@ function governingLimit(site: string | null): {
 function statusWord(status: BudgetStatus): string {
   if (status.snoozed) {
     const until = status.budget.snoozedUntil;
-    return until ? `Paused · resumes ${formatAgo(until)}` : "Paused";
+    return until ? t("popupLimitPausedUntil", formatAgo(until)) : t("popupLimitPaused");
   }
-  if (status.share >= 1) return "Over limit";
-  if (status.share >= 0.85) return "Nearly full";
-  return "Within limit";
+  if (status.share >= 1) return t("popupLimitOver");
+  if (status.share >= 0.85) return t("popupLimitNearlyFull");
+  return t("popupLimitWithin");
 }
 
 const GRANT_MIN = 5_000_000;
@@ -841,8 +910,12 @@ function showLimitStatus(status: BudgetStatus, payload: OverviewPayload): void {
   const over = status.share >= 1;
 
   setData(limitScope, "data-scope", isAll ? "all" : "site");
+  // The label comes from `core/types.ts`, which is where every surface reads it, so it
+  // is localised there rather than here. The fallback is unreachable while that record
+  // has an `#all` entry and is left English deliberately: a second copy of the word in
+  // a message catalogue would be a second thing to keep in step.
   limitScope.textContent = isAll
-    ? `${RESERVED_SITE_LABELS[ALL_SITES] ?? "Everything"} — every site, not just this tab`
+    ? t("popupLimitScopeAll", RESERVED_SITE_LABELS[ALL_SITES] ?? "Everything")
     : status.budget.site;
 
   limitStatus.hidden = false;
@@ -855,11 +928,19 @@ function showLimitStatus(status: BudgetStatus, payload: OverviewPayload): void {
   );
 
   limitLine.hidden = false;
-  limitLine.textContent = [
-    `${bytes(status.used)} of ${bytes(status.allowance)}`,
-    `${formatPercent(status.share)} of ${BUDGET_WINDOW_LABELS[status.budget.period]}`,
-    status.resetsAt ? `resets ${formatAgo(status.resetsAt)}` : "resets when the browser closes",
-  ].join(" · ");
+  // One message, not three fragments joined on a middle dot. "1.1 MB of 800 kB · 132%
+  // of today's limit · resets in 3 hours" is a sentence, and a translator handed its
+  // three pieces separately cannot reorder them or change the punctuation between
+  // them. The two reset endings are two whole messages for the same reason.
+  const limitFigures = [
+    bytes(status.used),
+    bytes(status.allowance),
+    formatPercent(status.share),
+    BUDGET_WINDOW_LABELS[status.budget.period],
+  ];
+  limitLine.textContent = status.resetsAt
+    ? t("popupLimitLine", [...limitFigures, formatAgo(status.resetsAt)])
+    : t("popupLimitLineUntilClose", limitFigures);
 
   limitBar.hidden = false;
   limitBarFill.style.width = `${Math.min(100, Math.max(1, status.share * 100)).toFixed(1)}%`;
@@ -869,7 +950,7 @@ function showLimitStatus(status: BudgetStatus, payload: OverviewPayload): void {
   // of a setting when what they needed was the sentence underneath it.
   limitConsequence.hidden = false;
   limitConsequence.textContent = status.snoozed
-    ? `Nothing is refused while paused. On resume: ${TIER_DESCRIPTIONS[status.wouldBe]}`
+    ? t("popupLimitPausedConsequence", TIER_DESCRIPTIONS[status.wouldBe])
     : TIER_DESCRIPTIONS[status.tier];
 
   // The bytes a limit prevented, which used to be printed inside the "Data Saver on"
@@ -882,8 +963,8 @@ function showLimitStatus(status: BudgetStatus, payload: OverviewPayload): void {
   const modelled = Math.max(0, totals.saved - totals.savedMeasured);
   if (status.tier !== "off" && modelled > 0) {
     limitPrevented.hidden = false;
-    limitPrevented.textContent = `~${bytes(modelled)} refused rather than spent`;
-    limitPrevented.title = `${payload.description}. A refused request is never dispatched, so it has no measured size — this is the size model's figure for what it would have weighed. Beacon-blocking contributes here too when Data Saver is on.`;
+    limitPrevented.textContent = t("popupLimitPrevented", bytes(modelled));
+    limitPrevented.title = t("popupLimitPreventedTitle", payload.description);
   } else {
     limitPrevented.hidden = true;
   }
@@ -893,15 +974,17 @@ function showLimitStatus(status: BudgetStatus, payload: OverviewPayload): void {
   // Not `window`: this module runs in a document and shadowing the DOM global with a
   // string is the kind of thing that reads as a mistake three edits later.
   const windowLabel = GRANT_WINDOW_LABELS[status.budget.period];
-  limitGrant.textContent = `+${bytes(grant)} ${windowLabel}`;
-  limitGrant.title = `Raises the allowance for ${windowLabel} from ${bytes(status.allowance)} to ${bytes(status.allowance + grant)}. The extra belongs to this window only and is gone when it resets.`;
-  limitPause.textContent = status.snoozed ? "Resume" : "Pause 1 hour";
-  limitPause.title = status.snoozed
-    ? "Puts the limit back in force now."
-    : "Stops refusing anything for an hour. The counter keeps running.";
-  if (!removeArmed) limitRemove.textContent = "Remove";
+  limitGrant.textContent = t("popupLimitGrant", [bytes(grant), windowLabel]);
+  limitGrant.title = t("popupLimitGrantTitle", [
+    windowLabel,
+    bytes(status.allowance),
+    bytes(status.allowance + grant),
+  ]);
+  limitPause.textContent = t(status.snoozed ? "popupLimitResume" : "popupLimitPause");
+  limitPause.title = t(status.snoozed ? "popupLimitResumeTitle" : "popupLimitPauseTitle");
+  if (!removeArmed) limitRemove.textContent = t("popupLimitRemove");
   setData(limitRemove, "data-danger", "true");
-  limitRemove.title = `Deletes the limit on ${siteLabel(status.budget.site)}. The counter and the tier go with it.`;
+  limitRemove.title = t("popupLimitRemoveTitle", siteLabel(status.budget.site));
 }
 
 function renderLimit(payload: OverviewPayload, primary: BudgetStatus | null, secondary: BudgetStatus | null): void {
@@ -931,14 +1014,16 @@ function renderLimit(payload: OverviewPayload, primary: BudgetStatus | null, sec
     limitActions.hidden = true;
     limitNote.hidden = false;
     limitPresets.hidden = !site;
-    limitNote.textContent = site
-      ? `No limit on ${site}. A daily limit sheds video at 60%, images and fonts at 85%, and everything but the page's own HTML at 100%.`
-      : "Limits apply to the site in the tab you are on, and this page is not one Byte Budget can limit. A limit over everything would still apply here.";
+    limitNote.textContent = site ? t("popupNoLimitOnSite", site) : t("popupNoLimitHere");
   }
 
   if (secondary) {
     limitAlso.hidden = false;
-    limitAlso.textContent = `Also ${formatPercent(secondary.share)} of ${BUDGET_WINDOW_LABELS[secondary.budget.period]} on ${siteLabel(secondary.budget.site)}.`;
+    limitAlso.textContent = t("popupLimitAlso", [
+      formatPercent(secondary.share),
+      BUDGET_WINDOW_LABELS[secondary.budget.period],
+      siteLabel(secondary.budget.site),
+    ]);
   } else {
     limitAlso.hidden = true;
   }
@@ -969,11 +1054,10 @@ function renderOptimize(payload: OverviewPayload, biting: boolean): void {
     optimizeCopy.htmlFor = "";
     optimizeMeasured.hidden = true;
     optimizeDismissButton.hidden = false;
-    optimizeTitle.textContent = "Data Saver is off";
-    optimizeHint.textContent =
-      "It asks image services for a smaller version of the same picture, refuses analytics beacons, and stops feeds ordering images larger than they are shown. Switch it off again from here, for this site or for everything.";
-    optimizeAction.textContent = "Turn on";
-    optimizeAction.title = "Eight optimizers, each one switchable in settings. Five are on by default.";
+    optimizeTitle.textContent = t("popupOptimizeOffTitle");
+    optimizeHint.textContent = t("popupOptimizeOffHint");
+    optimizeAction.textContent = t("popupOptimizeTurnOn");
+    optimizeAction.title = t("popupOptimizeTurnOnTitle");
     return;
   }
 
@@ -985,17 +1069,14 @@ function renderOptimize(payload: OverviewPayload, biting: boolean): void {
   optimizeCheck.checked = active;
   optimizeCopy.htmlFor = "optimize-site";
   optimizeDismissButton.hidden = true;
-  optimizeTitle.textContent = active ? `Data Saver on for ${site}` : `Data Saver off for ${site}`;
-  optimizeHint.textContent = active
-    ? "Images are requested at a smaller size where the service offers one, and analytics beacons are refused."
-    : "This site is on the never-optimize list. Nothing here is rewritten or refused.";
+  optimizeTitle.textContent = t(active ? "popupOptimizeOnForSite" : "popupOptimizeOffForSite", site);
+  optimizeHint.textContent = t(active ? "popupOptimizeActiveHint" : "popupOptimizeExcludedHint");
   // The global switch it just flipped could not be flipped back from the popup: once
   // enabled, this row only ever rendered the per-site tick. "Off everywhere" rather
   // than "Turn off", because the tick two centimetres to its left also turns
   // something off and the two are not the same thing.
-  optimizeAction.textContent = "Off everywhere";
-  optimizeAction.title =
-    "Switches Data Saver off for every site. The tick beside it covers this site only.";
+  optimizeAction.textContent = t("popupOptimizeOffEverywhere");
+  optimizeAction.title = t("popupOptimizeOffEverywhereTitle");
 
   // Only what an optimizer earned, and only per site. The delta is the strongest
   // number this product has — a difference between two sets of real page loads — so
@@ -1005,12 +1086,22 @@ function renderOptimize(payload: OverviewPayload, biting: boolean): void {
   const delta = savings?.deltas.find((entry) => entry.site === site) ?? null;
   if (active && delta) {
     optimizeMeasured.hidden = false;
-    optimizeMeasured.textContent = `${bytes(delta.savedPerVisit)} ± ${bytes(delta.savedPerVisitSpread)} lighter per page load`;
-    optimizeMeasured.title = `Measured: ${formatCount(delta.optimizedCount)} optimized page loads against ${formatCount(delta.controlCount)} deliberately unoptimized ones on this site over ${SAVINGS_DAYS} days. The ± is the 95% interval — page weights are heavy-tailed, so the range is the result.`;
+    optimizeMeasured.textContent = t("popupOptimizeMeasuredDelta", [
+      bytes(delta.savedPerVisit),
+      bytes(delta.savedPerVisitSpread),
+    ]);
+    optimizeMeasured.title = t("popupOptimizeMeasuredDeltaTitle", [
+      formatCount(delta.optimizedCount),
+      formatCount(delta.controlCount),
+      String(SAVINGS_DAYS),
+    ]);
   } else if (active && payload.current.totals.savedMeasured > 0) {
     optimizeMeasured.hidden = false;
-    optimizeMeasured.textContent = `${bytes(payload.current.totals.savedMeasured)} measured off images here`;
-    optimizeMeasured.title = `${payload.description}. Arithmetic, not a model: the original variant's size was already on file, so this is what it weighed minus what the smaller one cost.`;
+    optimizeMeasured.textContent = t(
+      "popupOptimizeMeasuredHere",
+      bytes(payload.current.totals.savedMeasured),
+    );
+    optimizeMeasured.title = t("popupOptimizeMeasuredHereTitle", payload.description);
   } else {
     optimizeMeasured.hidden = true;
   }
@@ -1042,10 +1133,9 @@ function paint(): void {
   sitesPanel.hidden = nothing;
   emptyState.hidden = !nothing;
   if (nothing) {
-    emptyState.textContent =
-      payload.settings.planBytes === null
-        ? "Nothing recorded for this period yet. Load a page and the numbers appear here."
-        : "Nothing recorded for this period yet. The figure above covers the whole plan cycle.";
+    emptyState.textContent = t(
+      payload.settings.planBytes === null ? "popupEmptyNoPlan" : "popupEmptyWithPlan",
+    );
     return;
   }
 
@@ -1062,7 +1152,9 @@ function showError(message: string, source: "poll" | "action"): void {
   errorSource = source;
   actionError.hidden = false;
   actionErrorText.textContent = message;
-  actionErrorDismiss.textContent = fastTimer === null && source === "poll" ? "Try again" : "Dismiss";
+  actionErrorDismiss.textContent = t(
+    fastTimer === null && source === "poll" ? "popupErrorTryAgain" : "popupErrorDismiss",
+  );
   liveRegion.textContent = message;
 }
 
@@ -1093,7 +1185,7 @@ async function loadFast(): Promise<void> {
     // grace period exists to stop a routine worker wake flashing an error over
     // figures that are still true, and there are no figures to keep here.
     if (pollFailures >= POLL_FAILURES_BANNER || overview === null) {
-      showError(errorMessage(overviewResult.reason, "Could not read usage."), "poll");
+      showError(errorMessage(overviewResult.reason, t("popupErrorReadUsage")), "poll");
     }
     return;
   }
@@ -1210,7 +1302,7 @@ function disarmRemove(): void {
   // Also resets the label here, not only in `showLimitStatus`: a limit removed from
   // another surface mid-arm leaves the card with no status to render, and a button
   // still reading "Press again to remove" pointing at nothing.
-  limitRemove.textContent = "Remove";
+  limitRemove.textContent = t("popupLimitRemove");
   if (removeTimer !== null) {
     clearTimeout(removeTimer);
     removeTimer = null;
@@ -1226,7 +1318,7 @@ query<HTMLButtonElement>("#plan-alerts-button").addEventListener("click", () => 
   if (!plan) return;
   void ask(
     { type: "PUT_BUDGET", site: ALL_SITES, bytes: plan, period: "month", shape: "progressive" },
-    "Could not create the limit over everything.",
+    t("popupErrorCreateAllLimit"),
   );
 });
 
@@ -1234,7 +1326,7 @@ projectionToggle.addEventListener("click", () => {
   const expanded = projectionBasis.dataset.expanded === "true";
   setData(projectionBasis, "data-expanded", expanded ? null : "true");
   projectionToggle.setAttribute("aria-expanded", String(!expanded));
-  projectionToggle.textContent = expanded ? "Show how this is worked out" : "Show less";
+  projectionToggle.textContent = t(expanded ? "popupProjectionShow" : "popupProjectionShowLess");
 });
 
 actionErrorDismiss.addEventListener("click", () => {
@@ -1252,7 +1344,7 @@ limitGrant.addEventListener("click", () => {
   if (!status) return;
   void ask(
     { type: "GRANT_BYTES", site: status.budget.site, bytes: grantSize(status.allowance) },
-    "Could not raise the allowance.",
+    t("popupErrorGrant"),
   );
 });
 
@@ -1263,7 +1355,7 @@ limitPause.addEventListener("click", () => {
     status.snoozed
       ? { type: "RESUME_BUDGET", site: status.budget.site }
       : { type: "SNOOZE_BUDGET", site: status.budget.site, minutes: 60 },
-    status.snoozed ? "Could not resume the limit." : "Could not pause the limit.",
+    t(status.snoozed ? "popupErrorResume" : "popupErrorPause"),
   );
 });
 
@@ -1280,8 +1372,8 @@ limitRemove.addEventListener("click", () => {
   if (!status) return;
   if (!removeArmed) {
     removeArmed = true;
-    limitRemove.textContent = "Press again to remove";
-    liveRegion.textContent = `Press Remove again to delete the limit on ${siteLabel(status.budget.site)}.`;
+    limitRemove.textContent = t("popupLimitRemoveArmed");
+    liveRegion.textContent = t("popupLimitRemoveConfirm", siteLabel(status.budget.site));
     removeTimer = setTimeout(() => {
       disarmRemove();
       paint();
@@ -1289,7 +1381,7 @@ limitRemove.addEventListener("click", () => {
     return;
   }
   disarmRemove();
-  void ask({ type: "REMOVE_BUDGET", site: status.budget.site }, "Could not remove the limit.");
+  void ask({ type: "REMOVE_BUDGET", site: status.budget.site }, t("popupErrorRemove"));
 });
 
 query<HTMLButtonElement>("#limit-more").addEventListener("click", () => openSettings("limits-panel"));
@@ -1299,7 +1391,7 @@ optimizeCheck.addEventListener("change", () => {
   if (!site) return;
   void ask(
     { type: "SET_SITE_OPTIMIZE", site, optimize: optimizeCheck.checked },
-    "Could not change Data Saver for this site.",
+    t("popupErrorSiteOptimize"),
   );
 });
 
@@ -1308,7 +1400,7 @@ optimizeAction.addEventListener("click", () => {
   savingsLoaded = false;
   void ask(
     { type: "SAVE_OPTIMIZE", changes: { enabled: !enabled } },
-    "Could not change Data Saver.",
+    t("popupErrorOptimize"),
   );
 });
 
@@ -1316,7 +1408,7 @@ optimizeDismissButton.addEventListener("click", () => {
   optimizeDismissed = true;
   void chrome.storage.local.set({ [OPTIMIZE_DISMISSED_KEY]: true });
   optimizeRow.hidden = true;
-  liveRegion.textContent = "Suggestion hidden. Data Saver is still in settings.";
+  liveRegion.textContent = t("popupOptimizeDismissed");
 });
 
 sitesExpand.addEventListener("click", () => {
@@ -1399,14 +1491,14 @@ async function start(): Promise<void> {
     limitPresets,
     LIMIT_PRESETS.map((preset) =>
       button("ghost-button", {
-        text: `${preset.label} a day`,
-        title: `Limits the site in this tab to ${preset.label} a day. Video goes at 60% of that, images and fonts at 85%, everything but the page's own HTML at 100%.`,
+        text: t("popupLimitPresetLabel", preset.label),
+        title: t("popupLimitPresetTitle", preset.label),
         onClick: () => {
           const site = overview?.current.site;
           if (!site) return;
           void ask(
             { type: "PUT_BUDGET", site, bytes: preset.bytes, period: "day", shape: "progressive" },
-            "Could not set the limit.",
+            t("popupErrorSetLimit"),
           );
         },
       }),

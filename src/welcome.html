@@ -3,8 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Byte Budget — set up</title>
+    <title data-i18n="welcomePageTitle"></title>
   </head>
+  <!--
+    Every string on this page is named here and written in by `welcome.ts`. Chrome
+    substitutes `__MSG_name__` in the manifest and in CSS but not in an extension page's
+    HTML, so there is no declarative way to do it, and copy left in the markup would be
+    copy a translation never reaches. `data-i18n-label`, `data-i18n-title` and
+    `data-i18n-placeholder` cover the attributes, which are the strings an extraction
+    pass forgets and the whole of the page for a screen-reader user.
+  -->
   <body>
     <div class="page welcome-page">
       <header class="page-head">
@@ -12,11 +20,8 @@
           <img class="brand-mark" src="./icon.svg" alt="" width="40" height="40" />
           <div class="brand-copy">
             <p class="brand-eyebrow">Byte Budget</p>
-            <h1 class="brand-title">Two questions, then it runs on its own</h1>
-            <p class="brand-sub">
-              Byte Budget is already counting. Answering these turns a running total into a
-              position — on track, or not. All of it is optional; skip it and nothing breaks.
-            </p>
+            <h1 class="brand-title" data-i18n="welcomeTitle"></h1>
+            <p class="brand-sub" data-i18n="welcomeIntro"></p>
           </div>
         </div>
       </header>
@@ -30,24 +35,27 @@
             context.
           -->
           <div class="panel-head">
-            <h2 class="feature-title" id="plan-title">
-              How big is your plan, and when does it reset?
-            </h2>
+            <h2 class="feature-title" id="plan-title" data-i18n="welcomePlanTitle"></h2>
           </div>
 
           <form class="welcome-form" id="plan-form">
             <div class="field">
-              <label class="field-label" for="plan-size">Allowance per month</label>
+              <label class="field-label" for="plan-size" data-i18n="welcomePlanSizeLabel"></label>
               <input
                 class="search-input"
                 id="plan-size"
                 type="text"
                 autocomplete="off"
                 spellcheck="false"
-                placeholder="15 GB"
+                data-i18n-placeholder="welcomePlanSizePlaceholder"
                 list="plan-sizes"
                 aria-describedby="plan-size-hint"
               />
+              <!--
+                The suggestions are values, not labels: picking one puts the text straight
+                into the field, where `parseByteSize` has to read it back. Translating them
+                would be translating input, so they stay as they are.
+              -->
               <datalist id="plan-sizes">
                 <option value="5 GB"></option>
                 <option value="10 GB"></option>
@@ -59,7 +67,7 @@
             </div>
 
             <div class="field">
-              <label class="field-label" for="cycle-day">Resets on</label>
+              <label class="field-label" for="cycle-day" data-i18n="welcomeCycleDayLabel"></label>
               <!--
                 Filled by `welcome.ts` rather than written out here: twenty-eight options
                 is a lot of markup to keep in step with `MAX_CYCLE_START_DAY`, and the
@@ -70,73 +78,57 @@
             </div>
 
             <div class="welcome-actions">
-              <button class="primary-button" id="plan-save" type="submit">Save</button>
-              <button class="ghost-button" id="plan-skip" type="button">Skip for now</button>
+              <button
+                class="primary-button"
+                id="plan-save"
+                type="submit"
+                data-i18n="welcomePlanSave"
+              ></button>
+              <button
+                class="ghost-button"
+                id="plan-skip"
+                type="button"
+                data-i18n="welcomeSkip"
+              ></button>
             </div>
           </form>
 
           <p class="field-hint form-status" id="plan-status" aria-live="polite"></p>
 
           <details class="inline-details">
-            <summary>What saving a plan does</summary>
-            <p>
-              The size becomes an allowance over everything you browse, and that allowance is
-              what the warnings are measured against. They arrive at 75%, 90% and 100%. Those
-              three are fixed; there is no fourth.
-            </p>
-            <p>
-              Nothing is refused below 100%. At 100% Byte Budget starts refusing subresources —
-              images, video, scripts — on every site until the allowance rolls over. The page
-              itself always loads, carrying a banner that says why. Change the allowance, pause
-              it for an hour, or remove it entirely in Settings.
-            </p>
-            <p>
-              Reset days stop at the 28th because every month has one. A cycle anchored to the
-              31st would reset on a different date in February, and the reset date is the one
-              figure here you check against a bill.
-            </p>
+            <summary data-i18n="welcomePlanDetailsSummary"></summary>
+            <p data-i18n="welcomePlanDetailsAllowance"></p>
+            <p data-i18n="welcomePlanDetailsEnforcement"></p>
+            <p data-i18n="welcomePlanDetailsResetDay"></p>
           </details>
         </section>
 
         <section class="panel feature-panel saver-panel" id="saver-panel" aria-labelledby="saver-title">
           <div class="setting-hero">
             <div class="setting-hero-copy">
-              <p class="panel-kicker">Optional</p>
-              <h2 class="feature-title" id="saver-title">Data Saver</h2>
-              <p class="section-intro">
-                Asks known image CDNs for a smaller version of the same picture, refuses
-                analytics beacons, and stops video that is off screen from pre-buffering. The
-                individual features, per-site exceptions and the off switch are all in Settings.
-              </p>
-              <p class="section-intro">
-                To measure what that saves rather than estimate it, about one page load in ten
-                is deliberately left unoptimized as a control.
-              </p>
+              <p class="panel-kicker" data-i18n="welcomeSaverKicker"></p>
+              <h2 class="feature-title" id="saver-title" data-i18n="welcomeSaverTitle"></h2>
+              <p class="section-intro" data-i18n="welcomeSaverIntro"></p>
+              <p class="section-intro" data-i18n="welcomeSaverControl"></p>
             </div>
             <label class="switch-control">
               <input type="checkbox" id="saver-toggle" />
               <span class="switch-track" aria-hidden="true"><span></span></span>
-              <span class="switch-label">Data Saver</span>
+              <span class="switch-label" data-i18n="welcomeSaverSwitchLabel"></span>
             </label>
           </div>
           <p class="save-status" id="saver-status" aria-live="polite"></p>
         </section>
 
         <section class="panel" id="scope-panel" aria-labelledby="scope-title">
-          <h2 class="panel-title" id="scope-title">What these numbers do not cover</h2>
-          <p class="section-intro">
-            Everything Byte Budget counts happens inside this Chrome profile. A second profile,
-            a different browser, apps outside Chrome, system and app updates, and every other
-            device sharing your connection are invisible to an extension — there is no API that
-            would show them — so a carrier’s figure can sit well above this one, sometimes by a
-            factor of several. Nothing is uploaded and there is no account.
-          </p>
+          <h2 class="panel-title" id="scope-title" data-i18n="welcomeScopeTitle"></h2>
+          <p class="section-intro" data-i18n="welcomeScopeBody"></p>
         </section>
       </main>
 
-      <nav class="section-nav" aria-label="Where to go next">
-        <a href="./dashboard.html">Dashboard</a>
-        <a href="./settings.html">Settings</a>
+      <nav class="section-nav" data-i18n-label="welcomeNavLabel">
+        <a href="./dashboard.html" data-i18n="welcomeNavDashboard"></a>
+        <a href="./settings.html" data-i18n="welcomeNavSettings"></a>
       </nav>
     </div>
     <script type="module" src="./welcome.ts"></script>

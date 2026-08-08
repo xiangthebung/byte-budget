@@ -38,11 +38,21 @@
  * proxy for compressed size at a fixed quality.
  */
 
+import { t } from "../core/i18n";
+
 export interface Pack {
   id: string;
-  /** The site or service, for the UI. */
+  /** The site or service, for the UI. Already localised, from `corePack<Id>Label`. */
   label: string;
-  /** What it does, in one sentence, for the UI. */
+  /**
+   * What it does, in one sentence, for the UI. Already localised, from
+   * `corePack<Id>Description`.
+   *
+   * The sentence is a promise about the rule below it, and property 5 above is the
+   * reason it has to stay one: `corePackCloudinaryDescription` names the media types
+   * the pattern refuses to touch, and `corePackWikimediaDescription` names the cost on
+   * a high-density screen. Neither is decoration.
+   */
   description: string;
   /** Hosts this pack rewrites, for display and for the exclusion check. */
   hosts: string[];
@@ -80,9 +90,8 @@ export const TARGET_WIDTH = 800;
 export const PACKS: readonly Pack[] = [
   {
     id: "twimg",
-    label: "X / Twitter images",
-    description:
-      "Asks pbs.twimg.com for the 680px variant instead of the 2048px one. Same image, same path.",
+    label: t("corePackTwimgLabel"),
+    description: t("corePackTwimgDescription"),
     hosts: ["pbs.twimg.com"],
     // The whole URL is rebuilt from the media id and the format, because the only
     // other parameter twimg takes is the one being replaced.
@@ -100,9 +109,8 @@ export const PACKS: readonly Pack[] = [
   },
   {
     id: "wikimedia",
-    label: "Wikipedia and Wikimedia images",
-    description:
-      "Asks Wikimedia for an 800px-wide thumbnail in place of one 1300px or wider. On a high-density screen a large image can come back looking softer.",
+    label: t("corePackWikimediaLabel"),
+    description: t("corePackWikimediaDescription"),
     hosts: ["upload.wikimedia.org"],
     // The floor is 1300, and the two reasons behind that number are different.
     //
@@ -122,8 +130,8 @@ export const PACKS: readonly Pack[] = [
   },
   {
     id: "photon",
-    label: "WordPress.com and Jetpack images",
-    description: "Caps the Photon image proxy at 800px wide.",
+    label: t("corePackPhotonLabel"),
+    description: t("corePackPhotonDescription"),
     hosts: ["i0.wp.com", "i1.wp.com", "i2.wp.com"],
     /*
      * Only queries this pattern can read end to end, which is why every parameter it
@@ -151,8 +159,8 @@ export const PACKS: readonly Pack[] = [
   },
   {
     id: "shopify",
-    label: "Shopify product images",
-    description: "Caps Shopify CDN images at 800px wide, in the sized-filename form.",
+    label: t("corePackShopifyLabel"),
+    description: t("corePackShopifyDescription"),
     hosts: ["cdn.shopify.com"],
     // Shopify writes the size into the filename and then decorates it: `_crop_center`
     // picks the framing, `@2x` asks for double the named size. The tail used to be
@@ -168,8 +176,8 @@ export const PACKS: readonly Pack[] = [
   },
   {
     id: "shopifyWidth",
-    label: "Shopify theme images",
-    description: "Caps Shopify CDN images at 800px wide when the theme asks by query parameter.",
+    label: t("corePackShopifyWidthLabel"),
+    description: t("corePackShopifyWidthDescription"),
     hosts: ["cdn.shopify.com"],
     /*
      * A second pack rather than a branch in the one above, because the two forms need
@@ -195,9 +203,8 @@ export const PACKS: readonly Pack[] = [
   },
   {
     id: "cloudinary",
-    label: "Cloudinary images",
-    description:
-      "Adds automatic format and quality selection to unsigned Cloudinary photographs. Signed URLs, vectors, animations and documents are left alone.",
+    label: t("corePackCloudinaryLabel"),
+    description: t("corePackCloudinaryDescription"),
     hosts: ["res.cloudinary.com"],
     // Requires a version segment straight after `upload/`, which is what a signed URL
     // does not have — and what the substitution displaces, so it cannot loop.

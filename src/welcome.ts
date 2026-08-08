@@ -14,13 +14,43 @@
  */
 
 import "./welcome.css";
-import { element, query, replaceChildren } from "./core/dom";
+import { element, query, queryAll, replaceChildren } from "./core/dom";
 import { formatBytes, parseByteSize } from "./core/format";
+import { t } from "./core/i18n";
 import { errorMessage, sendRequest } from "./core/messages";
 import { cycleResetsAt, dayKey, formatDayShort, startOfCycle } from "./core/period";
 import { applyTheme } from "./core/settings";
 import { ALL_SITES, MAX_CYCLE_START_DAY, type Settings } from "./core/types";
 import type { OptimizeSettings } from "./optimize/features";
+
+/**
+ * Writes the text that welcome.html names but does not hold.
+ *
+ * Chrome substitutes `__MSG_name__` in the manifest and in CSS but not in an
+ * extension page's HTML, so this loop is the only way those strings can be
+ * translated at all. It runs at module scope, before the lookups below, so a key is
+ * never on screen — including in the tab, since `<title>` is swept with everything
+ * else.
+ *
+ * `aria-label` and `placeholder` are swept alongside text: the nav's name and the
+ * example size in the allowance field are as much a part of this page as its
+ * paragraphs, and an attribute is the string an extraction pass forgets. `popup.ts`
+ * holds the twin of this loop rather than sharing one — `core/i18n.ts` is the
+ * cross-surface contract and holds `t` alone.
+ */
+function applyFixedStrings(): void {
+  for (const node of queryAll<HTMLElement>("[data-i18n]")) {
+    node.textContent = t(node.dataset.i18n ?? "");
+  }
+  for (const node of queryAll<HTMLElement>("[data-i18n-label]")) {
+    node.setAttribute("aria-label", t(node.dataset.i18nLabel ?? ""));
+  }
+  for (const node of queryAll<HTMLInputElement>("[data-i18n-placeholder]")) {
+    node.placeholder = t(node.dataset.i18nPlaceholder ?? "");
+  }
+}
+
+applyFixedStrings();
 
 const planForm = query<HTMLFormElement>("#plan-form");
 const planSize = query<HTMLInputElement>("#plan-size");
@@ -39,11 +69,29 @@ let units: Settings["units"] = "si";
  * The two questions
  * ------------------------------------------------------------------ */
 
-/** `1st`, `2nd`, `3rd`, `21st`. English only, like every other literal in this build. */
+/**
+ * `1st`, `2nd`, `3rd`, `21st`.
+ *
+ * The four forms are whole messages rather than suffixes glued to a digit, because a
+ * suffix is not what every language uses — some prefix the marker, some inflect the
+ * number — and a translation handed only "st" cannot move it.
+ *
+ * The *choice* between the four is still English: 11 to 13 take the `other` form and
+ * everything else goes on the last digit. That rule belongs to `Intl.PluralRules`
+ * with `type: "ordinal"`, which is a behaviour change and so is not part of this
+ * extraction pass. Until it lands, a locale with different ordinal categories gets
+ * the right words in the wrong places.
+ */
 function ordinal(day: number): string {
   const teens = day % 100;
-  if (teens >= 11 && teens <= 13) return `${day}th`;
-  return `${day}${["th", "st", "nd", "rd"][day % 10] ?? "th"}`;
+  if (teens >= 11 && teens <= 13) return t("welcomeOrdinalOther", String(day));
+  const forms = [
+    "welcomeOrdinalOther",
+    "welcomeOrdinalOne",
+    "welcomeOrdinalTwo",
+    "welcomeOrdinalFew",
+  ];
+  return t(forms[day % 10] ?? "welcomeOrdinalOther", String(day));
 }
 
 /**
@@ -62,7 +110,7 @@ function cycleOptions(): HTMLOptionElement[] {
     // picked would decide nothing.
     if (day === 1) continue;
     const option = element("option", {
-      text: day === 0 ? "The 1st — the calendar month" : `The ${ordinal(day)}`,
+      text: day === 0 ? t("welcomeCycleDayCalendar") : t("welcomeCycleDayOption", ordinal(day)),
     });
     option.value = String(day);
     options.push(option);
@@ -83,12 +131,12 @@ function paintSizeHint(): void {
   const parsed = raw === "" ? null : parseByteSize(raw);
   const text =
     raw === ""
-      ? "Blank is fine. Usage is still measured — there is just nothing to measure it against."
+      ? t("welcomePlanSizeBlank")
       : parsed === null
-        ? `Could not read "${raw}". Try 15 GB, 500 MB or 20 GiB.`
+        ? t("welcomePlanSizeUnreadable", raw)
         : parsed <= 0
-          ? "A plan of nothing is not a plan. Leave it blank instead."
-          : `Read as ${formatBytes(parsed, units)}.`;
+          ? t("welcomePlanSizeZero")
+          : t("welcomePlanSizeRead", formatBytes(parsed, units));
   // Written only when it changes. This is a live region updated on every keystroke, and
   // reassigning the same sentence makes a screen reader announce it once per character.
   if (planSizeHint.textContent !== text) planSizeHint.textContent = text;
@@ -108,7 +156,7 @@ function nextResetLabel(): string {
 /** The chosen day as the two dates a person can check against a bill. */
 function paintCycleHint(): void {
   const started = formatDayShort(dayKey(startOfCycle(chosenCycle())));
-  const text = `This cycle started ${started}. Next reset ${nextResetLabel()}.`;
+  const text = t("welcomeCycleHint", [started, nextResetLabel()]);
   if (cycleDayHint.textContent !== text) cycleDayHint.textContent = text;
 }
 
@@ -116,14 +164,14 @@ async function savePlan(): Promise<void> {
   const raw = planSize.value.trim();
   const parsed = raw === "" ? null : parseByteSize(raw);
   if (raw !== "" && (parsed === null || parsed <= 0)) {
-    planStatus.textContent = `Could not read "${raw}" as a size. Try 15 GB, or leave it blank.`;
+    planStatus.textContent = t("welcomePlanSaveUnreadable", raw);
     planSize.focus();
     return;
   }
 
   const cycleStartDay = Number(cycleDay.value);
   planSave.disabled = true;
-  planStatus.textContent = "Saving…";
+  planStatus.textContent = t("welcomeSaving");
 
   try {
     await sendRequest({
@@ -131,7 +179,7 @@ async function savePlan(): Promise<void> {
       changes: { planBytes: parsed, cycleStartDay },
     });
   } catch (error) {
-    planStatus.textContent = errorMessage(error, "Could not save the plan.");
+    planStatus.textContent = errorMessage(error, t("welcomePlanSaveFailed"));
     planSave.disabled = false;
     return;
   }
@@ -166,8 +214,13 @@ async function savePlan(): Promise<void> {
   } catch (error) {
     // Named rather than swallowed. The plan size is stored and every surface will show
     // it, so a quiet failure here is the one state where the product looks set up and
-    // the warnings can never arrive.
-    planStatus.textContent = `${errorMessage(error, "Could not set the allowance.")} The plan size is saved, but the warnings are not set up — try again from Settings.`;
+    // the warnings can never arrive. The failure and the consequence are one message
+    // with the reason as a placeholder, not a sentence bolted onto whatever the error
+    // happened to say.
+    planStatus.textContent = t(
+      "welcomeAllowanceFailed",
+      errorMessage(error, t("welcomeAllowanceFailedFallback")),
+    );
     planSave.disabled = false;
     return;
   }
@@ -175,8 +228,8 @@ async function savePlan(): Promise<void> {
   planSave.disabled = false;
   planStatus.textContent =
     parsed === null
-      ? "Saved. No plan set — usage is measured all the same, and you can set one in Settings later."
-      : `Saved. ${formatBytes(parsed, units)} a month, next reset ${nextResetLabel()}. Change it any time in Settings.`;
+      ? t("welcomePlanSavedNone")
+      : t("welcomePlanSaved", [formatBytes(parsed, units), nextResetLabel()]);
 }
 
 /**
@@ -212,9 +265,7 @@ async function skip(): Promise<void> {
 function paintSaver(optimize: OptimizeSettings): void {
   saverToggle.checked = optimize.enabled;
   saverStatus.dataset.active = String(optimize.enabled);
-  saverStatus.textContent = optimize.enabled
-    ? "Data Saver is on for every site. Switch it off with this control, or exclude one site in Settings."
-    : "Data Saver is off. No request is being rewritten or refused.";
+  saverStatus.textContent = t(optimize.enabled ? "welcomeSaverOn" : "welcomeSaverOff");
 }
 
 async function loadSaver(): Promise<void> {
@@ -222,18 +273,18 @@ async function loadSaver(): Promise<void> {
     const { optimize } = await sendRequest({ type: "GET_OPTIMIZE" });
     paintSaver(optimize);
   } catch (error) {
-    saverStatus.textContent = errorMessage(error, "Could not read Data Saver.");
+    saverStatus.textContent = errorMessage(error, t("welcomeSaverReadFailed"));
   }
 }
 
 async function changeSaver(enabled: boolean): Promise<void> {
   saverToggle.disabled = true;
-  saverStatus.textContent = "Saving…";
+  saverStatus.textContent = t("welcomeSaving");
   try {
     const { optimize } = await sendRequest({ type: "SAVE_OPTIMIZE", changes: { enabled } });
     paintSaver(optimize);
   } catch (error) {
-    const message = errorMessage(error, "Could not change Data Saver.");
+    const message = errorMessage(error, t("welcomeSaverChangeFailed"));
     // Re-read rather than reverting the checkbox by hand: what is stored is the only
     // thing that decides, and a switch showing the value we tried to write is the
     // failure this page is least able to explain.
@@ -274,7 +325,7 @@ async function start(): Promise<void> {
     // and assigning a value no option carries leaves the select showing nothing.
     if (cycleDay.value === "") cycleDay.value = "0";
   } catch (error) {
-    planStatus.textContent = errorMessage(error, "Could not read the current settings.");
+    planStatus.textContent = errorMessage(error, t("welcomeSettingsReadFailed"));
   }
 
   paintSizeHint();

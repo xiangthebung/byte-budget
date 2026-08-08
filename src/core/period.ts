@@ -8,6 +8,7 @@
  * it is what lets an IndexedDB range query stand in for a date comparison.
  */
 
+import { t } from "./i18n";
 import { MAX_CYCLE_START_DAY, type Period, type Settings } from "./types";
 
 function pad(value: number, width = 2): string {
@@ -248,21 +249,138 @@ export function formatWeekday(key: string): string {
   return WEEKDAY_SHORT.format(startOfDay(key));
 }
 
-/** A sentence naming what a period actually covers, for the UI to show. */
+/**
+ * Which of the six sentences a period wants, without composing any of them.
+ *
+ * `period` alone does not decide this: `week` and `month` each read as a calendar
+ * window or a trailing one depending on a setting, and the two need different
+ * sentences. Naming the six cases here is what lets the worker say *which* window it
+ * measured without saying it in English.
+ */
+export type PeriodKind =
+  | "session"
+  | "day"
+  | "calendarWeek"
+  | "rollingWeek"
+  | "calendarMonth"
+  | "rollingMonth";
+
+export interface PeriodDescription {
+  kind: PeriodKind;
+  /** Inclusive `YYYY-MM-DD`. `null` only for `session`, which has no day range. */
+  from: string | null;
+  /** Inclusive `YYYY-MM-DD`. `null` only for `session`. */
+  to: string | null;
+  /** Whole days covered, inclusive of both ends. `0` for `session`. */
+  days: number;
+}
+
+/**
+ * What a period covers, as data rather than as a sentence.
+ *
+ * This is the form meant to cross the message boundary: the worker computes it, puts
+ * it on the payload, and the surface renders it with `formatPeriodDescription`, which
+ * is where the locale actually is. A composed sentence cannot survive that trip — a
+ * translation of "This week · Jul 27 – Jul 31" may need the range first, the separator
+ * elsewhere, or no separator at all, and none of that is reachable once the worker has
+ * already joined the pieces.
+ *
+ * `track/stats.ts` still sends `describePeriod`'s English on `payload.description`; the
+ * three surfaces move over to this one at a time, and that field goes when the last of
+ * them has.
+ */
+export function periodDescription(
+  period: Period,
+  settings: Pick<Settings, "weekMode" | "monthMode" | "weekStart">,
+  now: Date = new Date(),
+): PeriodDescription {
+  const range = periodRange(period, settings, now);
+  if (!range) return { kind: "session", from: null, to: null, days: 0 };
+
+  const kind: PeriodKind =
+    period === "today"
+      ? "day"
+      : period === "week"
+        ? settings.weekMode === "calendar"
+          ? "calendarWeek"
+          : "rollingWeek"
+        : settings.monthMode === "calendar"
+          ? "calendarMonth"
+          : "rollingMonth";
+
+  return {
+    kind,
+    from: range.from,
+    to: range.to,
+    days: daysBetween(range.from, range.to) + 1,
+  };
+}
+
+/**
+ * The sentence, built in the surface's locale from whole messages.
+ *
+ * Every case is one message with placeholders — never a prefix joined to a range —
+ * because a translator cannot reorder two fragments that arrive already
+ * concatenated. The date range is itself one message (`corePeriodSpan`) for the same
+ * reason: the separator between two dates is not the same character everywhere, and
+ * some languages want the dates the other way round.
+ */
+export function formatPeriodDescription(description: PeriodDescription): string {
+  if (description.kind === "session" || description.from === null || description.to === null) {
+    return t("corePeriodSession");
+  }
+  const span = t("corePeriodSpan", [
+    formatDayShort(description.from),
+    formatDayShort(description.to),
+  ]);
+  switch (description.kind) {
+    case "day":
+      return t("corePeriodToday", formatDayShort(description.to));
+    case "calendarWeek":
+      return t("corePeriodCalendarWeek", span);
+    case "calendarMonth":
+      return t("corePeriodCalendarMonth", span);
+    case "rollingWeek":
+    case "rollingMonth":
+      return t("corePeriodRollingDays", [String(description.days), span]);
+  }
+}
+
+/**
+ * A sentence naming what a period actually covers, for the UI to show.
+ *
+ * @deprecated Composed in the worker, in English, and shipped as
+ * `payload.description`. Use `periodDescription` on the producing side and
+ * `formatPeriodDescription` on the rendering side; this exists only so the three
+ * surfaces can migrate one at a time instead of all in the same commit.
+ *
+ * Deliberately still literal English rather than a set of catalogue lookups. It has no
+ * localised behaviour to offer — the worker composes it before the surface's locale is
+ * in the picture — so translating it would duplicate the six `corePeriod*` sentences in
+ * `i18n/core.json` for a function that is being deleted. Delete this once nothing reads
+ * `payload.description`.
+ */
 export function describePeriod(
   period: Period,
   settings: Pick<Settings, "weekMode" | "monthMode" | "weekStart">,
   now: Date = new Date(),
 ): string {
-  const range = periodRange(period, settings, now);
-  if (!range) return "Since this browser started";
-  if (period === "today") return formatDayShort(range.to);
-  const days = daysBetween(range.from, range.to) + 1;
-  const span = `${formatDayShort(range.from)} – ${formatDayShort(range.to)}`;
-  if (period === "week") {
-    return settings.weekMode === "calendar" ? `This week · ${span}` : `Last ${days} days · ${span}`;
+  const description = periodDescription(period, settings, now);
+  if (description.from === null || description.to === null) return "Since this browser started";
+  const span = `${formatDayShort(description.from)} – ${formatDayShort(description.to)}`;
+  switch (description.kind) {
+    case "session":
+      return "Since this browser started";
+    case "day":
+      return formatDayShort(description.to);
+    case "calendarWeek":
+      return `This week · ${span}`;
+    case "calendarMonth":
+      return `This month · ${span}`;
+    case "rollingWeek":
+    case "rollingMonth":
+      return `Last ${description.days} days · ${span}`;
   }
-  return settings.monthMode === "calendar" ? `This month · ${span}` : `Last ${days} days · ${span}`;
 }
 
 /** The oldest day key worth keeping, given a retention setting. `null` = keep all. */

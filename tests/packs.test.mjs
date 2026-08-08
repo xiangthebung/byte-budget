@@ -24,6 +24,7 @@
  * and ships another, and properties 2 and 3 are unproven for the thing that runs.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   applyPack,
@@ -390,9 +391,31 @@ test("a description promises only what the substitution actually asks for", () =
     { about: "cropping", claim: /\bcrops?\b/i, asks: /crop/ },
   ];
 
+  /*
+   * Read from the catalogue, not from `entry.description`.
+   *
+   * The descriptions became `t("corePack<Id>Description")` lookups, and under
+   * `node --test` there is no `chrome.i18n`, so `t()` returns the key. A key matches
+   * none of the three claim patterns above — so every pack would `continue`, and this
+   * test would pass having asserted nothing at all. It is the test that caught the
+   * shipped Photon copy, and a green vacuous test is worse than no test: it reports
+   * that the sentence was checked.
+   *
+   * `i18n/core.json` is the source the build merges into `_locales/en/messages.json`,
+   * so this reads exactly the English a person is shown.
+   */
+  const catalogue = JSON.parse(
+    readFileSync(new URL("../i18n/core.json", import.meta.url), "utf8"),
+  );
+
+  let checked = 0;
   for (const entry of PACKS) {
+    const key = `corePack${entry.id[0].toUpperCase()}${entry.id.slice(1)}Description`;
+    const message = catalogue[key]?.message;
+    assert.ok(message, `${entry.id} has no ${key} in i18n/core.json`);
     for (const { about, claim, asks } of claims) {
-      if (!claim.test(entry.description)) continue;
+      if (!claim.test(message)) continue;
+      checked += 1;
       assert.match(
         entry.regexSubstitution,
         asks,
@@ -400,6 +423,11 @@ test("a description promises only what the substitution actually asks for", () =
       );
     }
   }
+
+  // The guard against this test going quietly vacuous a second time. At least one pack
+  // must actually make one of these claims, or the loop above proved nothing and the
+  // claim patterns have drifted away from the copy they are meant to police.
+  assert.ok(checked > 0, "no pack description made any of the claims this test checks");
 });
 
 test("pack rules match case-sensitively, because the JavaScript copies do", () => {

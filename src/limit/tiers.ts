@@ -22,24 +22,26 @@
  * explicit setting, not at the end of a slope.
  */
 
+import { t } from "../core/i18n";
 import type { ResourceType } from "../core/types";
 
 export const TIERS = ["off", "trim", "lean", "strict"] as const;
 export type Tier = (typeof TIERS)[number];
 
+/** The state word a surface shows for a tier. */
 export const TIER_LABELS: Record<Tier, string> = {
-  off: "No limit",
-  trim: "Skip video and audio",
-  lean: "Skip video, images and fonts",
-  strict: "Page shell only",
+  off: t("coreTierOffLabel"),
+  trim: t("coreTierTrimLabel"),
+  lean: t("coreTierLeanLabel"),
+  strict: t("coreTierStrictLabel"),
 };
 
+/** The one-line consequence a surface shows under the state word. */
 export const TIER_DESCRIPTIONS: Record<Tier, string> = {
-  off: "Everything loads normally.",
-  trim: "Video and audio segments are refused. Players usually drop to a lower quality or pause.",
-  lean: "Also refuses images and web fonts. Layout survives; pictures do not.",
-  strict:
-    "Refuses every subresource. The page's own HTML still loads so it can tell you what happened, but nothing else does.",
+  off: t("coreTierOffDescription"),
+  trim: t("coreTierTrimDescription"),
+  lean: t("coreTierLeanDescription"),
+  strict: t("coreTierStrictDescription"),
 };
 
 /**

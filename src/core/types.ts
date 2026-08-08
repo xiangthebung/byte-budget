@@ -8,6 +8,8 @@
  * total that hides that fact is a total nobody should trust.
  */
 
+import { t } from "./i18n";
+
 /** Schema version for the IndexedDB database. Bump on any store change. */
 export const DB_VERSION = 1;
 export const DB_NAME = "byte-budget";
@@ -68,19 +70,25 @@ export const RESOURCE_TYPE_HUES: Record<ResourceType, number> = {
   other: 232,
 };
 
-/** Display order and labels for the type breakdown, heaviest first by habit. */
+/**
+ * Display order and labels for the type breakdown, heaviest first by habit.
+ *
+ * The order is the property order of this object and is read by the chart; the text
+ * comes from the catalogue. Resolved once at module load rather than per render,
+ * because the locale cannot change while a page is open.
+ */
 export const RESOURCE_TYPE_LABELS: Record<ResourceType, string> = {
-  media: "Video & audio",
-  image: "Images",
-  script: "Scripts",
-  main_frame: "Pages",
-  sub_frame: "Frames",
-  stylesheet: "Styles",
-  font: "Fonts",
-  xmlhttprequest: "Data (XHR/fetch)",
-  websocket: "Sockets",
-  ping: "Beacons",
-  other: "Other",
+  media: t("coreResourceTypeMedia"),
+  image: t("coreResourceTypeImage"),
+  script: t("coreResourceTypeScript"),
+  main_frame: t("coreResourceTypeMainFrame"),
+  sub_frame: t("coreResourceTypeSubFrame"),
+  stylesheet: t("coreResourceTypeStylesheet"),
+  font: t("coreResourceTypeFont"),
+  xmlhttprequest: t("coreResourceTypeXhr"),
+  websocket: t("coreResourceTypeWebsocket"),
+  ping: t("coreResourceTypePing"),
+  other: t("coreResourceTypeOther"),
 };
 
 /* ------------------------------------------------------------------ *
@@ -106,10 +114,14 @@ export const EXTENSION_SITE = "#extensions";
  */
 export const ALL_SITES = "#all";
 
+/**
+ * What each reserved key is called on screen. The keys themselves are stored and
+ * never translated; only the label a person reads comes from the catalogue.
+ */
 export const RESERVED_SITE_LABELS: Record<string, string> = {
-  [BACKGROUND_SITE]: "Background & other",
-  [EXTENSION_SITE]: "Extensions",
-  [ALL_SITES]: "Everything",
+  [BACKGROUND_SITE]: t("coreSiteBackground"),
+  [EXTENSION_SITE]: t("coreSiteExtensions"),
+  [ALL_SITES]: t("coreSiteAll"),
 };
 
 export function isReservedSite(site: string): boolean {
@@ -336,11 +348,12 @@ export interface SizeSample {
 export const PERIODS = ["session", "today", "week", "month"] as const;
 export type Period = (typeof PERIODS)[number];
 
+/** The option text in the period selector. Short: these sit in a four-up control. */
 export const PERIOD_LABELS: Record<Period, string> = {
-  session: "Session",
-  today: "Today",
-  week: "7 days",
-  month: "30 days",
+  session: t("corePeriodOptionSession"),
+  today: t("corePeriodOptionToday"),
+  week: t("corePeriodOptionWeek"),
+  month: t("corePeriodOptionMonth"),
 };
 
 /* ------------------------------------------------------------------ *
