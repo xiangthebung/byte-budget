@@ -19,6 +19,13 @@
       a key that never reached the catalogue is visibly wrong here too.
     -->
     <div class="page settings-page">
+      <!--
+        The head and the nav below it are the same two blocks, in the same order, at
+        the same size, as `dashboard.html`. They are the only thing a person sees on
+        both surfaces, so anything that differs between them is the page appearing to
+        jump when they switch — which is exactly what it did while the nav lived
+        inside this header and the dashboard's sat under it.
+      -->
       <header class="page-head">
         <div class="brand">
           <img class="brand-mark" src="./icon.svg" alt="" width="40" height="40" />
@@ -26,9 +33,14 @@
             <!-- The product name is not translated, so it carries no message. -->
             <p class="brand-eyebrow">Byte Budget</p>
             <h1 class="brand-title" data-i18n="settingsBrandTitle">Settings</h1>
-            <p class="brand-sub" data-i18n="settingsBrandSub">
-              Your plan, your limits, and what this keeps.
-            </p>
+            <!--
+              Deliberately empty, and deliberately present. The dashboard's third line
+              is the period it is showing; this page has no equivalent and needs none,
+              but the line is what sets the header's height — so removing it would put
+              the nav, the rail and every pane 18px higher here than there.
+              `settings.css` gives it the height of one line.
+            -->
+            <p class="brand-sub"></p>
           </div>
         </div>
       </header>
@@ -38,435 +50,826 @@
         <a href="./settings.html" aria-current="page" data-i18n="settingsNavSettings">Settings</a>
       </nav>
 
-      <main class="settings-stack">
-        <!--
-          Plan, then Data Saver, then limits.
+      <!--
+        Six sections behind a rail, rather than six panels down one page.
 
-          The old order led with the limits table — a table most profiles have no rows
-          for, above a form most people never fill — and put the plan nowhere at all.
-          Every "% of your plan", every projection and every plan alert is measured
-          against the two fields below, so a page that does not ask for them first is a
-          page whose other numbers cannot mean anything. Data Saver comes next because
-          it is one switch that applies everywhere; a per-site limit is the specialised
-          thing, so it goes below the general one.
-        -->
-        <section class="panel feature-panel" id="plan-panel" aria-labelledby="plan-title">
-          <div class="panel-head">
-            <div>
-              <p class="panel-kicker" data-i18n="settingsPlanKicker">Start here</p>
-              <h2 class="feature-title" id="plan-title" data-i18n="settingsPlanTitle">
-                Your data plan
-              </h2>
-            </div>
-            <span class="panel-note" id="plan-note"></span>
-          </div>
+        The page this replaces was one column roughly six screens tall, and every
+        control on it was on screen at once — thirty of them, each under a paragraph
+        explaining itself. Nothing was hidden, which is the same thing as nothing being
+        findable: the plan size and the export button were the same size, in the same
+        kind of box, three thousand pixels apart.
 
-          <p class="section-intro" data-i18n="settingsPlanIntro">
-            How much data your plan allows, and the day it resets. These two numbers are
-            what the cycle figures and the projection on the dashboard are measured
-            against. Byte Budget sees one Chrome profile on this device, so its total is
-            always lower than a carrier's — often by a lot.
-          </p>
+        A rail is not decoration here. It is what lets each section be about one
+        question, small enough to read in a glance, with the answer to "where do I
+        change X" reduced to picking one of six words. The panes are all in the DOM at
+        all times — every control is built once at startup and only ever painted after
+        that, so switching sections cannot destroy a control mid-interaction — and the
+        one not being read is `hidden`.
 
-          <form class="limit-form" id="plan-form">
-            <div class="limit-field">
-              <label class="field-label" for="plan-size" data-i18n="settingsPlanSizeLabel"
-                >Plan size</label
-              >
-              <input
-                class="search-input"
-                id="plan-size"
-                type="text"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="15 GB"
-                data-i18n-placeholder="settingsPlanSizePlaceholder"
-                list="plan-sizes"
-              />
-              <!--
-                The datalist values are not messages: each is fed back through
-                `parseByteSize`, so they are input the page has to be able to read, not
-                prose. Translating them would make the suggestion the one thing the
-                field cannot accept.
-              -->
-              <datalist id="plan-sizes">
-                <option value="5 GB"></option>
-                <option value="10 GB"></option>
-                <option value="15 GB"></option>
-                <option value="50 GB"></option>
-              </datalist>
-              <span class="field-hint" id="plan-echo" aria-live="polite"></span>
-            </div>
-            <div class="limit-field">
-              <label class="field-label" for="plan-cycle" data-i18n="settingsPlanCycleLabel"
-                >Resets on</label
-              >
-              <select class="select" id="plan-cycle"></select>
-              <span class="field-hint" data-i18n="settingsPlanCycleHint">
-                Up to the 28th only: every month has a 28th, so the reset date never
-                moves.
-              </span>
-            </div>
-            <button class="primary-button" id="plan-save" type="submit" data-i18n="settingsPlanSave">
-              Save plan
-            </button>
-          </form>
-
-          <p class="field-hint form-status" id="plan-status" aria-live="polite"></p>
-
-          <!-- `defaults-note` is only borrowed for its rule and spacing above. -->
-          <div class="field defaults-note" id="plan-shape-field">
-            <span class="field-label" id="plan-shape-label" data-i18n="settingsPlanShapeLabel"
-              >As the plan fills</span
-            >
-            <div class="segmented" id="plan-shape-group" aria-labelledby="plan-shape-label"></div>
-            <p class="field-hint" id="plan-shape-hint"></p>
-          </div>
-
-          <div id="plan-allowance"></div>
-        </section>
-
-        <section
-          class="panel feature-panel saver-panel"
-          id="optimize-panel"
-          aria-labelledby="optimize-title"
-        >
-          <div class="setting-hero">
-            <div class="feature-icon" aria-hidden="true">
+        The rail items are anchors with a real `href`, not buttons, so Back works,
+        `settings.html#privacy` opens on the right section, and the browser handles the
+        keyboard. `#plan` is implied when the fragment is missing or unknown.
+      -->
+      <div class="settings-shell">
+        <nav class="settings-rail" aria-label="Settings sections" data-i18n-label="settingsRailLabel">
+          <a class="rail-item" href="#plan" data-pane="plan">
+            <span class="rail-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false">
-                <path
-                  d="M5 12.5 9.2 17 19 7"
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="8.5"
                   fill="none"
                   stroke="currentColor"
-                  stroke-width="2"
+                  stroke-width="1.7"
+                />
+                <path
+                  d="M12 3.5A8.5 8.5 0 0 1 20.5 12H12Z"
+                  fill="currentColor"
+                  stroke="none"
+                />
+              </svg>
+            </span>
+            <span class="rail-copy">
+              <span class="rail-label" data-i18n="settingsRailPlan">Data plan</span>
+              <span class="rail-value" id="rail-value-plan"></span>
+            </span>
+          </a>
+
+          <a class="rail-item" href="#saver" data-pane="saver">
+            <span class="rail-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path
+                  d="M12 4v10m0 0-4-4m4 4 4-4M5 19h14"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
                   stroke-linecap="round"
                   stroke-linejoin="round"
                 />
               </svg>
-            </div>
-            <div class="setting-hero-copy">
-              <p class="panel-kicker" data-i18n="settingsSaverKicker">Off until you switch it on</p>
-              <h2 class="feature-title" id="optimize-title" data-i18n="settingsSaverTitle">
-                Data Saver
-              </h2>
-              <p class="section-intro" data-i18n="settingsSaverIntro">
-                Changes to what a page is allowed to ask for, each switchable on its own
-                and listed below by how much you will notice it.
+            </span>
+            <span class="rail-copy">
+              <span class="rail-label" data-i18n="settingsRailSaver">Data Saver</span>
+              <span class="rail-value" id="rail-value-saver"></span>
+            </span>
+          </a>
+
+          <a class="rail-item" href="#limits" data-pane="limits">
+            <span class="rail-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path
+                  d="M4 12h9M18 5v14"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="m11 8.5 3.5 3.5L11 15.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span class="rail-copy">
+              <span class="rail-label" data-i18n="settingsRailLimits">Site limits</span>
+              <span class="rail-value" id="rail-value-limits"></span>
+            </span>
+          </a>
+
+          <a class="rail-item" href="#alerts" data-pane="alerts">
+            <span class="rail-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path
+                  d="M6.5 17V11a5.5 5.5 0 0 1 11 0v6M4.5 17h15M10 20h4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span class="rail-copy">
+              <span class="rail-label" data-i18n="settingsRailAlerts">Alerts</span>
+            </span>
+          </a>
+
+          <a class="rail-item" href="#appearance" data-pane="appearance">
+            <span class="rail-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <circle
+                  cx="12"
+                  cy="12"
+                  r="8.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                />
+                <path d="M12 3.5v17a8.5 8.5 0 0 0 0-17Z" fill="currentColor" stroke="none" />
+              </svg>
+            </span>
+            <span class="rail-copy">
+              <span class="rail-label" data-i18n="settingsRailAppearance">Appearance</span>
+            </span>
+          </a>
+
+          <a class="rail-item" href="#privacy" data-pane="privacy">
+            <span class="rail-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <rect
+                  x="5"
+                  y="10.5"
+                  width="14"
+                  height="9"
+                  rx="2.2"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                />
+                <path
+                  d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </span>
+            <span class="rail-copy">
+              <span class="rail-label" data-i18n="settingsRailPrivacy">Privacy &amp; data</span>
+            </span>
+          </a>
+
+          <a class="rail-item" href="#plus" data-pane="plus">
+            <span class="rail-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path
+                  d="m12 3.8 2.4 5 5.4.8-3.9 3.8.9 5.4-4.8-2.6-4.8 2.6.9-5.4L4.2 9.6l5.4-.8Z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span class="rail-copy">
+              <span class="rail-label" data-i18n="settingsRailPlus">Plus</span>
+              <span class="rail-value" id="rail-value-plus"></span>
+            </span>
+          </a>
+        </nav>
+
+        <main class="settings-panes">
+          <!-- ---------------------------------------------------------- *
+             * Data plan
+             * ---------------------------------------------------------- -->
+          <section class="pane" id="pane-plan" data-pane="plan" aria-labelledby="plan-title">
+            <header class="pane-head">
+              <h2 class="pane-title" tabindex="-1" id="plan-title" data-i18n="settingsPlanTitle">Data plan</h2>
+              <p class="pane-sub" data-i18n="settingsPlanSub">
+                How much data you have, when it resets, and what should happen when it
+                runs out.
               </p>
-            </div>
-            <label class="switch-control">
-              <input type="checkbox" id="optimize-toggle" />
-              <span class="switch-track" aria-hidden="true"><span></span></span>
-              <span class="switch-label" data-i18n="settingsSaverSwitchLabel">Data Saver</span>
-            </label>
-          </div>
+            </header>
 
-          <div class="optimize-body" id="optimize-body" hidden>
-            <div id="feature-groups"></div>
-
-            <div class="exception-settings">
-              <div class="exception-head">
-                <span class="field-label" data-i18n="settingsExceptionsLabel"
-                  >Website exceptions</span
-                >
-                <span class="summary-note" id="exclusion-count"></span>
+            <div class="group">
+              <div class="row">
+                <div class="row-copy">
+                  <label class="row-label" for="plan-size" data-i18n="settingsPlanSizeLabel"
+                    >Plan size</label
+                  >
+                  <span class="row-sub" id="plan-echo" aria-live="polite"></span>
+                </div>
+                <div class="row-control">
+                  <input
+                    class="search-input value-input"
+                    id="plan-size"
+                    type="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="15 GB"
+                    data-i18n-placeholder="settingsPlanSizePlaceholder"
+                    list="plan-sizes"
+                  />
+                  <!--
+                    The datalist values are not messages: each is fed back through
+                    `parseByteSize`, so they are input the page has to be able to read,
+                    not prose. Translating them would make the suggestion the one thing
+                    the field cannot accept.
+                  -->
+                  <datalist id="plan-sizes">
+                    <option value="5 GB"></option>
+                    <option value="10 GB"></option>
+                    <option value="15 GB"></option>
+                    <option value="50 GB"></option>
+                  </datalist>
+                </div>
               </div>
-              <p data-i18n="settingsExceptionsIntro">
+
+              <div class="row">
+                <div class="row-copy">
+                  <label class="row-label" for="plan-cycle" data-i18n="settingsPlanCycleLabel"
+                    >Resets on</label
+                  >
+                  <span class="row-sub" data-i18n="settingsPlanCycleHint">
+                    Any day up to the 28th, so the date never moves in February.
+                  </span>
+                </div>
+                <div class="row-control">
+                  <select class="select" id="plan-cycle"></select>
+                </div>
+              </div>
+
+              <div class="row">
+                <div class="row-copy">
+                  <span class="row-label" id="plan-shape-label" data-i18n="settingsPlanShapeLabel"
+                    >When it runs out</span
+                  >
+                  <span class="row-sub" id="plan-shape-hint"></span>
+                </div>
+                <div class="row-control">
+                  <div
+                    class="segmented"
+                    id="plan-shape-group"
+                    aria-labelledby="plan-shape-label"
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            <p class="group-note form-status" id="plan-status" aria-live="polite"></p>
+            <p class="group-note" data-i18n="settingsPlanScope">
+              Byte Budget sees one Chrome profile on this device, so its total is always
+              lower than your carrier's — often by a lot.
+            </p>
+
+            <div id="plan-allowance"></div>
+          </section>
+
+          <!-- ---------------------------------------------------------- *
+             * Data Saver
+             * ---------------------------------------------------------- -->
+          <section class="pane" id="pane-saver" data-pane="saver" aria-labelledby="saver-title">
+            <header class="pane-head">
+              <h2 class="pane-title" tabindex="-1" id="saver-title" data-i18n="settingsSaverTitle">Data Saver</h2>
+              <p class="pane-sub" data-i18n="settingsSaverSub">
+                Ask sites for less, so a page costs fewer bytes to open.
+              </p>
+            </header>
+
+            <div class="group">
+              <div class="row">
+                <div class="row-copy">
+                  <label
+                    class="row-label"
+                    for="optimize-toggle"
+                    data-i18n="settingsSaverSwitchLabel"
+                    >Data Saver</label
+                  >
+                  <span class="row-sub" id="saver-state"></span>
+                </div>
+                <div class="row-control">
+                  <!--
+                    A `span`, not the `label` this control is elsewhere: the row's own
+                    `label` already names the input, and a second one wrapping it would
+                    give the switch two accessible names. `settings.css` stretches the
+                    input over the track so the track is still what gets clicked.
+                  -->
+                  <span class="switch-control">
+                    <input type="checkbox" id="optimize-toggle" />
+                    <span class="switch-track" aria-hidden="true"><span></span></span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div id="optimize-body" hidden>
+              <div class="group">
+                <div class="row">
+                  <div class="row-copy">
+                    <span class="row-label" id="saver-level-label">
+                      <span data-i18n="settingsLevelLabel">How much to save</span>
+                      <span class="state-chip" id="saver-level-custom" hidden
+                        data-i18n="settingsLevelCustom">Custom</span
+                      >
+                    </span>
+                    <span class="row-sub" id="saver-level-hint"></span>
+                  </div>
+                  <div class="row-control">
+                    <div
+                      class="segmented"
+                      id="saver-level-group"
+                      aria-labelledby="saver-level-label"
+                    ></div>
+                  </div>
+                </div>
+              </div>
+
+              <h3 class="group-title">
+                <span data-i18n="settingsExceptionsLabel">Website exceptions</span
+                ><span class="summary-note" id="exclusion-count"></span>
+              </h3>
+              <div class="group">
+                <div class="row row-stack">
+                  <form class="exclusion-form" id="exclusion-form">
+                    <input
+                      class="search-input"
+                      id="exclusion-input"
+                      type="text"
+                      autocomplete="off"
+                      spellcheck="false"
+                      placeholder="example.com"
+                      data-i18n-placeholder="settingsExceptionsPlaceholder"
+                      aria-label="Website to leave alone"
+                      data-i18n-label="settingsExceptionsInputLabel"
+                    />
+                    <button class="ghost-button" type="submit" data-i18n="settingsExceptionsAdd">
+                      Add exception
+                    </button>
+                  </form>
+                  <ul class="chip-list" id="exclusion-list"></ul>
+                </div>
+              </div>
+              <p class="group-note" data-i18n="settingsExceptionsIntro">
                 Leave a site completely alone: no rules, no page script, no rewritten
                 images. This is the first thing to try if a site looks wrong.
               </p>
-              <form class="exclusion-form" id="exclusion-form">
-                <input
-                  class="search-input"
-                  id="exclusion-input"
-                  type="text"
-                  autocomplete="off"
-                  spellcheck="false"
-                  placeholder="example.com"
-                  data-i18n-placeholder="settingsExceptionsPlaceholder"
-                  aria-label="Website to leave alone"
-                  data-i18n-label="settingsExceptionsInputLabel"
-                />
-                <button class="ghost-button" type="submit" data-i18n="settingsExceptionsAdd">
-                  Add exception
-                </button>
-              </form>
-              <ul class="chip-list" id="exclusion-list"></ul>
+
+              <details class="inline-details" id="saver-advanced">
+                <!--
+                  The word and the note beside it are two messages, so the label is
+                  wrapped in a span of its own: setting text on the `<summary>` would take
+                  the note with it.
+                -->
+                <summary>
+                  <span data-i18n="settingsAdvancedSummary">Advanced</span
+                  ><span class="summary-note" data-i18n="settingsAdvancedSummaryNote"
+                    >choose each change yourself</span
+                  >
+                </summary>
+
+                <!--
+                  Filled by `renderLocks()` when the install is on the free tier, empty
+                  otherwise. The disclosure still opens either way and every switch below
+                  is still on screen, greyed — a person who has never opened Advanced
+                  cannot want it, and a person who has should be able to see exactly what
+                  they would be paying for rather than a list of feature names.
+                -->
+                <div class="plus-lock-slot" id="saver-advanced-lock"></div>
+
+                <h3 class="group-title" data-i18n="settingsAdvancedFeaturesTitle">
+                  Individual changes
+                </h3>
+                <p class="group-note group-note-lead" data-i18n="settingsAdvancedFeaturesNote">
+                  Switching one of these makes the level above read "Custom". Nothing is
+                  lost: picking a level again replaces the selection.
+                </p>
+                <div id="feature-groups"></div>
+
+                <h3 class="group-title" data-i18n="settingsAdvancedPacksTitle">Image services</h3>
+                <p class="group-note group-note-lead" id="packs-intro"></p>
+                <div class="group" id="pack-list"></div>
+
+                <h3 class="group-title" id="holdout-label" data-i18n="settingsHoldoutLabel">
+                  Measuring what this saves
+                </h3>
+                <div class="group">
+                  <div class="row">
+                    <div class="row-copy">
+                      <span class="row-sub" id="holdout-hint"></span>
+                    </div>
+                    <div class="row-control">
+                      <div
+                        class="segmented"
+                        id="holdout-group"
+                        aria-labelledby="holdout-label"
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </details>
             </div>
 
-            <details class="inline-details advanced-settings">
-              <!--
-                The word and the note beside it are two messages, so the label is wrapped
-                in a span of its own: setting text on the `<summary>` would take the note
-                with it.
-              -->
-              <summary>
-                <span data-i18n="settingsAdvancedSummary">Advanced</span
-                ><span class="summary-note" data-i18n="settingsAdvancedSummaryNote"
-                  >image services, and how savings are measured</span
-                >
-              </summary>
-              <p class="advanced-intro" id="packs-intro"></p>
-              <div class="advanced-options" id="pack-list"></div>
+            <p class="save-status" id="optimize-note" aria-live="polite"></p>
+          </section>
 
-              <div class="field defaults-note" id="holdout-field">
-                <span class="field-label" id="holdout-label" data-i18n="settingsHoldoutLabel"
-                  >Measuring what this saves</span
-                >
-                <div class="segmented" id="holdout-group" aria-labelledby="holdout-label"></div>
-                <p class="field-hint" id="holdout-hint"></p>
-              </div>
-            </details>
-          </div>
-          <p class="save-status" id="optimize-note" aria-live="polite"></p>
-        </section>
-
-        <section class="panel feature-panel" id="limits-panel" aria-labelledby="limits-title">
-          <div class="panel-head">
-            <div>
-              <p class="panel-kicker" data-i18n="settingsLimitsKicker">One site at a time</p>
-              <h2 class="feature-title" id="limits-title" data-i18n="settingsLimitsTitle">
+          <!-- ---------------------------------------------------------- *
+             * Site limits
+             * ---------------------------------------------------------- -->
+          <section class="pane" id="pane-limits" data-pane="limits" aria-labelledby="limits-title">
+            <header class="pane-head">
+              <h2 class="pane-title" tabindex="-1" id="limits-title" data-i18n="settingsLimitsTitle">
                 Site limits
               </h2>
-            </div>
-            <span class="panel-note" id="limits-note"></span>
-          </div>
+              <p class="pane-sub" data-i18n="settingsLimitsSub">
+                Cap one heavy site on its own, without touching the rest of your browsing.
+              </p>
+            </header>
 
-          <p class="section-intro" data-i18n="settingsLimitsIntro">
-            An allowance for one heavy site, over a session, a day, a week or a month.
-            Click an allowance in the table to change it.
-          </p>
+            <h3 class="group-title" id="limits-list-title" data-i18n="settingsLimitsListTitle">
+              Your limits
+            </h3>
+            <!--
+              A list, not the six-column table this replaces.
 
-          <div class="table-scroll">
-            <table class="table" id="limits-table">
-              <thead>
-                <tr>
-                  <th scope="col" data-i18n="settingsLimitsColSite">Site</th>
-                  <th scope="col" data-i18n="settingsLimitsColLimit">Limit</th>
-                  <th scope="col" class="numeric" data-i18n="settingsLimitsColUsed">Used</th>
-                  <th scope="col" data-i18n="settingsLimitsColStatus">Status</th>
-                  <th scope="col" data-i18n="settingsLimitsColResets">Resets</th>
-                  <th scope="col">
-                    <span class="sr-only" data-i18n="settingsLimitsColActions">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-          <p class="empty friendly-empty" id="limits-empty" data-i18n="settingsLimitsEmpty" hidden>
-            No site limits yet. Add one below, or set one from the popup while you are on
-            the site.
-          </p>
-
-          <form class="limit-form" id="limit-form">
-            <div class="limit-field">
-              <label class="field-label" for="limit-site" data-i18n="settingsLimitSiteLabel"
-                >Website</label
-              >
-              <input
-                class="search-input"
-                id="limit-site"
-                type="text"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="youtube.com"
-                data-i18n-placeholder="settingsLimitSitePlaceholder"
-                required
-              />
-            </div>
-            <div class="limit-field">
-              <label class="field-label" for="limit-size" data-i18n="settingsLimitSizeLabel"
-                >Allowance</label
-              >
-              <input
-                class="search-input"
-                id="limit-size"
-                type="text"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="500 MB"
-                data-i18n-placeholder="settingsLimitSizePlaceholder"
-                list="limit-sizes"
-                required
-              />
-              <!-- Values, not prose: see the note on `plan-sizes` above. -->
-              <datalist id="limit-sizes">
-                <option value="100 MB"></option>
-                <option value="250 MB"></option>
-                <option value="500 MB"></option>
-                <option value="1 GB"></option>
-              </datalist>
-            </div>
-            <div class="limit-field">
-              <span class="field-label" id="limit-period-label" data-i18n="settingsLimitPeriodLabel"
-                >Per</span
-              >
-              <div
-                class="segmented"
-                id="limit-period-group"
-                aria-labelledby="limit-period-label"
-              ></div>
-            </div>
-            <div class="limit-field" id="limit-shape-field"></div>
-            <button class="primary-button" id="limit-add" type="submit" data-i18n="settingsLimitAdd">
-              Set limit
-            </button>
-          </form>
-          <p class="field-hint form-status" id="limit-form-status" aria-live="polite"></p>
-
-          <details class="inline-details">
-            <summary data-i18n="settingsTierSummary">What a limit does as it fills</summary>
-            <p id="limit-shape-explainer"></p>
-            <div class="table-scroll">
-              <table class="table" id="tier-table">
-                <thead>
-                  <tr>
-                    <th scope="col" data-i18n="settingsTierColAt">At</th>
-                    <th scope="col" data-i18n="settingsTierColRefuses">Refuses</th>
-                    <th scope="col" data-i18n="settingsTierColSee">What you see</th>
-                  </tr>
-                </thead>
-                <tbody></tbody>
-              </table>
-            </div>
-            <p data-i18n="settingsTierNote">
-              The page's own HTML always loads, at every step, so the site can say what
-              happened instead of showing a browser error. Pause a limit for an hour, add
-              bytes to the current window, or remove it, at any time.
+              The table needed a `data-label` on every cell and a whole media query to
+              turn itself back into one card per limit below 640px, which is what it
+              always wanted to be: five figures about one site, of which only two are
+              comparable down a column.
+            -->
+            <ul class="limit-list" id="limits-list"></ul>
+            <p class="empty friendly-empty" id="limits-empty" data-i18n="settingsLimitsEmpty" hidden>
+              No site limits yet. Add one below, or set one from the popup while you are on
+              the site.
             </p>
-          </details>
-        </section>
 
-        <div class="bottom-grid">
-          <section class="panel" id="alerts-panel" aria-labelledby="alerts-title">
-            <div class="panel-head">
-              <h2 class="panel-title" id="alerts-title" data-i18n="settingsAlertsTitle">Alerts</h2>
-              <span class="save-status" id="alerts-status" aria-live="polite"></span>
-            </div>
-            <p class="field-hint" data-i18n="settingsAlertsIntro">
-              A desktop notification when an allowance is running out, said once per
-              window and not again for that window.
-            </p>
-            <div class="simple-settings" id="alert-options"></div>
-            <p class="field-hint" id="alerts-plan-note"></p>
-          </section>
+            <h3 class="group-title" data-i18n="settingsAddLimitTitle">Add a limit</h3>
+            <div class="plus-lock-slot" id="limit-form-lock"></div>
+            <form class="group" id="limit-form">
+              <div class="row">
+                <div class="row-copy">
+                  <label class="row-label" for="limit-site" data-i18n="settingsLimitSiteLabel"
+                    >Website</label
+                  >
+                </div>
+                <div class="row-control">
+                  <input
+                    class="search-input value-input"
+                    id="limit-site"
+                    type="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="youtube.com"
+                    data-i18n-placeholder="settingsLimitSitePlaceholder"
+                    required
+                  />
+                </div>
+              </div>
 
-          <section class="panel" id="preferences-panel" aria-labelledby="preferences-title">
-            <div class="panel-head">
-              <h2 class="panel-title" id="preferences-title" data-i18n="settingsPreferencesTitle">
-                Appearance &amp; units
-              </h2>
-              <span class="save-status" id="settings-status" aria-live="polite"></span>
-            </div>
-            <div class="simple-settings">
-              <div class="field">
-                <span class="field-label" id="theme-label" data-i18n="settingsThemeLabel">Theme</span>
-                <div
-                  class="segmented"
-                  id="theme-group"
-                  aria-labelledby="theme-label"
-                ></div>
+              <div class="row">
+                <div class="row-copy">
+                  <label class="row-label" for="limit-size" data-i18n="settingsLimitSizeLabel"
+                    >Allowance</label
+                  >
+                </div>
+                <div class="row-control">
+                  <input
+                    class="search-input value-input"
+                    id="limit-size"
+                    type="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="500 MB"
+                    data-i18n-placeholder="settingsLimitSizePlaceholder"
+                    list="limit-sizes"
+                    required
+                  />
+                  <!-- Values, not prose: see the note on `plan-sizes` above. -->
+                  <datalist id="limit-sizes">
+                    <option value="100 MB"></option>
+                    <option value="250 MB"></option>
+                    <option value="500 MB"></option>
+                    <option value="1 GB"></option>
+                  </datalist>
+                </div>
               </div>
-              <div class="field">
-                <span class="field-label" id="badge-label" data-i18n="settingsBadgeLabel"
-                  >Toolbar badge</span
-                >
-                <div
-                  class="segmented"
-                  id="badge-group"
-                  aria-labelledby="badge-label"
-                ></div>
+
+              <div class="row">
+                <div class="row-copy">
+                  <span
+                    class="row-label"
+                    id="limit-period-label"
+                    data-i18n="settingsLimitPeriodLabel"
+                    >Per</span
+                  >
+                </div>
+                <div class="row-control">
+                  <div
+                    class="segmented"
+                    id="limit-period-group"
+                    aria-labelledby="limit-period-label"
+                  ></div>
+                </div>
               </div>
-              <div class="field">
-                <span class="field-label" id="units-label" data-i18n="settingsUnitsLabel">Units</span>
-                <div
-                  class="segmented"
-                  id="units-group"
-                  aria-labelledby="units-label"
-                ></div>
-                <span class="field-hint" id="units-hint"></span>
+
+              <div class="row">
+                <div class="row-copy">
+                  <span class="row-label" id="limit-shape-label" data-i18n="settingsLimitShapeLabel"
+                    >When it runs out</span
+                  >
+                  <span class="row-sub" id="limit-shape-hint"></span>
+                </div>
+                <div class="row-control">
+                  <div
+                    class="segmented"
+                    id="limit-shape-group"
+                    aria-labelledby="limit-shape-label"
+                  ></div>
+                </div>
               </div>
-            </div>
+
+              <div class="row row-actions-only">
+                <button class="primary-button" id="limit-add" type="submit" data-i18n="settingsLimitAdd">
+                  Set limit
+                </button>
+              </div>
+            </form>
+            <p class="group-note form-status" id="limit-form-status" aria-live="polite"></p>
+
             <details class="inline-details">
-              <summary data-i18n="settingsPeriodsSummary">How weeks and months are counted</summary>
-              <div class="simple-settings" id="period-options"></div>
+              <summary data-i18n="settingsTierSummary">What a limit does as it fills</summary>
+              <p id="limit-shape-explainer"></p>
+              <div class="table-scroll">
+                <table class="table" id="tier-table">
+                  <thead>
+                    <tr>
+                      <th scope="col" data-i18n="settingsTierColAt">At</th>
+                      <th scope="col" data-i18n="settingsTierColRefuses">Refuses</th>
+                      <th scope="col" data-i18n="settingsTierColSee">What you see</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <p data-i18n="settingsTierNote">
+                The page's own HTML always loads, at every step, so the site can say what
+                happened instead of showing a browser error. Pause a limit for an hour, add
+                bytes to the current window, or remove it, at any time.
+              </p>
             </details>
           </section>
-        </div>
 
-        <section class="panel" id="data-panel" aria-labelledby="data-title">
-          <div class="panel-head">
-            <h2 class="panel-title" id="data-title" data-i18n="settingsDataTitle">
-              Privacy &amp; data
-            </h2>
-            <span class="panel-note" id="storage-note" data-i18n="settingsStorageNote"
-              >Stored on this device</span
-            >
-          </div>
-          <p class="field-hint" data-i18n="settingsPrivacyBlurb">
-            Byte Budget records bytes per site per day and per hour, which hosts a site's
-            bytes came from, and one row per page load holding the site and origin — never
-            a path or a query string. It has no account, no server and makes no network
-            request of its own. Preferences follow you through Chrome sync; site names,
-            limits and exceptions do not leave this profile. All of it covers this Chrome
-            profile on this device: other profiles, other browsers, other devices on the
-            same connection and everything outside Chrome are invisible to an extension.
-          </p>
+          <!-- ---------------------------------------------------------- *
+             * Alerts
+             * ---------------------------------------------------------- -->
+          <section class="pane" id="pane-alerts" data-pane="alerts" aria-labelledby="alerts-title">
+            <header class="pane-head">
+              <h2 class="pane-title" tabindex="-1" id="alerts-title" data-i18n="settingsAlertsTitle">Alerts</h2>
+              <p class="pane-sub" data-i18n="settingsAlertsSub">
+                A desktop notification when an allowance is running out, said once and not
+                repeated.
+              </p>
+            </header>
 
-          <div class="simple-settings" id="privacy-options"></div>
+            <div class="group" id="alert-options"></div>
+            <p class="group-note" id="alerts-plan-note"></p>
+            <p class="save-status" id="alerts-status" aria-live="polite"></p>
+          </section>
 
-          <div class="defaults-note">
-            <span class="field-label" data-i18n="settingsExportLabel">Export</span>
-            <p class="field-hint" data-i18n="settingsExportHint">
-              One row per site per day, as stored: the date, the site, bytes down and up,
-              requests, and how much of the down figure was estimated rather than
-              measured.
-            </p>
-            <div class="actions">
-              <!--
-                The three option labels are one message with the day count substituted in,
-                filled by `localizeMarkup()`. Three near-identical strings differing only
-                in a number is the shape that gets translated three inconsistent ways.
-              -->
-              <select
-                class="select"
-                id="export-days"
-                aria-label="Export range"
-                data-i18n-label="settingsExportRangeLabel"
-              >
-                <option value="30">Last 30 days</option>
-                <option value="90">Last 90 days</option>
-                <option value="400">Last 400 days</option>
-              </select>
-              <button class="ghost-button" id="export-csv" type="button" data-i18n="settingsExportCsv">
-                Export CSV
-              </button>
-              <button
-                class="ghost-button"
-                id="export-json"
-                type="button"
-                data-i18n="settingsExportJson"
-              >
-                Export JSON
-              </button>
+          <!-- ---------------------------------------------------------- *
+             * Appearance
+             * ---------------------------------------------------------- -->
+          <section
+            class="pane"
+            id="pane-appearance"
+            data-pane="appearance"
+            aria-labelledby="appearance-title"
+          >
+            <header class="pane-head">
+              <h2 class="pane-title" tabindex="-1" id="appearance-title" data-i18n="settingsAppearanceTitle">
+                Appearance
+              </h2>
+              <p class="pane-sub" data-i18n="settingsAppearanceSub">
+                How Byte Budget looks, and what it shows on the Chrome toolbar.
+              </p>
+            </header>
+
+            <div class="group">
+              <div class="row">
+                <div class="row-copy">
+                  <span class="row-label" id="theme-label" data-i18n="settingsThemeLabel">Theme</span>
+                </div>
+                <div class="row-control">
+                  <div class="segmented" id="theme-group" aria-labelledby="theme-label"></div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="row-copy">
+                  <span class="row-label" id="badge-label" data-i18n="settingsBadgeLabel"
+                    >Toolbar badge</span
+                  >
+                </div>
+                <div class="row-control">
+                  <div class="segmented" id="badge-group" aria-labelledby="badge-label"></div>
+                </div>
+              </div>
             </div>
-            <p class="field-hint form-status" id="data-status" aria-live="polite"></p>
-          </div>
+            <p class="save-status" id="settings-status" aria-live="polite"></p>
 
-          <div class="defaults-note" id="delete-block">
-            <span class="field-label" data-i18n="settingsDeleteLabel">Delete recorded usage</span>
-            <p class="field-hint" id="delete-scope-note"></p>
-            <div class="actions" id="delete-actions"></div>
-            <p class="field-hint form-status" id="delete-status" aria-live="polite"></p>
-          </div>
+            <!--
+              Units and the week/month rules are here rather than beside Theme.
 
-          <details class="inline-details" id="storage-details">
-            <summary data-i18n="settingsStorageSummary">What this is costing on disk</summary>
-            <div id="storage-report"></div>
-          </details>
-        </section>
-      </main>
+              Both are answers to questions about how a figure is computed, not about
+              what the product should do, and a person who has never wondered whether a
+              gigabyte is 1000 or 1024 megabytes should not have to decide before they
+              can find the dark mode switch.
+            -->
+            <details class="inline-details">
+              <summary>
+                <span data-i18n="settingsSectionAdvanced">Advanced</span
+                ><span class="summary-note" data-i18n="settingsAppearanceAdvancedNote"
+                  >units, and how weeks and months are counted</span
+                >
+              </summary>
+              <div class="plus-lock-slot" id="appearance-advanced-lock"></div>
+              <div class="group">
+                <div class="row">
+                  <div class="row-copy">
+                    <span class="row-label" id="units-label" data-i18n="settingsUnitsLabel"
+                      >Units</span
+                    >
+                    <span class="row-sub" id="units-hint"></span>
+                  </div>
+                  <div class="row-control">
+                    <div class="segmented" id="units-group" aria-labelledby="units-label"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="group" id="period-options"></div>
+            </details>
+          </section>
+
+          <!-- ---------------------------------------------------------- *
+             * Privacy & data
+             * ---------------------------------------------------------- -->
+          <section class="pane" id="pane-privacy" data-pane="privacy" aria-labelledby="data-title">
+            <header class="pane-head">
+              <h2 class="pane-title" tabindex="-1" id="data-title" data-i18n="settingsDataTitle">
+                Privacy &amp; data
+              </h2>
+              <p class="pane-sub" data-i18n="settingsDataSub">
+                Every usage figure stays in this browser profile. If you connect a Plus
+                account, Byte Budget also checks its status with ExtensionPay.
+              </p>
+            </header>
+
+            <!--
+              The full disclosure is behind a summary, and the line above is not a
+              replacement for it.
+
+              The published privacy policy is what the long paragraph matches word for
+              word, so it is still on the page, one click away, unedited. What changed is
+              that it is no longer the first thing between a person and the retention
+              picker.
+            -->
+            <details class="inline-details">
+              <summary data-i18n="settingsPrivacySummary">What is recorded</summary>
+              <p data-i18n="settingsPrivacyBlurb">
+                Byte Budget records bytes per site per day and per hour, which hosts a
+                site's bytes came from, and one row per page load holding the site and
+                origin — never a path or a query string. None of that measured data is
+                uploaded. Preferences follow you through Chrome sync; site names, limits
+                and exceptions do not leave this profile. A connected Plus account is
+                checked separately with ExtensionPay, as disclosed in the Plus section.
+                The figures cover this Chrome profile on this device: other profiles,
+                browsers, devices and everything outside Chrome are invisible.
+              </p>
+            </details>
+
+            <div class="group" id="privacy-options"></div>
+
+            <h3 class="group-title" data-i18n="settingsExportLabel">Export</h3>
+            <div class="plus-lock-slot" id="export-lock"></div>
+            <div class="group">
+              <div class="row">
+                <div class="row-copy">
+                  <span class="row-sub" data-i18n="settingsExportHint">
+                    One row per site per day, as stored: the date, the site, bytes down and
+                    up, requests, and how much of the down figure was estimated rather than
+                    measured.
+                  </span>
+                </div>
+                <div class="row-control row-control-wrap">
+                  <!--
+                    The three option labels are one message with the day count substituted
+                    in, filled by `localizeMarkup()`. Three near-identical strings
+                    differing only in a number is the shape that gets translated three
+                    inconsistent ways.
+                  -->
+                  <!--
+                    Seven days is the free tier's whole reporting window, so it is the
+                    only range that is always selectable. The other three are disabled
+                    rather than removed on a free install: the export is the one route a
+                    person has to their own data, and a control that silently offers less
+                    than it used to reads as the data being gone rather than as a range
+                    being locked.
+                  -->
+                  <select
+                    class="select"
+                    id="export-days"
+                    aria-label="Export range"
+                    data-i18n-label="settingsExportRangeLabel"
+                  >
+                    <option value="7">Last 7 days</option>
+                    <option value="30">Last 30 days</option>
+                    <option value="90">Last 90 days</option>
+                    <option value="400">Last 400 days</option>
+                  </select>
+                  <button
+                    class="ghost-button"
+                    id="export-csv"
+                    type="button"
+                    data-i18n="settingsExportCsv"
+                  >
+                    Export CSV
+                  </button>
+                  <button
+                    class="ghost-button"
+                    id="export-json"
+                    type="button"
+                    data-i18n="settingsExportJson"
+                  >
+                    Export JSON
+                  </button>
+                </div>
+              </div>
+            </div>
+            <p class="group-note form-status" id="data-status" aria-live="polite"></p>
+
+            <h3 class="group-title" data-i18n="settingsDeleteLabel">Delete recorded usage</h3>
+            <div class="group group-danger" id="delete-block">
+              <div class="row">
+                <div class="row-copy">
+                  <span class="row-sub" id="delete-scope-note"></span>
+                </div>
+                <div class="row-control row-control-wrap" id="delete-actions"></div>
+              </div>
+            </div>
+            <p class="group-note form-status" id="delete-status" aria-live="polite"></p>
+
+            <details class="inline-details" id="storage-details">
+              <summary data-i18n="settingsStorageSummary">What this is costing on disk</summary>
+              <div id="storage-report"></div>
+            </details>
+          </section>
+
+          <!-- ---------------------------------------------------------- *
+             * Plus
+             * ---------------------------------------------------------- -->
+          <section class="pane" id="pane-plus" data-pane="plus" aria-labelledby="plus-title">
+            <header class="pane-head">
+              <h2 class="pane-title" tabindex="-1" id="plus-title" data-i18n="settingsPlusTitle">
+                Byte Budget Plus
+              </h2>
+              <p class="pane-sub" data-i18n="settingsPlusSub">
+                Everything that measures your usage is free and always will be. Plus adds
+                the settings and the history for people who want to tune it.
+              </p>
+            </header>
+
+            <!--
+              State first, offer second, and the order is not cosmetic. Someone who is
+              already subscribed opened this section to check something or to cancel, and
+              a page that leads with a price for a thing they are already paying for
+              reads as the product not knowing who they are.
+            -->
+            <div class="plus-state" id="plus-state"></div>
+
+            <h3 class="group-title" data-i18n="settingsPlusIncludedTitle">What Plus unlocks</h3>
+            <ul class="plus-list" id="plus-list"></ul>
+
+            <div class="plus-actions" id="plus-actions"></div>
+            <p class="group-note form-status" id="plus-status" aria-live="polite"></p>
+
+            <!--
+              The disclosure that the privacy section can no longer make on its own.
+              `settingsDataSub` says usage never leaves the device, which is still true;
+              this says what *does* leave, and it is the only thing that does.
+            -->
+            <details class="inline-details">
+              <summary data-i18n="settingsPlusPrivacySummary">
+                What the subscription check sends
+              </summary>
+              <p data-i18n="settingsPlusPrivacyBlurb">
+                A never-connected free install makes no subscription request. Starting a
+                trial, subscribing or restoring creates an opaque account key stored on
+                this device. Byte Budget sends that key to extensionpay.com about four
+                times a day; it never sends usage, site names, limits or settings. The
+                reply can contain an account email and subscription details. Byte Budget
+                keeps only the paid state, dates and plan interval and discards the rest.
+                Card details stay on ExtensionPay and Stripe's pages.
+              </p>
+            </details>
+
+            <details class="inline-details">
+              <summary data-i18n="settingsPlusTermsSummary">Subscription and refund terms</summary>
+              <p data-i18n="settingsPlusTermsBlurb">
+                Byte Budget's developer, not Google, sells Plus. Monthly and yearly plans
+                renew until cancelled. Manage subscription opens the account page where
+                you can cancel future renewals; access continues through the paid period.
+                For a billing error or refund request, contact xiangli3625@gmail.com within
+                14 days of the charge. Requests are reviewed individually, and your legal
+                consumer rights are not limited.
+              </p>
+            </details>
+          </section>
+        </main>
+      </div>
 
       <p class="live-region" id="live-region" role="status" aria-live="polite"></p>
     </div>

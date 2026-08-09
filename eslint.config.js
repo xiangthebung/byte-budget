@@ -25,12 +25,9 @@
  * rules that make an invariant checkable, and nothing that would produce a wall
  * of findings nobody reads.
  *
- * ESLint is installed out of tree, like Playwright, so it stays out of the
- * extension's dependency graph:
- *
- *   npm i --no-save eslint typescript-eslint && npm run lint
- *
- * See CHANGELOG.md and .github/workflows/ci.yml for why it is not part of the
+ * ESLint and Playwright are pinned development dependencies. Neither can enter the
+ * Store archive because packaging walks `dist/` only, and keeping them in the lockfile
+ * makes the two release checks reproducible on a clean checkout. Lint is part of the
  * blocking `verify` job.
  */
 import tseslint from "typescript-eslint";
@@ -39,7 +36,15 @@ export default tseslint.config(
   {
     // Build output and vendored code are not ours to lint. `dist/` in particular
     // is minified, so a finding there would be unreadable and unfixable.
-    ignores: ["dist/", "dist-throttle/", "artifacts/", "outputs/", "node_modules/"],
+    ignores: [
+      "dist/",
+      "dist-throttle/",
+      "artifacts/",
+      "outputs/",
+      "outputs-before/",
+      "store-assets/",
+      "node_modules/",
+    ],
   },
   {
     // Type-aware rules need a program, and `tsconfig.json` includes `src` only.

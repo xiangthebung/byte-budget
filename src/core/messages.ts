@@ -12,6 +12,7 @@ import type { AlertSettings } from "../limit/alerts";
 import type { Budget, BudgetPeriod, BudgetShape } from "../limit/budgets";
 import type { Tier } from "../limit/tiers";
 import type { OptimizeSettings, PageFeatureId } from "../optimize/features";
+import type { PlusPage, PlusStatus } from "../plus/tier";
 import type { FlushError } from "../track/ledger";
 import type { Projection } from "./forecast";
 import type { PeriodDescription } from "./period";
@@ -234,6 +235,18 @@ export type ExtensionRequest =
   /** Adds or removes the current site from the never-optimize list. */
   | { type: "SET_SITE_OPTIMIZE"; site: string; optimize: boolean }
   | { type: "GET_SAVINGS"; days: number }
+  /**
+   * The paid-tier status, and the three ways to change it.
+   *
+   * `GET_PLUS` is cheap and answers from the worker's cache — the surfaces call it on
+   * their slow clock alongside the other preferences. `REFRESH_PLUS` forces a check
+   * against the provider and is only sent from the Plus settings section, where a
+   * person is looking at the answer and may be waiting for it to change.
+   */
+  | { type: "GET_PLUS" }
+  | { type: "REFRESH_PLUS" }
+  | { type: "OPEN_PLUS_PAGE"; page: PlusPage }
+  | { type: "PLUS_PROVIDER_EVENT"; event: "payment" | "trial" }
   /** Asked by the page optimizer for the features it should apply. */
   | { type: "GET_PAGE_FEATURES" }
   /** Fire-and-forget from the timing content script. */
@@ -384,9 +397,11 @@ export type ResponseFor<T extends ExtensionRequest> = T extends { type: "GET_OVE
                           ? { optimize: OptimizeSettings; rules: number }
                           : T extends { type: "GET_SAVINGS" }
                             ? SavingsReport
-                            : T extends { type: "GET_PAGE_FEATURES" }
-                              ? { features: PageFeatureId[] }
-                              : Record<string, never>;
+                            : T extends { type: "GET_PLUS" | "REFRESH_PLUS" }
+                              ? { plus: PlusStatus }
+                              : T extends { type: "GET_PAGE_FEATURES" }
+                                ? { features: PageFeatureId[] }
+                                : Record<string, never>;
 
 export type Envelope<T> = ({ ok: true } & T) | { ok: false; error: string };
 

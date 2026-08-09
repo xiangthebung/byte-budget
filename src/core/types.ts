@@ -398,6 +398,42 @@ export interface Settings {
 export const RETENTION_OPTIONS = [30, 90, 400, 0] as const;
 
 /**
+ * The sections of the options page, as they appear in its URL fragment.
+ *
+ * Here rather than in `settings.ts` because the popup links into three of them and
+ * the dashboard into two, and until this list existed each of those surfaces spelled
+ * the fragment out for itself. When the panels became panes every one of them kept
+ * pointing at a `#…-panel` that no longer existed — which does not throw, does not
+ * warn, and simply opens Settings at the top, so four buttons quietly stopped doing
+ * what their labels said.
+ *
+ * `settings.ts` reads a fragment against this list and falls back to the first entry,
+ * so an unknown one is still handled. What the shared list buys is that a caller
+ * cannot write one: `openSettings("plan-panel")` is now a type error rather than a
+ * button that goes to the wrong place.
+ */
+export const SETTINGS_SECTIONS = [
+  "plan",
+  "saver",
+  "limits",
+  "alerts",
+  "appearance",
+  "privacy",
+  /**
+   * Last on the rail on purpose.
+   *
+   * Every lock elsewhere on the page links here, so it is reachable in one click from
+   * the moment anyone meets a ceiling — which is the only time it is relevant. Putting
+   * it first would make the upgrade the first thing a person sees on the page they
+   * opened to change their reset day, and the paid tier here is meant to be something
+   * people grow into rather than something the settings page opens by asking for money.
+   */
+  "plus",
+] as const;
+
+export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
+
+/**
  * The largest day of the month a billing cycle may start on.
  *
  * 28 rather than 31, because every month has a 28th. A cycle anchored above it would

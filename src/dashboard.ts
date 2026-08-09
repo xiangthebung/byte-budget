@@ -9,9 +9,17 @@ import {
   query,
   queryAll,
   replaceChildren,
+  setGroupOptionsLocked,
 } from "./core/dom";
 import { formatAgo, formatBytes, formatCount, formatPercent, splitBytes } from "./core/format";
 import { applyDocumentLanguage, t } from "./core/i18n";
+import { lockNotice } from "./plus/lock";
+import {
+  FREE_REPORT_DAYS,
+  periodAllowed,
+  unknownStatus,
+  type PlusStatus,
+} from "./plus/tier";
 import {
   errorMessage,
   sendRequest,
@@ -63,9 +71,20 @@ import {
   type TypeBytes,
 } from "./core/types";
 
-const RANGE_OPTIONS = [14, 30, 90] as const;
+/**
+ * Seven is here because it is the free tier's whole reporting window.
+ *
+ * It was added rather than the other three being hidden on a free install, so that the
+ * control says what the product has: a range picker showing one option is not a picker,
+ * and it would leave nothing on screen to explain why the chart stops where it does.
+ * `plus/tier.ts`'s `FREE_REPORT_DAYS` is the ceiling; this is the option that sits under
+ * it, and the two have to keep agreeing — if that constant ever moves, this list needs
+ * an option at the new value.
+ */
+const RANGE_OPTIONS = [7, 14, 30, 90] as const;
 type RangeOption = (typeof RANGE_OPTIONS)[number];
 const RANGE_LABELS: Record<RangeOption, string> = {
+  7: t("dashboardRangeOneWeek"),
   14: t("dashboardRangeTwoWeeks"),
   30: t("dashboardRangeThirtyDays"),
   90: t("dashboardRangeThreeMonths"),
@@ -146,6 +165,8 @@ const detailTypes = query<HTMLDivElement>("#detail-types");
 const detailHostsBody = query<HTMLTableSectionElement>("#detail-hosts tbody");
 const detailHostsTable = query<HTMLTableElement>("#detail-hosts");
 const detailHostsEmpty = query<HTMLParagraphElement>("#detail-hosts-empty");
+const detailHostsLock = query<HTMLDivElement>("#detail-hosts-lock");
+const savingsCompareLock = query<HTMLDivElement>("#savings-compare-lock");
 const savingsStats = query<HTMLDivElement>("#savings-stats");
 const savingsNote = query<HTMLSpanElement>("#savings-note");
 const savingsHint = query<HTMLParagraphElement>("#savings-hint");
@@ -154,6 +175,9 @@ const savingsExplainer = query<HTMLParagraphElement>("#savings-explainer");
 const savingsTable = query<HTMLTableElement>("#savings-table");
 const savingsBody = query<HTMLTableSectionElement>("#savings-table tbody");
 const savingsEmpty = query<HTMLParagraphElement>("#savings-empty");
+const savingsIdle = query<HTMLParagraphElement>("#savings-idle");
+const savingsCompare = query<HTMLDivElement>("#savings-compare");
+const savingsDetails = query<HTMLDetailsElement>("#savings-details");
 const planNote = query<HTMLSpanElement>("#plan-note");
 const planBody = query<HTMLDivElement>("#plan-body");
 const storageBody = query<HTMLDivElement>("#storage-body");
@@ -198,6 +222,21 @@ localizeMarkup();
 
 let period: Period = "today";
 let trendDays: RangeOption = 30;
+/**
+ * Free until the worker says otherwise.
+ *
+ * Read once at startup and again when the tab is shown, which is when a subscription
+ * most often turns out to have changed — the payment page is another tab.
+ */
+let plus: PlusStatus = unknownStatus();
+/**
+ * False until `start()` has done its first read.
+ *
+ * `loadPlus` reloads the trend and the savings panel when the range it is allowed to
+ * ask for moves. During startup those two are about to be loaded anyway a few lines
+ * later, so without this the first paint would fetch both of them twice.
+ */
+let booted = false;
 let units: Settings["units"] = "si";
 let overview: OverviewPayload | null = null;
 let selectedSite: string | null = null;
@@ -354,8 +393,18 @@ function chartFrame(figure: HTMLElement, peak: number): HTMLElement {
   ]);
 }
 
+/**
+ * A chart, or the sentence that says why there isn't one.
+ *
+ * The empty test is on the *values*, not on the length. `GET_SERIES` answers a
+ * thirty-day request with thirty rows whether or not anything was recorded in them,
+ * so `series.length === 0` was only ever true for a range with no days in it — and a
+ * new install got the other branch: a plot with a date axis, a peak of zero, and
+ * thirty bars of no height. Nothing on it said "nothing here yet", so the one panel
+ * on the page with no empty state was the one whose emptiness looked like a fault.
+ */
 function chartInto(node: HTMLElement, series: readonly SeriesPoint[], caption: string): void {
-  if (series.length === 0) {
+  if (!series.some((point) => point.down + point.up > 0)) {
     replaceChildren(node, [
       element("p", { className: "stack-note", text: t("dashboardChartNothingRecorded") }),
     ]);
@@ -637,14 +686,24 @@ function renderStats(payload: OverviewPayload): void {
     // measured share is 1 - estimatedDown/down, which by construction excludes the
     // halved headers, the invisible WebSocket frames and the zero-counted cancelled
     // bodies. It is a qualifier on this number, so it lives on this card as one.
+    //
+    // And it is dropped entirely when there is nothing to qualify. `measuredShare`
+    // returns 1 for an empty total on purpose — 0% confidence in nothing is the wrong
+    // reading — but a fresh install then opened on "0 B" wearing "100% measured", which
+    // is a confident claim about a figure that has no requests behind it at all. The
+    // pill describes the total; with no total it describes nothing.
     statCard(t("dashboardStatDataUsed"), totalSplit.value, {
       unit: totalSplit.unit,
       hint: plural(payload.sites.length, "dashboardSiteCountOne", "dashboardSiteCountOther"),
-      pill: {
-        text: t("dashboardMeasuredPill", formatPercent(measured)),
-        title: t("dashboardMeasuredPillTitle"),
-        ...(measured < 0.9 ? { tone: "estimate" as const } : {}),
-      },
+      ...(payload.totals.down > 0
+        ? {
+            pill: {
+              text: t("dashboardMeasuredPill", formatPercent(measured)),
+              title: t("dashboardMeasuredPillTitle"),
+              ...(measured < 0.9 ? { tone: "estimate" as const } : {}),
+            },
+          }
+        : {}),
       ...(comparison ? { note: comparison } : {}),
     }),
     statCard(t("dashboardStatTopSite"), top ? bytes(topBytes) : "–", {
@@ -944,8 +1003,18 @@ function renderDetail(payload: SiteDetailPayload): void {
   // rows rendered a bare header row and nothing under it.
   const hostsOff = !payload.settings.trackHosts;
   const noHosts = payload.hosts.length === 0;
-  detailHostsEmpty.hidden = !(hostsOff || noHosts);
-  detailHostsTable.hidden = hostsOff || noHosts;
+  /*
+   * Three absences, and the paid one is checked second rather than first.
+   *
+   * Someone on the free tier who has also switched per-host detail off in Privacy is
+   * owed "you turned this off" — telling them to subscribe would be selling a table
+   * that a subscription would not produce, because the rows do not exist. Their own
+   * setting is the real answer and it is the one they can act on.
+   */
+  const hostsLocked = !hostsOff && !plus.plus;
+  replaceChildren(detailHostsLock, hostsLocked ? [lock(t("dashboardPlusLockHosts"))] : []);
+  detailHostsEmpty.hidden = hostsLocked || !(hostsOff || noHosts);
+  detailHostsTable.hidden = hostsLocked || hostsOff || noHosts;
   detailHostsEmpty.textContent = t(hostsOff ? "dashboardHostsOff" : "dashboardHostsEmpty");
 
   replaceChildren(
@@ -1191,7 +1260,7 @@ function renderDetailSaver(): void {
     replaceChildren(detailSaver, [
       element("p", { className: "field-hint", text: t("dashboardSaverOffEverywhere") }),
       element("p", { className: "detail-presets" }, [
-        linkButton(t("dashboardSaverOpenSettings"), "./settings.html#optimize-panel"),
+        linkButton(t("dashboardSaverOpenSettings"), "./settings.html#saver"),
       ]),
     ]);
     renderDetailAdvice();
@@ -1303,8 +1372,43 @@ async function loadSavings(): Promise<void> {
   }
 }
 
+/**
+ * True when Data Saver is off and has never done anything in this window.
+ *
+ * Every one of these has to be zero, not just the switch: the panel's job is to
+ * report what the optimizer did, and a person who ran it last week and turned it off
+ * yesterday still has results worth defending. It is only the install that has never
+ * had it on that is being spared the methodology.
+ */
+function savingsUntouched(report: SavingsReport): boolean {
+  return (
+    !report.optimize.enabled &&
+    report.saved === 0 &&
+    report.blocked === 0 &&
+    report.rewritten === 0 &&
+    report.deltas.length === 0
+  );
+}
+
 function renderSavings(report: SavingsReport): void {
   savingsNote.textContent = `${RANGE_LABELS[trendDays]} · ${formatDayShort(report.from)} – ${formatDayShort(report.to)}`;
+
+  // One sentence instead of the whole apparatus, while there is nothing for the
+  // apparatus to be about. What is hidden is two 0 B tiles, the holdout note, the 95%
+  // interval rule, the "needs five loads on both sides" line and a disclosure — none of
+  // which is wrong, and all of which is an answer to a question a new install has not
+  // asked yet. It all comes back with the first byte the optimizer touches, and the
+  // panel keeps its "Manage Data Saver" link either way, so the way in is unchanged.
+  const untouched = savingsUntouched(report);
+  savingsIdle.hidden = !untouched;
+  savingsStats.hidden = untouched;
+  savingsHint.hidden = untouched;
+  savingsCompare.hidden = untouched;
+  savingsDetails.hidden = untouched;
+  if (untouched) {
+    savingsIdle.textContent = t("dashboardSavingsNeverRun");
+    return;
+  }
 
   // Two tiles, and the split is the point. `savedMeasured` is a subtraction against an
   // original whose size is on file; `savedModelled` is the estimator's guess at what a
@@ -1333,13 +1437,26 @@ function renderSavings(report: SavingsReport): void {
       ].join(" · ")
     : t("dashboardSavingsHintOff");
 
+  /*
+   * The per-site comparison is behind Plus; the two tiles above it are not, and that
+   * split is deliberate rather than arbitrary.
+   *
+   * The tiles are the honesty of this panel — a measured figure and a modelled one,
+   * kept apart, which README.md:133-141 says must never be merged. Those stay free
+   * forever. What is locked is the per-site breakdown *underneath* them: which sites
+   * the difference came from, over how many page loads. The note that explains the
+   * holdout stays visible either way, because it qualifies the tiles too.
+   */
+  const compareLocked = !plus.plus;
+  replaceChildren(savingsCompareLock, compareLocked ? [lock(t("dashboardPlusLockCompare"))] : []);
+
   savingsCompareNote.textContent =
     report.optimize.holdoutPercent > 0
       ? t("dashboardSavingsCompareNoteOn", String(report.optimize.holdoutPercent))
       : t("dashboardSavingsCompareNoteOff");
 
-  savingsEmpty.hidden = report.deltas.length > 0;
-  savingsTable.hidden = report.deltas.length === 0;
+  savingsEmpty.hidden = compareLocked || report.deltas.length > 0;
+  savingsTable.hidden = compareLocked || report.deltas.length === 0;
   savingsEmpty.textContent = t(
     report.optimize.holdoutPercent > 0 ? "dashboardSavingsEmptyOn" : "dashboardSavingsEmptyOff",
   );
@@ -1608,6 +1725,20 @@ function storageRow(label: string, value: string): HTMLElement {
 }
 
 function renderStorage(report: StorageReport): void {
+  // Seven rows of "0 rows" over "Disk in use 81.1 kB" is a table that contradicts
+  // itself, and the reading a new install takes from it is that one of the two figures
+  // is made up. Both are right: an empty IndexedDB is not a zero-byte one, and the
+  // stores, their indexes and the database's own metadata are what the quota is
+  // reporting. The note says so, and only while it is the whole explanation.
+  const stored =
+    report.dailyRows +
+    report.hourlyRows +
+    report.hostRows +
+    report.visitRows +
+    report.sizeModelRows +
+    (report.baselineRows ?? 0);
+  const empty = stored === 0 && report.bytesUsed !== null && report.bytesUsed > 0;
+
   replaceChildren(storageBody, [
     // Not debug output. A rejected write leaves every total quietly behind the traffic
     // it claims to measure, and this is the only surface that can admit it.
@@ -1653,7 +1784,9 @@ function renderStorage(report: StorageReport): void {
         ),
       ]),
     ]),
-    element("p", { className: "field-hint", text: t("dashboardStorageNote") }),
+    empty
+      ? element("p", { className: "field-hint", text: t("dashboardStorageEmptyNote") })
+      : element("p", { className: "field-hint", text: t("dashboardStorageNote") }),
   ]);
 }
 
@@ -1716,6 +1849,73 @@ async function load(): Promise<void> {
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * Plus
+ *
+ * The dashboard's two ceilings are both on *reading*, which makes them a different
+ * shape from the settings page's. There is nothing here to disable — a table is not a
+ * control — so a locked block hides its contents and puts the notice where they were.
+ * The heading above it stays, because "which third-party hosts a site's bytes came
+ * from" is worth knowing exists.
+ * ------------------------------------------------------------------ */
+
+/** The settings page owns the Plus section, so every lock here links across to it. */
+function lock(note: string): HTMLElement {
+  return lockNotice(note, "./settings.html#plus");
+}
+
+function renderLocks(): void {
+  // The period tabs and the range tabs, which between them decide how far back
+  // anything on this page reaches. Activating a locked one opens the Plus section
+  // rather than doing nothing — which is the whole point of them staying operable.
+  const openPlus = (): void => {
+    location.assign("./settings.html#plus");
+  };
+  const reason = t("corePlusLockedOption");
+  setGroupOptionsLocked(periodTabs, {
+    isLocked: (value) => !periodAllowed(value as Period, plus),
+    reason,
+    onActivate: openPlus,
+  });
+  setGroupOptionsLocked(rangeTabs, {
+    isLocked: (value) => !plus.plus && Number(value) > FREE_REPORT_DAYS,
+    reason,
+    onActivate: openPlus,
+  });
+}
+
+/**
+ * Moves the trend range under the free ceiling, and says whether it had to.
+ *
+ * The stored default is 30 days, so an install that has never subscribed would ask the
+ * worker for a month and draw it — the gate has to move the *value*, not only disable
+ * the option. Returns true when it changed so the caller can reload the two panels that
+ * read it; on a lapse mid-session that is the difference between the chart quietly
+ * continuing to show a month and it honestly falling back to a week.
+ */
+function clampTrendRange(): boolean {
+  if (plus.plus || trendDays <= FREE_REPORT_DAYS) return false;
+  trendDays = FREE_REPORT_DAYS;
+  paintGroup(rangeTabs, trendDays);
+  return true;
+}
+
+async function loadPlus(): Promise<void> {
+  try {
+    const response = await sendRequest({ type: "GET_PLUS" });
+    plus = response.plus;
+  } catch {
+    // Leave the last known answer standing. A failed read of the worker's cache is the
+    // worker being unavailable, which the panels report in their own right — and it is
+    // never a reason to take something away, by the policy in `plus/gate.ts`.
+  }
+  const moved = clampTrendRange();
+  renderLocks();
+  if (moved && booted) {
+    await Promise.all([loadTrend(), loadSavings()]);
+  }
+}
+
 async function refresh(): Promise<void> {
   if (refreshing) return;
   refreshing = true;
@@ -1740,6 +1940,10 @@ async function start(): Promise<void> {
   applyDocumentLanguage();
   selectedSite = siteFromHash();
   bindControls();
+  // Before the first read, so a free install never asks the worker for a month of days
+  // and draws it before the ceiling is applied.
+  await loadPlus();
+  booted = true;
   await load();
   // A deep link is a request for this panel, so focus lands in it — but without the
   // announcement, which on a fresh document would talk over the page's own heading.
@@ -1778,6 +1982,7 @@ addEventListener("hashchange", () => {
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") return;
+  void loadPlus();
   void refresh();
   void loadSavings();
   void loadStorage();

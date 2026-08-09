@@ -1,7 +1,123 @@
 {
-  "dashboardPageTitle": {
-    "message": "Byte Budget — data usage",
-    "description": "Browser tab title for the dashboard page. \"Byte Budget\" is the product name and is not translated."
+  "dashboardAdviceFeatureOff": {
+    "message": "$SHARE$ of this site's bytes are $TYPE$. The Data Saver setting aimed at that is \"$FEATURE$\", which is off by default.",
+    "description": "Recommendation line naming the Data Saver feature aimed at this site's dominant resource type, when that feature ships switched off. Separate from dashboardAdviceFeatureOn so \"off\" is never a substituted fragment.",
+    "placeholders": {
+      "share": {
+        "content": "$1",
+        "example": "71%"
+      },
+      "type": {
+        "content": "$2",
+        "example": "video & audio"
+      },
+      "feature": {
+        "content": "$3",
+        "example": "Click to load video"
+      }
+    }
+  },
+  "dashboardAdviceFeatureOn": {
+    "message": "$SHARE$ of this site's bytes are $TYPE$. The Data Saver setting aimed at that is \"$FEATURE$\", which is on by default.",
+    "description": "Recommendation line naming the Data Saver feature aimed at this site's dominant resource type, when that feature ships switched on. Separate from dashboardAdviceFeatureOff so \"on\" is never a substituted fragment. The quotation marks around the feature name may be replaced with the local ones.",
+    "placeholders": {
+      "share": {
+        "content": "$1",
+        "example": "71%"
+      },
+      "type": {
+        "content": "$2",
+        "example": "video & audio"
+      },
+      "feature": {
+        "content": "$3",
+        "example": "Click to load video"
+      }
+    }
+  },
+  "dashboardAdviceNoFeature": {
+    "message": "$SHARE$ of this site's bytes are $TYPE$. Nothing in Data Saver removes $TYPE$, so a limit is the only lever here.",
+    "description": "Recommendation line for a site whose dominant resource type no Data Saver feature touches. The type name is the same word both times.",
+    "placeholders": {
+      "share": {
+        "content": "$1",
+        "example": "71%"
+      },
+      "type": {
+        "content": "$2",
+        "example": "scripts"
+      }
+    }
+  },
+  "dashboardAnnounceLimitApplied": {
+    "message": "$SITE$ limited to $SIZE$ $WINDOW$.",
+    "description": "Announced to a screen reader after a preset button creates or replaces a limit.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "youtube.com"
+      },
+      "size": {
+        "content": "$2",
+        "example": "200 MB"
+      },
+      "window": {
+        "content": "$3",
+        "example": "a day"
+      }
+    }
+  },
+  "dashboardAnnounceLimitPaused": {
+    "message": "Limit paused for an hour.",
+    "description": "Announced to a screen reader after a limit is paused."
+  },
+  "dashboardAnnounceLimitRemoved": {
+    "message": "Limit removed.",
+    "description": "Announced to a screen reader after a limit is removed."
+  },
+  "dashboardAnnounceLimitResumed": {
+    "message": "Limit resumed.",
+    "description": "Announced to a screen reader after a paused limit is resumed."
+  },
+  "dashboardAnnouncePlanAligned": {
+    "message": "Everything is now limited to $PLAN$ a month.",
+    "description": "Announced to a screen reader after an all-sites limit is created or changed to match the plan.",
+    "placeholders": {
+      "plan": {
+        "content": "$1",
+        "example": "15 GB"
+      }
+    }
+  },
+  "dashboardAnnounceSaverOff": {
+    "message": "Data Saver off for $SITE$.",
+    "description": "Announced to a screen reader after Data Saver is switched off for a site.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "youtube.com"
+      }
+    }
+  },
+  "dashboardAnnounceSaverOn": {
+    "message": "Data Saver on for $SITE$.",
+    "description": "Announced to a screen reader after Data Saver is switched on for a site.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "youtube.com"
+      }
+    }
+  },
+  "dashboardAnnounceSiteDetails": {
+    "message": "Site details for $SITE$.",
+    "description": "Announced to a screen reader when the detail panel opens or swaps to another site.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "youtube.com"
+      }
+    }
   },
   "dashboardBrandEyebrow": {
     "message": "Byte Budget",
@@ -11,570 +127,46 @@
     "message": "Your data usage",
     "description": "Main heading (h1) of the dashboard page."
   },
-  "dashboardLoading": {
-    "message": "Loading…",
-    "description": "Placeholder under the page heading, replaced by the period description as soon as figures arrive."
+  "dashboardChartNothingRecorded": {
+    "message": "Nothing recorded yet.",
+    "description": "Shown in place of a chart when every bucket in the series is zero. Word for word the same as coreChartNothingRecorded, which stands in for the share bar: on the dashboard the two panels sit side by side, and two nearly-identical sentences a hand's width apart read as two different states of two different things."
   },
-  "dashboardPeriodGroupLabel": {
-    "message": "Usage period",
-    "description": "Accessible name for the Session/Today/7 days/30 days picker in the page header."
-  },
-  "dashboardNavLabel": {
-    "message": "Main navigation",
-    "description": "Accessible name for the two-link nav that switches between Dashboard and Settings."
-  },
-  "dashboardNavDashboard": {
-    "message": "Dashboard",
-    "description": "Navigation link to this page."
-  },
-  "dashboardNavSettings": {
-    "message": "Settings",
-    "description": "Navigation link to the settings page."
-  },
-  "dashboardOverviewLabel": {
-    "message": "Usage overview",
-    "description": "Accessible name for the region holding the four stat cards at the top of the page."
-  },
-
-  "dashboardStatDataUsed": {
-    "message": "Data used",
-    "description": "Label of the stat card showing total bytes for the chosen period."
-  },
-  "dashboardMeasuredPill": {
-    "message": "$PERCENT$ measured",
-    "description": "Small badge on the \"Data used\" card. The share of the total that was measured from real response sizes rather than estimated. Not a claim of overall accuracy — see dashboardMeasuredPillTitle.",
+  "dashboardComparisonLess": {
+    "message": "$PERCENT$ less than the previous $WINDOW$",
+    "description": "Note under the \"Data used\" card when this period used less than the one before it. Separate from dashboardComparisonMore so the direction is never a substituted fragment.",
     "placeholders": {
-      "percent": { "content": "$1", "example": "97%" }
-    }
-  },
-  "dashboardMeasuredPillTitle": {
-    "message": "Response bodies measured. Header overhead is estimated and halved, WebSocket frames are invisible to an extension, and a cancelled body counts as zero — see How Byte Budget measures usage.",
-    "description": "Tooltip on the measured badge. It deliberately lists what the measured percentage does NOT cover, so the badge cannot be read as \"the total is exact\". The closing phrase names the disclosure section on the same page (dashboardMethodSummary); translate it the same way there."
-  },
-  "dashboardStatTopSite": {
-    "message": "Top site",
-    "description": "Label of the stat card showing the heaviest site of the period."
-  },
-  "dashboardTopSiteNoUsage": {
-    "message": "No usage yet",
-    "description": "Hint under the \"Top site\" card when nothing has been recorded in this period."
-  },
-  "dashboardStatProjected": {
-    "message": "Projected",
-    "description": "Label of the stat card showing where the cycle is expected to end up. Always this word, whatever the card's value says, because the figure is modelled rather than measured."
-  },
-  "dashboardProjectedNoPlan": {
-    "message": "No plan",
-    "description": "Value of the \"Projected\" card when no plan size has been set, so there is nothing to project against."
-  },
-  "dashboardProjectedNoPlanHint": {
-    "message": "Nothing to project against yet",
-    "description": "Hint under the \"Projected\" card when no plan size has been set."
-  },
-  "dashboardProjectedSetPlanLink": {
-    "message": "Set your plan size and reset day",
-    "description": "Link on the \"Projected\" card that opens the settings page."
-  },
-  "dashboardProjectedNotYet": {
-    "message": "Not yet",
-    "description": "Value of the \"Projected\" card when a plan exists but no day of the cycle has finished, so no rate can be computed."
-  },
-  "dashboardProjectedNotYetHint": {
-    "message": "No day of this cycle has finished",
-    "description": "Hint under the \"Projected\" card when the cycle has only just begun."
-  },
-  "dashboardProjectedTooEarly": {
-    "message": "Too early",
-    "description": "Value of the \"Projected\" card when too few days have finished for the projection to be stated. No figure is printed at all in this state."
-  },
-  "dashboardProjectedTooEarlyHint": {
-    "message": "Too few finished days to state a figure",
-    "description": "Hint under the \"Projected\" card when the projection is not confident enough to print."
-  },
-  "dashboardProjectedOverPlan": {
-    "message": "$OVER$ over your $PLAN$ plan",
-    "description": "Hint under the \"Projected\" card when the projection lands above the plan size.",
-    "placeholders": {
-      "over": { "content": "$1", "example": "2.1 GB" },
-      "plan": { "content": "$2", "example": "15 GB" }
-    }
-  },
-  "dashboardProjectedUnderPlan": {
-    "message": "$UNDER$ under your $PLAN$ plan",
-    "description": "Hint under the \"Projected\" card when the projection lands below the plan size.",
-    "placeholders": {
-      "under": { "content": "$1", "example": "3.4 GB" },
-      "plan": { "content": "$2", "example": "15 GB" }
-    }
-  },
-  "dashboardProjectionBasis": {
-    "message": "Projected — $BASIS$",
-    "description": "Line under the stat cards saying what rate the projection assumed and over what window. The basis text comes from the worker and is already a sentence fragment describing the rate.",
-    "placeholders": {
-      "basis": { "content": "$1", "example": "1.2 GB a day over the 6 finished days of this cycle" }
-    }
-  },
-  "dashboardProjectionSpentOn": {
-    "message": "The plan was already spent, on $DAY$.",
-    "description": "Second sentence of the projection basis line when the plan ran out on a day that has already passed. This date was found by reading recorded days, so it is measured rather than modelled.",
-    "placeholders": {
-      "day": { "content": "$1", "example": "3 Aug" }
-    }
-  },
-  "dashboardProjectionRunsOutOn": {
-    "message": "At that rate it runs out on $DAY$.",
-    "description": "Second sentence of the projection basis line when the plan is expected to run out on a future day. \"At that rate\" marks it as modelled, unlike dashboardProjectionSpentOn.",
-    "placeholders": {
-      "day": { "content": "$1", "example": "24 Aug" }
-    }
-  },
-  "dashboardStatDataPrevented": {
-    "message": "Data prevented",
-    "description": "Label of the stat card showing bytes that were never transferred. \"Prevented\", not \"saved\": these bytes are not part of the total on the neighbouring card, so the two do not share a denominator."
-  },
-  "dashboardPreventedHintSplit": {
-    "message": "$MEASURED$ of it measured, the rest modelled",
-    "description": "Hint under the \"Data prevented\" card. The card's own figure is a sum of a measured subtraction and an estimate, and this says how much of it is which. The distinction must survive translation: \"measured\" is arithmetic on sizes on file, \"modelled\" is a guess.",
-    "placeholders": {
-      "measured": { "content": "$1", "example": "620 MB" }
-    }
-  },
-  "dashboardPreventedHintCache": {
-    "message": "Cache also avoided ~$BYTES$",
-    "description": "Hint under the \"Data prevented\" card when nothing was prevented but the browser cache avoided some traffic. The leading tilde marks the figure as approximate; keep it or use the local equivalent.",
-    "placeholders": {
-      "bytes": { "content": "$1", "example": "310 MB" }
-    }
-  },
-  "dashboardPreventedHintNone": {
-    "message": "Turn on Data Saver or add a limit",
-    "description": "Hint under the \"Data prevented\" card when nothing has been prevented and nothing is set up to prevent anything. \"Data Saver\" is a feature name used throughout the product."
-  },
-
-  "dashboardComparisonSame": {
-    "message": "About the same as the previous $WINDOW$",
-    "description": "Note under the \"Data used\" card when this period matches the one before it. The window word is one of dashboardWindowSession/Day/Week/SevenDays/Month/ThirtyDays.",
-    "placeholders": {
-      "window": { "content": "$1", "example": "30 days" }
+      "percent": {
+        "content": "$1",
+        "example": "18%"
+      },
+      "window": {
+        "content": "$2",
+        "example": "30 days"
+      }
     }
   },
   "dashboardComparisonMore": {
     "message": "$PERCENT$ more than the previous $WINDOW$",
     "description": "Note under the \"Data used\" card when this period used more than the one before it. Separate from dashboardComparisonLess so the direction is never a substituted fragment.",
     "placeholders": {
-      "percent": { "content": "$1", "example": "18%" },
-      "window": { "content": "$2", "example": "30 days" }
+      "percent": {
+        "content": "$1",
+        "example": "18%"
+      },
+      "window": {
+        "content": "$2",
+        "example": "30 days"
+      }
     }
   },
-  "dashboardComparisonLess": {
-    "message": "$PERCENT$ less than the previous $WINDOW$",
-    "description": "Note under the \"Data used\" card when this period used less than the one before it. Separate from dashboardComparisonMore so the direction is never a substituted fragment.",
+  "dashboardComparisonSame": {
+    "message": "About the same as the previous $WINDOW$",
+    "description": "Note under the \"Data used\" card when this period matches the one before it. The window word is one of dashboardWindowSession/Day/Week/SevenDays/Month/ThirtyDays.",
     "placeholders": {
-      "percent": { "content": "$1", "example": "18%" },
-      "window": { "content": "$2", "example": "30 days" }
-    }
-  },
-  "dashboardWindowSession": {
-    "message": "session",
-    "description": "Names the window a period-over-period comparison is against. Substituted into dashboardComparisonSame/More/Less, e.g. \"18% less than the previous session\". Lower case, mid-sentence."
-  },
-  "dashboardWindowDay": {
-    "message": "day",
-    "description": "Names the window a period-over-period comparison is against. Substituted into dashboardComparisonSame/More/Less, e.g. \"18% less than the previous day\". Lower case, mid-sentence."
-  },
-  "dashboardWindowWeek": {
-    "message": "week",
-    "description": "Names the window a comparison is against when weeks are counted as calendar weeks. Substituted into dashboardComparisonSame/More/Less. Lower case, mid-sentence."
-  },
-  "dashboardWindowSevenDays": {
-    "message": "7 days",
-    "description": "Names the window a comparison is against when a week means the last 7 days rather than a calendar week. Substituted into dashboardComparisonSame/More/Less. Lower case, mid-sentence."
-  },
-  "dashboardWindowMonth": {
-    "message": "month",
-    "description": "Names the window a comparison is against when months are counted as calendar months. Substituted into dashboardComparisonSame/More/Less. Lower case, mid-sentence."
-  },
-  "dashboardWindowThirtyDays": {
-    "message": "30 days",
-    "description": "Names the window a comparison is against when a month means the last 30 days rather than a calendar month. Substituted into dashboardComparisonSame/More/Less. Lower case, mid-sentence."
-  },
-
-  "dashboardStaleNote": {
-    "message": "Showing figures from $AGO$.",
-    "description": "Notice in the page header when the figures on screen are older than the refresh interval, so a stale number is never presented as live.",
-    "placeholders": {
-      "ago": { "content": "$1", "example": "2 minutes ago" }
-    }
-  },
-
-  "dashboardSitesTitle": {
-    "message": "Where your data went",
-    "description": "Heading of the panel listing sites by bytes used."
-  },
-  "dashboardSiteSearchLabel": {
-    "message": "Find a site",
-    "description": "Search box above the site list. Used as both the placeholder and the accessible name, which must stay identical, so it is one message."
-  },
-  "dashboardSitesEmpty": {
-    "message": "No usage yet. Browse normally and sites will appear here.",
-    "description": "Empty state of the site list when nothing has been recorded for the chosen period."
-  },
-  "dashboardSitesFilteredCount": {
-    "message": "$SHOWN$ of $TOTAL$",
-    "description": "Count beside the site list while a search filter is active: how many sites match out of how many exist.",
-    "placeholders": {
-      "shown": { "content": "$1", "example": "4" },
-      "total": { "content": "$2", "example": "37" }
-    }
-  },
-  "dashboardSiteCountOne": {
-    "message": "$COUNT$ site",
-    "description": "Count beside the site list, singular. Chrome's message format has no plural rules, so the singular and plural are separate whole messages.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "1" }
-    }
-  },
-  "dashboardSiteCountOther": {
-    "message": "$COUNT$ sites",
-    "description": "Count beside the site list, plural. Paired with dashboardSiteCountOne.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "37" }
-    }
-  },
-  "dashboardShowAllSites": {
-    "message": "Show all $COUNT$ sites",
-    "description": "Button at the foot of the site list revealing the rows past the first 25. Only ever shown with a count above 25, so no singular form is needed.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "37" }
-    }
-  },
-  "dashboardReservedRowTitle": {
-    "message": "Requests that did not belong to a tab: browser services, service workers and other extensions.",
-    "description": "Tooltip on the site row for the reserved ledger buckets, which are not real sites."
-  },
-  "dashboardOpenSiteDetails": {
-    "message": "Open details for $SITE$",
-    "description": "Tooltip on a site row, saying that clicking it opens the detail panel.",
-    "placeholders": {
-      "site": { "content": "$1", "example": "youtube.com" }
-    }
-  },
-  "dashboardSiteShareOfTotal": {
-    "message": "$PERCENT$ of total",
-    "description": "Second figure on a site row: this site's share of the period's total.",
-    "placeholders": {
-      "percent": { "content": "$1", "example": "31%" }
-    }
-  },
-  "dashboardSiteShareOfTotalEstimated": {
-    "message": "$PERCENT$ of total · includes estimates",
-    "description": "Second figure on a site row when under three quarters of the site's bytes were measured. Separate whole message rather than a suffix appended to dashboardSiteShareOfTotal, so the qualifier can be placed wherever the language needs it.",
-    "placeholders": {
-      "percent": { "content": "$1", "example": "31%" }
-    }
-  },
-
-  "dashboardDetailTitle": {
-    "message": "Site details",
-    "description": "Heading of the panel that opens when a site row is clicked."
-  },
-  "dashboardDetailClose": {
-    "message": "Close",
-    "description": "Button that closes the site detail panel."
-  },
-  "dashboardAnnounceSiteDetails": {
-    "message": "Site details for $SITE$.",
-    "description": "Announced to a screen reader when the detail panel opens or swaps to another site.",
-    "placeholders": {
-      "site": { "content": "$1", "example": "youtube.com" }
-    }
-  },
-  "dashboardErrorReadSite": {
-    "message": "Could not read that site.",
-    "description": "Announced when the detail panel's request to the background worker fails."
-  },
-  "dashboardDetailIncludesEstimates": {
-    "message": "Includes some estimates",
-    "description": "Qualifier in the detail panel's summary line when under 90% of the site's bytes were measured."
-  },
-  "dashboardPageLoadCountOne": {
-    "message": "$COUNT$ page load",
-    "description": "Number of recorded page loads for a site, singular.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "1" }
-    }
-  },
-  "dashboardPageLoadCountOther": {
-    "message": "$COUNT$ page loads",
-    "description": "Number of recorded page loads for a site, plural. Paired with dashboardPageLoadCountOne.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "42" }
-    }
-  },
-  "dashboardDetailVisitsSummary": {
-    "message": "$LOADS$ · typical $BYTES$",
-    "description": "Part of the detail panel's summary line: how many page loads were recorded and the median bytes of one. \"Typical\" is the median, not the mean.",
-    "placeholders": {
-      "loads": { "content": "$1", "example": "42 page loads" },
-      "bytes": { "content": "$2", "example": "3.1 MB" }
-    }
-  },
-  "dashboardDetailLimitHeading": {
-    "message": "Limit this site",
-    "description": "Heading of the block in the detail panel for setting a data limit on the site."
-  },
-  "dashboardDetailWindowLabel": {
-    "message": "Window",
-    "description": "Label for the Session/Day/Week/Month picker that chooses which window a limit's allowance covers."
-  },
-  "dashboardDetailShapeLabel": {
-    "message": "When it runs out",
-    "description": "Label for the picker that chooses what happens once a limit's allowance is spent."
-  },
-  "dashboardDetailSaverHeading": {
-    "message": "Data Saver",
-    "description": "Heading of the block in the detail panel for turning Data Saver on or off for this site. \"Data Saver\" is the product's name for the optimizer feature."
-  },
-  "dashboardDetailHoursHeading": {
-    "message": "Today by hour",
-    "description": "Heading and chart caption for the site's hourly usage chart."
-  },
-  "dashboardDetailDaysHeading": {
-    "message": "By day",
-    "description": "Heading and chart caption for the site's daily usage chart."
-  },
-  "dashboardTypeOfData": {
-    "message": "Type of data",
-    "description": "Heading and chart caption for the breakdown by resource type — video, images, scripts and so on. Used for the panel on the overview and for the block inside the detail panel."
-  },
-  "dashboardDetailHostsHeading": {
-    "message": "Source hosts",
-    "description": "Heading of the table listing the hostnames a site's bytes actually came from."
-  },
-  "dashboardHostsColumnHost": {
-    "message": "Host",
-    "description": "Column header in the source hosts table: the hostname."
-  },
-  "dashboardHostsColumnData": {
-    "message": "Data",
-    "description": "Column header in the source hosts table: bytes transferred."
-  },
-  "dashboardHostsColumnRequests": {
-    "message": "Requests",
-    "description": "Column header in the source hosts table: number of requests."
-  },
-  "dashboardHostsOff": {
-    "message": "Per-host detail is switched off, so nothing was recorded to show here.",
-    "description": "Empty state of the source hosts table when the user has turned per-host recording off. Distinct from dashboardHostsEmpty: nothing was ever recorded, rather than nothing happened."
-  },
-  "dashboardHostsEmpty": {
-    "message": "No host detail for this period yet.",
-    "description": "Empty state of the source hosts table when per-host recording is on but this period has no rows. Distinct from dashboardHostsOff."
-  },
-  "dashboardHostThirdParty": {
-    "message": "third party",
-    "description": "Tag beside a hostname in the source hosts table when the host is not part of the site itself. Lower case: it is a tag, not a sentence."
-  },
-
-  "dashboardChartNothingRecorded": {
-    "message": "Nothing recorded.",
-    "description": "Shown in place of a chart when the series is empty."
-  },
-  "dashboardPreventedLabel": {
-    "message": "prevented, partly estimated",
-    "description": "Names the second band drawn inside each bar of the daily chart, in the key, in the bar tooltips and in the chart's screen-reader summary. Not \"saved\": those bytes were never transferred, so they are not part of the bar they sit inside. \"Partly estimated\" is not optional — the figure is a measured subtraction plus a size model's guess. Lower case, used mid-phrase."
-  },
-  "dashboardTrendTitle": {
-    "message": "Daily usage",
-    "description": "Heading of the panel holding the daily usage chart."
-  },
-  "dashboardTrendCaption": {
-    "message": "Daily usage over $RANGE$",
-    "description": "Caption read out with the daily usage chart, naming the range currently shown.",
-    "placeholders": {
-      "range": { "content": "$1", "example": "30 days" }
-    }
-  },
-  "dashboardRangeGroupLabel": {
-    "message": "Range for the daily chart and the Data Saver results",
-    "description": "Accessible name for the 2 weeks/30 days/3 months picker. It names both panels because the control also re-scopes the Data Saver results far below the fold."
-  },
-  "dashboardRangeTwoWeeks": {
-    "message": "2 weeks",
-    "description": "Option in the range picker, and the range name substituted into dashboardTrendCaption and dashboardRangeAnnouncement."
-  },
-  "dashboardRangeThirtyDays": {
-    "message": "30 days",
-    "description": "Option in the range picker, and the range name substituted into dashboardTrendCaption and dashboardRangeAnnouncement."
-  },
-  "dashboardRangeThreeMonths": {
-    "message": "3 months",
-    "description": "Option in the range picker, and the range name substituted into dashboardTrendCaption and dashboardRangeAnnouncement."
-  },
-  "dashboardRangeAnnouncement": {
-    "message": "Daily usage and Data Saver results now cover the last $RANGE$.",
-    "description": "Announced to a screen reader after the range picker changes, because the second panel it re-scopes is several hundred pixels below the control.",
-    "placeholders": {
-      "range": { "content": "$1", "example": "30 days" }
-    }
-  },
-
-  "dashboardMethodSummary": {
-    "message": "How Byte Budget measures usage",
-    "description": "Summary line of the collapsed disclosure explaining the measurement method. Referred to by name at the end of dashboardMeasuredPillTitle; keep the two the same."
-  },
-  "dashboardMethodBodyOne": {
-    "message": "Totals use the best information available from Chrome and each site. If an exact size is unavailable, Byte Budget makes a clearly labelled estimate.",
-    "description": "First paragraph of the measurement disclosure."
-  },
-  "dashboardMethodBodyTwo": {
-    "message": "The measured percentage covers response bodies and nothing else. Header overhead is counted from the names and values and then halved, because HTTP/2 compresses headers by an amount Chrome does not report; WebSocket frames are invisible to an extension; a cancelled response counts as zero. So 100% measured means every body was measured, not that the total is exact.",
-    "description": "Second paragraph of the measurement disclosure. It is the product's statement of what the measured percentage does and does not cover; the final sentence is the point of the paragraph and must not be softened."
-  },
-  "dashboardMethodBodyThree": {
-    "message": "Every figure here covers this Chrome profile. A second profile, another browser, a native app, an operating system update and every other device on the same connection are invisible to an extension — there is no API that would show them. A carrier's figure can be several times larger, and the difference is not an error in this one.",
-    "description": "Third paragraph of the measurement disclosure, on why the extension's total differs from a carrier's bill."
-  },
-
-  "dashboardLimitPeriodSession": {
-    "message": "Session",
-    "description": "Option in the limit window picker: the allowance covers this browser session. Kept short to fit a segmented control; the longer wording is the button's tooltip."
-  },
-  "dashboardLimitPeriodDay": {
-    "message": "Day",
-    "description": "Option in the limit window picker: the allowance covers one day. Kept short to fit a segmented control."
-  },
-  "dashboardLimitPeriodWeek": {
-    "message": "Week",
-    "description": "Option in the limit window picker: the allowance covers one week. Kept short to fit a segmented control."
-  },
-  "dashboardLimitPeriodMonth": {
-    "message": "Month",
-    "description": "Option in the limit window picker: the allowance covers one month. Kept short to fit a segmented control."
-  },
-  "dashboardLimitShapeProgressive": {
-    "message": "Shed weight",
-    "description": "Option for what a limit does once the allowance is spent: drop heavy resource types in stages rather than refuse everything. Kept short to fit a segmented control."
-  },
-  "dashboardLimitShapeHard": {
-    "message": "Hard stop",
-    "description": "Option for what a limit does once the allowance is spent: refuse every subresource at once. Kept short to fit a segmented control."
-  },
-  "dashboardLimitWindowSession": {
-    "message": "this session's limit",
-    "description": "Names the window a share is a share of, substituted into dashboardLimitStatusFigure, e.g. \"42% of this session's limit\". Lower case, mid-sentence."
-  },
-  "dashboardLimitWindowDay": {
-    "message": "today's limit",
-    "description": "Names the window a share is a share of, substituted into dashboardLimitStatusFigure, e.g. \"42% of today's limit\". Lower case, mid-sentence."
-  },
-  "dashboardLimitWindowWeek": {
-    "message": "this week's limit",
-    "description": "Names the window a share is a share of, substituted into dashboardLimitStatusFigure. Lower case, mid-sentence."
-  },
-  "dashboardLimitWindowMonth": {
-    "message": "this month's limit",
-    "description": "Names the window a share is a share of, substituted into dashboardLimitStatusFigure. Lower case, mid-sentence."
-  },
-  "dashboardLimitStatusOver": {
-    "message": "Over limit",
-    "description": "State chip on a site's limit when more than the allowance has been used."
-  },
-  "dashboardLimitStatusNearlyFull": {
-    "message": "Nearly full",
-    "description": "State chip on a site's limit at 85% or more of the allowance."
-  },
-  "dashboardLimitStatusWithin": {
-    "message": "Within limit",
-    "description": "State chip on a site's limit below 85% of the allowance."
-  },
-  "dashboardLimitStatusPaused": {
-    "message": "Paused",
-    "description": "State chip on a site's limit while enforcement is snoozed."
-  },
-  "dashboardLimitStatusFigure": {
-    "message": "$SHARE$ of $WINDOW$ · $RESET$",
-    "description": "Line beside the limit's state chip: how much of the allowance is spent and when the window rolls over. The window comes from dashboardLimitWindowSession/Day/Week/Month and the reset clause from dashboardLimitResetsAt or dashboardLimitResetsNever.",
-    "placeholders": {
-      "share": { "content": "$1", "example": "42%" },
-      "window": { "content": "$2", "example": "today's limit" },
-      "reset": { "content": "$3", "example": "resets in 9 hours" }
-    }
-  },
-  "dashboardLimitResetsNever": {
-    "message": "runs until this browser session ends",
-    "description": "Reset clause for a session limit, which has no rollover time. Substituted into dashboardLimitStatusFigure. Lower case, mid-sentence."
-  },
-  "dashboardLimitResetsAt": {
-    "message": "resets $WHEN$",
-    "description": "Reset clause for a limit whose window rolls over at a known time. Substituted into dashboardLimitStatusFigure. Lower case, mid-sentence.",
-    "placeholders": {
-      "when": { "content": "$1", "example": "in 9 hours" }
-    }
-  },
-  "dashboardLimitMeterFigure": {
-    "message": "$USED$ of $ALLOWANCE$",
-    "description": "Figure under the limit's progress meter: bytes used against the allowance for the window.",
-    "placeholders": {
-      "used": { "content": "$1", "example": "820 MB" },
-      "allowance": { "content": "$2", "example": "2 GB" }
-    }
-  },
-  "dashboardLimitPausedHint": {
-    "message": "Nothing is being refused while it is paused. Without the pause: $TIER$",
-    "description": "Hint under a paused limit that has no known resume time. The tier text describes what would be refused and comes from the shared tier descriptions.",
-    "placeholders": {
-      "tier": { "content": "$1", "example": "Video, audio, images and web fonts are refused." }
-    }
-  },
-  "dashboardLimitPausedHintResumes": {
-    "message": "Nothing is being refused while it is paused; it resumes $WHEN$. Without the pause: $TIER$",
-    "description": "Hint under a paused limit that has a resume time. A whole separate message rather than an optional clause spliced into dashboardLimitPausedHint, because a mid-sentence insertion cannot be reordered by a translator.",
-    "placeholders": {
-      "when": { "content": "$1", "example": "in 40 minutes" },
-      "tier": { "content": "$2", "example": "Video, audio, images and web fonts are refused." }
-    }
-  },
-  "dashboardReservedNoLimit": {
-    "message": "These requests have no site of their own for a rule to name, so they cannot be limited individually. A limit over Everything covers them along with the rest.",
-    "description": "Shown in place of the limit controls for the reserved ledger buckets, which are not origins. \"Everything\" is the displayed name of the limit that covers all sites; translate it the same way it is translated there."
-  },
-  "dashboardResumeNow": {
-    "message": "Resume now",
-    "description": "Button that ends a paused limit immediately."
-  },
-  "dashboardAnnounceLimitResumed": {
-    "message": "Limit resumed.",
-    "description": "Announced to a screen reader after a paused limit is resumed."
-  },
-  "dashboardPauseOneHour": {
-    "message": "Pause 1 hour",
-    "description": "Button that suspends a limit's enforcement for one hour."
-  },
-  "dashboardAnnounceLimitPaused": {
-    "message": "Limit paused for an hour.",
-    "description": "Announced to a screen reader after a limit is paused."
-  },
-  "dashboardRemoveLimit": {
-    "message": "Remove limit",
-    "description": "Button that deletes the limit on this site."
-  },
-  "dashboardAnnounceLimitRemoved": {
-    "message": "Limit removed.",
-    "description": "Announced to a screen reader after a limit is removed."
-  },
-  "dashboardNoLimitHint": {
-    "message": "No limit on this site. A limit refuses requests before they are sent, so the bytes are never spent.",
-    "description": "Shown in the detail panel when the site has no limit, naming what a limit actually does."
-  },
-  "dashboardPresetTitle": {
-    "message": "Limit $SITE$ to $SIZE$ $WINDOW$ — $SHAPE$",
-    "description": "Tooltip on each round-figure preset button, spelling out the limit the button would create.",
-    "placeholders": {
-      "site": { "content": "$1", "example": "youtube.com" },
-      "size": { "content": "$2", "example": "200 MB" },
-      "window": { "content": "$3", "example": "a day" },
-      "shape": { "content": "$4", "example": "shed weight" }
+      "window": {
+        "content": "$1",
+        "example": "30 days"
+      }
     }
   },
   "dashboardConsequenceHard": {
@@ -585,62 +177,856 @@
     "message": "Shedding weight drops video and audio at 60% of the allowance, images and web fonts at 85%, and everything but the page shell at 100%.",
     "description": "Explains what the \"Shed weight\" shape does. Substituted into dashboardLimitHintReplaces or dashboardLimitHintExact."
   },
-  "dashboardLimitHintReplaces": {
-    "message": "$CONSEQUENCE$ Choosing a size replaces the current limit on this site.",
-    "description": "Hint under the preset buttons when the site already has a limit. The consequence sentence is dashboardConsequenceHard or dashboardConsequenceProgressive; it is a placeholder rather than a concatenation so the two sentences can be ordered as the language needs.",
+  "dashboardCycleNoteCalendar": {
+    "message": "This cycle runs from the calendar month. Most carrier cycles do not, and a figure anchored to the wrong day is never the one on the bill.",
+    "description": "Hint in the Plan and cycle panel when the cycle is anchored to the calendar month, which is the default and is usually not the carrier's. The second clause is the warning and is the reason the message exists."
+  },
+  "dashboardCycleNoteDay": {
+    "message": "This cycle runs from the $DAY$ of the month. A figure anchored to the wrong day is never the one on the bill.",
+    "description": "Hint in the Plan and cycle panel when the cycle is anchored to a chosen day of the month. A whole separate message from dashboardCycleNoteCalendar so the anchor is never a fragment spliced mid-sentence. It carries no warning about the 1st, unlike that one: the day was chosen deliberately here.",
     "placeholders": {
-      "consequence": { "content": "$1", "example": "A hard stop refuses every subresource the moment the allowance runs out. The page's own HTML still loads, so the site can say why it looks broken." }
+      "day": {
+        "content": "$1",
+        "example": "17th"
+      }
+    }
+  },
+  "dashboardDayCountOne": {
+    "message": "$COUNT$ day",
+    "description": "Number of days left in the cycle, singular. Substituted into dashboardPlanRemaining.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "dashboardDayCountOther": {
+    "message": "$COUNT$ days",
+    "description": "Number of days left in the cycle, plural. Substituted into dashboardPlanRemaining; paired with dashboardDayCountOne.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "19"
+      }
+    }
+  },
+  "dashboardDetailClose": {
+    "message": "Close",
+    "description": "Button that closes the site detail panel."
+  },
+  "dashboardDetailDaysHeading": {
+    "message": "By day",
+    "description": "Heading and chart caption for the site's daily usage chart."
+  },
+  "dashboardDetailHostsHeading": {
+    "message": "Source hosts",
+    "description": "Heading of the table listing the hostnames a site's bytes actually came from."
+  },
+  "dashboardDetailHoursHeading": {
+    "message": "Today by hour",
+    "description": "Heading and chart caption for the site's hourly usage chart."
+  },
+  "dashboardDetailIncludesEstimates": {
+    "message": "Includes some estimates",
+    "description": "Qualifier in the detail panel's summary line when under 90% of the site's bytes were measured."
+  },
+  "dashboardDetailLimitHeading": {
+    "message": "Limit this site",
+    "description": "Heading of the block in the detail panel for setting a data limit on the site."
+  },
+  "dashboardDetailSaverHeading": {
+    "message": "Data Saver",
+    "description": "Heading of the block in the detail panel for turning Data Saver on or off for this site. \"Data Saver\" is the product's name for the optimizer feature."
+  },
+  "dashboardDetailShapeLabel": {
+    "message": "When it runs out",
+    "description": "Label for the picker that chooses what happens once a limit's allowance is spent."
+  },
+  "dashboardDetailTitle": {
+    "message": "Site details",
+    "description": "Heading of the panel that opens when a site row is clicked."
+  },
+  "dashboardDetailVisitsSummary": {
+    "message": "$LOADS$ · typical $BYTES$",
+    "description": "Part of the detail panel's summary line: how many page loads were recorded and the median bytes of one. \"Typical\" is the median, not the mean.",
+    "placeholders": {
+      "loads": {
+        "content": "$1",
+        "example": "42 page loads"
+      },
+      "bytes": {
+        "content": "$2",
+        "example": "3.1 MB"
+      }
+    }
+  },
+  "dashboardDetailWindowLabel": {
+    "message": "Window",
+    "description": "Label for the Session/Day/Week/Month picker that chooses which window a limit's allowance covers."
+  },
+  "dashboardErrorGeneric": {
+    "message": "That did not work.",
+    "description": "Fallback shown and announced when a limit action fails and the worker gave no message of its own."
+  },
+  "dashboardErrorReadCycle": {
+    "message": "Could not read the cycle.",
+    "description": "Shown beside the Plan and cycle heading when the request to the worker fails."
+  },
+  "dashboardErrorReadSavings": {
+    "message": "Could not read the savings.",
+    "description": "Shown beside the Data Saver results heading when the request to the worker fails."
+  },
+  "dashboardErrorReadSeries": {
+    "message": "Could not read the daily series.",
+    "description": "Announced when the daily chart's request to the worker fails."
+  },
+  "dashboardErrorReadSite": {
+    "message": "Could not read that site.",
+    "description": "Announced when the detail panel's request to the background worker fails."
+  },
+  "dashboardErrorReadStorage": {
+    "message": "Could not read storage.",
+    "description": "Shown in the storage panel when the request to the worker fails."
+  },
+  "dashboardErrorReadUsage": {
+    "message": "Could not read usage.",
+    "description": "Shown in place of the stat cards, and announced, when the overview request to the worker fails."
+  },
+  "dashboardErrorSetLimit": {
+    "message": "Could not set that limit.",
+    "description": "Shown and announced when creating the all-sites limit from the Plan and cycle panel fails."
+  },
+  "dashboardErrorSetSiteOptimize": {
+    "message": "Could not change Data Saver for that site.",
+    "description": "Announced when the per-site Data Saver request to the worker fails."
+  },
+  "dashboardHostThirdParty": {
+    "message": "third party",
+    "description": "Tag beside a hostname in the source hosts table when the host is not part of the site itself. Lower case: it is a tag, not a sentence."
+  },
+  "dashboardHostsColumnData": {
+    "message": "Data",
+    "description": "Column header in the source hosts table: bytes transferred."
+  },
+  "dashboardHostsColumnHost": {
+    "message": "Host",
+    "description": "Column header in the source hosts table: the hostname."
+  },
+  "dashboardHostsColumnRequests": {
+    "message": "Requests",
+    "description": "Column header in the source hosts table: number of requests."
+  },
+  "dashboardHostsEmpty": {
+    "message": "No host detail for this period yet.",
+    "description": "Empty state of the source hosts table when per-host recording is on but this period has no rows. Distinct from dashboardHostsOff."
+  },
+  "dashboardHostsOff": {
+    "message": "Per-host detail is switched off, so nothing was recorded to show here.",
+    "description": "Empty state of the source hosts table when the user has turned per-host recording off. Distinct from dashboardHostsEmpty: nothing was ever recorded, rather than nothing happened."
+  },
+  "dashboardKeyCountOne": {
+    "message": "$COUNT$ key",
+    "description": "Key count in the storage table, singular. These stores are keyed maps rather than row tables.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "dashboardKeyCountOther": {
+    "message": "$COUNT$ keys",
+    "description": "Key count in the storage table, plural. Paired with dashboardKeyCountOne.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1,940"
+      }
     }
   },
   "dashboardLimitHintExact": {
     "message": "$CONSEQUENCE$ For an exact figure, use the limit form in Settings.",
     "description": "Hint under the preset buttons when the site has no limit yet. The consequence sentence is dashboardConsequenceHard or dashboardConsequenceProgressive.",
     "placeholders": {
-      "consequence": { "content": "$1", "example": "A hard stop refuses every subresource the moment the allowance runs out. The page's own HTML still loads, so the site can say why it looks broken." }
+      "consequence": {
+        "content": "$1",
+        "example": "A hard stop refuses every subresource the moment the allowance runs out. The page's own HTML still loads, so the site can say why it looks broken."
+      }
     }
   },
-  "dashboardAnnounceLimitApplied": {
-    "message": "$SITE$ limited to $SIZE$ $WINDOW$.",
-    "description": "Announced to a screen reader after a preset button creates or replaces a limit.",
+  "dashboardLimitHintReplaces": {
+    "message": "$CONSEQUENCE$ Choosing a size replaces the current limit on this site.",
+    "description": "Hint under the preset buttons when the site already has a limit. The consequence sentence is dashboardConsequenceHard or dashboardConsequenceProgressive; it is a placeholder rather than a concatenation so the two sentences can be ordered as the language needs.",
     "placeholders": {
-      "site": { "content": "$1", "example": "youtube.com" },
-      "size": { "content": "$2", "example": "200 MB" },
-      "window": { "content": "$3", "example": "a day" }
+      "consequence": {
+        "content": "$1",
+        "example": "A hard stop refuses every subresource the moment the allowance runs out. The page's own HTML still loads, so the site can say why it looks broken."
+      }
     }
   },
-  "dashboardErrorGeneric": {
-    "message": "That did not work.",
-    "description": "Fallback shown and announced when a limit action fails and the worker gave no message of its own."
-  },
-
-  "dashboardSaverReserved": {
-    "message": "Data Saver acts on requests belonging to a page, so it does not reach these.",
-    "description": "Shown in place of the Data Saver switch for the reserved ledger buckets, which have no page."
-  },
-  "dashboardSaverUnreadable": {
-    "message": "Data Saver settings could not be read.",
-    "description": "Shown in place of the Data Saver switch when the settings request to the worker failed."
-  },
-  "dashboardSaverOffEverywhere": {
-    "message": "Data Saver is off everywhere. It rewrites image requests to known CDNs so they return a smaller variant, refuses analytics beacons, and defers offscreen images and video. It applies to every site except the ones you exclude, and the switch that turns it on turns it back off.",
-    "description": "Shown in the detail panel when Data Saver is disabled globally. It names the whole of what the feature does and the whole of how to undo it, rather than selling it."
-  },
-  "dashboardSaverOpenSettings": {
-    "message": "Open Data Saver settings",
-    "description": "Link from the detail panel to the Data Saver section of the settings page."
-  },
-  "dashboardSaverOffForSite": {
-    "message": "Data Saver is off for $SITE$",
-    "description": "Label of the per-site Data Saver switch when the site is excluded.",
+  "dashboardLimitMeterFigure": {
+    "message": "$USED$ of $ALLOWANCE$",
+    "description": "Figure under the limit's progress meter: bytes used against the allowance for the window.",
     "placeholders": {
-      "site": { "content": "$1", "example": "youtube.com" }
+      "used": {
+        "content": "$1",
+        "example": "820 MB"
+      },
+      "allowance": {
+        "content": "$2",
+        "example": "2 GB"
+      }
     }
   },
-  "dashboardSaverOnForSite": {
-    "message": "Data Saver is on for $SITE$",
-    "description": "Label of the per-site Data Saver switch when the site is not excluded.",
+  "dashboardLimitPausedHint": {
+    "message": "Nothing is being refused while it is paused. Without the pause: $TIER$",
+    "description": "Hint under a paused limit that has no known resume time. The tier text describes what would be refused and comes from the shared tier descriptions.",
     "placeholders": {
-      "site": { "content": "$1", "example": "youtube.com" }
+      "tier": {
+        "content": "$1",
+        "example": "Video, audio, images and web fonts are refused."
+      }
+    }
+  },
+  "dashboardLimitPausedHintResumes": {
+    "message": "Nothing is being refused while it is paused; it resumes $WHEN$. Without the pause: $TIER$",
+    "description": "Hint under a paused limit that has a resume time. A whole separate message rather than an optional clause spliced into dashboardLimitPausedHint, because a mid-sentence insertion cannot be reordered by a translator.",
+    "placeholders": {
+      "when": {
+        "content": "$1",
+        "example": "in 40 minutes"
+      },
+      "tier": {
+        "content": "$2",
+        "example": "Video, audio, images and web fonts are refused."
+      }
+    }
+  },
+  "dashboardLimitPeriodDay": {
+    "message": "Day",
+    "description": "Option in the limit window picker: the allowance covers one day. Kept short to fit a segmented control."
+  },
+  "dashboardLimitPeriodMonth": {
+    "message": "Month",
+    "description": "Option in the limit window picker: the allowance covers one month. Kept short to fit a segmented control."
+  },
+  "dashboardLimitPeriodSession": {
+    "message": "Session",
+    "description": "Option in the limit window picker: the allowance covers this browser session. Kept short to fit a segmented control; the longer wording is the button's tooltip."
+  },
+  "dashboardLimitPeriodWeek": {
+    "message": "Week",
+    "description": "Option in the limit window picker: the allowance covers one week. Kept short to fit a segmented control."
+  },
+  "dashboardLimitResetsAt": {
+    "message": "resets $WHEN$",
+    "description": "Reset clause for a limit whose window rolls over at a known time. Substituted into dashboardLimitStatusFigure. Lower case, mid-sentence.",
+    "placeholders": {
+      "when": {
+        "content": "$1",
+        "example": "in 9 hours"
+      }
+    }
+  },
+  "dashboardLimitResetsNever": {
+    "message": "runs until this browser session ends",
+    "description": "Reset clause for a session limit, which has no rollover time. Substituted into dashboardLimitStatusFigure. Lower case, mid-sentence."
+  },
+  "dashboardLimitShapeHard": {
+    "message": "Hard stop",
+    "description": "Option for what a limit does once the allowance is spent: refuse every subresource at once. Kept short to fit a segmented control."
+  },
+  "dashboardLimitShapeProgressive": {
+    "message": "Shed weight",
+    "description": "Option for what a limit does once the allowance is spent: drop heavy resource types in stages rather than refuse everything. Kept short to fit a segmented control."
+  },
+  "dashboardLimitStatusFigure": {
+    "message": "$SHARE$ of $WINDOW$ · $RESET$",
+    "description": "Line beside the limit's state chip: how much of the allowance is spent and when the window rolls over. The window comes from dashboardLimitWindowSession/Day/Week/Month and the reset clause from dashboardLimitResetsAt or dashboardLimitResetsNever.",
+    "placeholders": {
+      "share": {
+        "content": "$1",
+        "example": "42%"
+      },
+      "window": {
+        "content": "$2",
+        "example": "today's limit"
+      },
+      "reset": {
+        "content": "$3",
+        "example": "resets in 9 hours"
+      }
+    }
+  },
+  "dashboardLimitStatusNearlyFull": {
+    "message": "Nearly full",
+    "description": "State chip on a site's limit at 85% or more of the allowance."
+  },
+  "dashboardLimitStatusOver": {
+    "message": "Over limit",
+    "description": "State chip on a site's limit when more than the allowance has been used."
+  },
+  "dashboardLimitStatusPaused": {
+    "message": "Paused",
+    "description": "State chip on a site's limit while enforcement is snoozed."
+  },
+  "dashboardLimitStatusWithin": {
+    "message": "Within limit",
+    "description": "State chip on a site's limit below 85% of the allowance."
+  },
+  "dashboardLimitWindowDay": {
+    "message": "today's limit",
+    "description": "Names the window a share is a share of, substituted into dashboardLimitStatusFigure, e.g. \"42% of today's limit\". Lower case, mid-sentence."
+  },
+  "dashboardLimitWindowMonth": {
+    "message": "this month's limit",
+    "description": "Names the window a share is a share of, substituted into dashboardLimitStatusFigure. Lower case, mid-sentence."
+  },
+  "dashboardLimitWindowSession": {
+    "message": "this session's limit",
+    "description": "Names the window a share is a share of, substituted into dashboardLimitStatusFigure, e.g. \"42% of this session's limit\". Lower case, mid-sentence."
+  },
+  "dashboardLimitWindowWeek": {
+    "message": "this week's limit",
+    "description": "Names the window a share is a share of, substituted into dashboardLimitStatusFigure. Lower case, mid-sentence."
+  },
+  "dashboardLoading": {
+    "message": "Loading…",
+    "description": "Placeholder under the page heading, replaced by the period description as soon as figures arrive."
+  },
+  "dashboardManageSaverLink": {
+    "message": "Manage Data Saver",
+    "description": "Link from the Data Saver results panel to the Data Saver section of the settings page."
+  },
+  "dashboardMeasuredPill": {
+    "message": "$PERCENT$ measured",
+    "description": "Small badge on the \"Data used\" card. The share of the total that was measured from real response sizes rather than estimated. Not a claim of overall accuracy — see dashboardMeasuredPillTitle.",
+    "placeholders": {
+      "percent": {
+        "content": "$1",
+        "example": "97%"
+      }
+    }
+  },
+  "dashboardMeasuredPillTitle": {
+    "message": "Response bodies measured. Header overhead is estimated and halved, WebSocket frames are invisible to an extension, and a cancelled body counts as zero — see How Byte Budget measures usage.",
+    "description": "Tooltip on the measured badge. It deliberately lists what the measured percentage does NOT cover, so the badge cannot be read as \"the total is exact\". The closing phrase names the disclosure section on the same page (dashboardMethodSummary); translate it the same way there."
+  },
+  "dashboardMethodBodyOne": {
+    "message": "Totals use the best information available from Chrome and each site. If an exact size is unavailable, Byte Budget makes a clearly labelled estimate.",
+    "description": "First paragraph of the measurement disclosure."
+  },
+  "dashboardMethodBodyThree": {
+    "message": "Every figure here covers this Chrome profile. Another profile, another browser, apps outside Chrome, system updates and other devices on your connection are invisible to an extension — there is no API that would show them. A carrier's figure can be several times larger, and that difference is not an error in this one.",
+    "description": "Third paragraph of the measurement disclosure, on why the extension's total differs from a carrier's bill."
+  },
+  "dashboardMethodBodyTwo": {
+    "message": "The measured percentage covers response bodies and nothing else. Header overhead is counted from the names and values, then halved, because HTTP/2 compresses headers by an amount Chrome does not report. WebSocket frames are invisible to an extension. A cancelled response counts as zero. So 100% measured means every body was measured, not that the total is exact.",
+    "description": "Second paragraph of the measurement disclosure. It is the product's statement of what the measured percentage does and does not cover; the final sentence is the point of the paragraph and must not be softened."
+  },
+  "dashboardMethodSummary": {
+    "message": "How Byte Budget measures usage",
+    "description": "Summary line of the collapsed disclosure explaining the measurement method. Referred to by name at the end of dashboardMeasuredPillTitle; keep the two the same."
+  },
+  "dashboardNavDashboard": {
+    "message": "Dashboard",
+    "description": "Navigation link to this page."
+  },
+  "dashboardNavLabel": {
+    "message": "Main navigation",
+    "description": "Accessible name for the two-link nav that switches between Dashboard and Settings."
+  },
+  "dashboardNavSettings": {
+    "message": "Settings",
+    "description": "Navigation link to the settings page."
+  },
+  "dashboardNoLimitHint": {
+    "message": "No limit on this site. A limit refuses requests before they are sent, so the bytes are never spent.",
+    "description": "Shown in the detail panel when the site has no limit, naming what a limit actually does."
+  },
+  "dashboardOpenSiteDetails": {
+    "message": "Open details for $SITE$",
+    "description": "Tooltip on a site row, saying that clicking it opens the detail panel.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "youtube.com"
+      }
+    }
+  },
+  "dashboardOriginalSizesOne": {
+    "message": "$COUNT$ original size on file",
+    "description": "Count of un-rewritten resource sizes recorded, which is what makes the measured saving a subtraction rather than a guess. Singular.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "dashboardOriginalSizesOther": {
+    "message": "$COUNT$ original sizes on file",
+    "description": "Count of un-rewritten resource sizes recorded. Plural; paired with dashboardOriginalSizesOne.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "214"
+      }
+    }
+  },
+  "dashboardOverviewLabel": {
+    "message": "Usage overview",
+    "description": "Accessible name for the region holding the four stat cards at the top of the page."
+  },
+  "dashboardPageLoadCountOne": {
+    "message": "$COUNT$ page load",
+    "description": "Number of recorded page loads for a site, singular.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "dashboardPageLoadCountOther": {
+    "message": "$COUNT$ page loads",
+    "description": "Number of recorded page loads for a site, plural. Paired with dashboardPageLoadCountOne.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "42"
+      }
+    }
+  },
+  "dashboardPageTitle": {
+    "message": "Byte Budget — data usage",
+    "description": "Browser tab title for the dashboard page. \"Byte Budget\" is the product name and is not translated."
+  },
+  "dashboardPauseOneHour": {
+    "message": "Pause 1 hour",
+    "description": "Button that suspends a limit's enforcement for one hour."
+  },
+  "dashboardPeriodGroupLabel": {
+    "message": "Usage period",
+    "description": "Accessible name for the Session/Today/7 days/30 days picker in the page header."
+  },
+  "dashboardPlanAlignCreate": {
+    "message": "Limit everything to $PLAN$ a month",
+    "description": "Button that creates an all-sites limit matching the plan size.",
+    "placeholders": {
+      "plan": {
+        "content": "$1",
+        "example": "15 GB"
+      }
+    }
+  },
+  "dashboardPlanAlignSet": {
+    "message": "Set it to $PLAN$ a month",
+    "description": "Button that changes the existing all-sites limit to match the plan size.",
+    "placeholders": {
+      "plan": {
+        "content": "$1",
+        "example": "15 GB"
+      }
+    }
+  },
+  "dashboardPlanEnforced": {
+    "message": "This plan is enforced: alerts at 75%, 90% and 100%, and requests refused past 100%.",
+    "description": "Hint in the Plan and cycle panel when a limit covering all sites matches the plan size. It no longer names the all-sites limit — the reader does not have to know the mechanism to understand that the plan now does something."
+  },
+  "dashboardPlanFigure": {
+    "message": "$USED$ of $PLAN$",
+    "description": "Headline figure of the Plan and cycle panel: bytes used in this cycle against the plan size.",
+    "placeholders": {
+      "used": {
+        "content": "$1",
+        "example": "4.2 GB"
+      },
+      "plan": {
+        "content": "$2",
+        "example": "15 GB"
+      }
+    }
+  },
+  "dashboardPlanMeterNote": {
+    "message": "$SHARE$ of the plan · resets $WHEN$, on $DAY$",
+    "description": "Note under the plan's progress meter: the share spent and when the cycle rolls over.",
+    "placeholders": {
+      "share": {
+        "content": "$1",
+        "example": "28%"
+      },
+      "when": {
+        "content": "$2",
+        "example": "in 19 days"
+      },
+      "day": {
+        "content": "$3",
+        "example": "17 Aug"
+      }
+    }
+  },
+  "dashboardPlanMismatch": {
+    "message": "The limit over Everything is set to $LIMIT$, and your plan is $PLAN$. Alerts and enforcement follow the limit, not the plan.",
+    "description": "Hint in the Plan and cycle panel when an all-sites limit exists but is a different size from the plan. \"Everything\" is the displayed name of the all-sites limit.",
+    "placeholders": {
+      "limit": {
+        "content": "$1",
+        "example": "10 GB"
+      },
+      "plan": {
+        "content": "$2",
+        "example": "15 GB"
+      }
+    }
+  },
+  "dashboardPlanNoPlanHint": {
+    "message": "Set a plan size and this becomes how much of the cycle is spent, what the rest allows per day, and where the cycle ends at the current rate.",
+    "description": "Hint in the Plan and cycle panel when no plan size is set. It says what the panel will say once it can, rather than rendering the plan as zero."
+  },
+  "dashboardPlanNote": {
+    "message": "Day $DAY$ of $TOTAL$ · began $FROM$",
+    "description": "Note beside the Plan and cycle heading: how far into the billing cycle today is.",
+    "placeholders": {
+      "day": {
+        "content": "$1",
+        "example": "12"
+      },
+      "total": {
+        "content": "$2",
+        "example": "31"
+      },
+      "from": {
+        "content": "$3",
+        "example": "17 Jul"
+      }
+    }
+  },
+  "dashboardPlanRemaining": {
+    "message": "$LEFT$ left. Spread evenly over the $DAYS$ remaining, that is $PERDAY$ a day.",
+    "description": "Hint in the Plan and cycle panel. Division, not a forecast: it says what an even spread would allow, which is a fact about the plan rather than a claim about the days ahead.",
+    "placeholders": {
+      "left": {
+        "content": "$1",
+        "example": "10.8 GB"
+      },
+      "days": {
+        "content": "$2",
+        "example": "19 days"
+      },
+      "perday": {
+        "content": "$3",
+        "example": "568 MB"
+      }
+    }
+  },
+  "dashboardPlanSetLink": {
+    "message": "Set your plan in Settings",
+    "description": "Link from the Plan and cycle panel to the settings page."
+  },
+  "dashboardPlanSpent": {
+    "message": "The plan is spent. Everything from here is over it.",
+    "description": "Hint in the Plan and cycle panel when the whole plan has been used."
+  },
+  "dashboardPlanTitle": {
+    "message": "Plan and cycle",
+    "description": "Heading of the panel showing the data plan and where the billing cycle stands."
+  },
+  "dashboardPlanUnenforced": {
+    "message": "Nothing is enforcing this plan yet. Turn it into a limit and you get alerts at 75%, 90% and 100%, and requests refused past 100%.",
+    "description": "Hint in the Plan and cycle panel when a plan size is set but no all-sites limit exists, so the plan is a number that refuses nothing. \"Turn it into a limit\" points at the button directly below it, which is why the all-sites limit is no longer named here."
+  },
+  "dashboardPlanUsedSince": {
+    "message": "$USED$ used since $FROM$",
+    "description": "Headline figure of the Plan and cycle panel when no plan size has been set, so there is nothing to show a share against.",
+    "placeholders": {
+      "used": {
+        "content": "$1",
+        "example": "4.2 GB"
+      },
+      "from": {
+        "content": "$2",
+        "example": "17 Jul"
+      }
+    }
+  },
+  "dashboardPlusLockCompare": {
+    "message": "The per-site comparison is part of Plus. The two figures above it are not, and never will be: what was measured and what was modelled always stay apart and always stay visible.",
+    "description": "Lock notice in place of the per-site with/without table under Data Saver results. States the rule that the measured-versus-modelled split is never behind the paywall."
+  },
+  "dashboardPlusLockHosts": {
+    "message": "Which third-party hosts a site's bytes came from is part of Plus. They are still being recorded — this is the view that is locked, not the data.",
+    "description": "Lock notice in place of the third-party host table in the site drill-down. The second sentence matters: per-host rows are still written on the free tier, so nothing is lost by waiting."
+  },
+  "dashboardPresetTitle": {
+    "message": "Limit $SITE$ to $SIZE$ $WINDOW$ — $SHAPE$",
+    "description": "Tooltip on each round-figure preset button, spelling out the limit the button would create.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "youtube.com"
+      },
+      "size": {
+        "content": "$2",
+        "example": "200 MB"
+      },
+      "window": {
+        "content": "$3",
+        "example": "a day"
+      },
+      "shape": {
+        "content": "$4",
+        "example": "shed weight"
+      }
+    }
+  },
+  "dashboardPreventedHintCache": {
+    "message": "Cache also avoided ~$BYTES$",
+    "description": "Hint under the \"Data prevented\" card when nothing was prevented but the browser cache avoided some traffic. The leading tilde marks the figure as approximate; keep it or use the local equivalent.",
+    "placeholders": {
+      "bytes": {
+        "content": "$1",
+        "example": "310 MB"
+      }
+    }
+  },
+  "dashboardPreventedHintNone": {
+    "message": "Turn on Data Saver or add a limit",
+    "description": "Hint under the \"Data prevented\" card when nothing has been prevented and nothing is set up to prevent anything. \"Data Saver\" is a feature name used throughout the product."
+  },
+  "dashboardPreventedHintSplit": {
+    "message": "$MEASURED$ of it measured, the rest modelled",
+    "description": "Hint under the \"Data prevented\" card. The card's own figure is a sum of a measured subtraction and an estimate, and this says how much of it is which. The distinction must survive translation: \"measured\" is arithmetic on sizes on file, \"modelled\" is a guess.",
+    "placeholders": {
+      "measured": {
+        "content": "$1",
+        "example": "620 MB"
+      }
+    }
+  },
+  "dashboardPreventedLabel": {
+    "message": "prevented, partly estimated",
+    "description": "Names the second band drawn inside each bar of the daily chart, in the key, in the bar tooltips and in the chart's screen-reader summary. Not \"saved\": those bytes were never transferred, so they are not part of the bar they sit inside. \"Partly estimated\" is not optional — the figure is a measured subtraction plus a size model's guess. Lower case, used mid-phrase."
+  },
+  "dashboardProjectedNoPlan": {
+    "message": "No plan",
+    "description": "Value of the \"Projected\" card when no plan size has been set, so there is nothing to project against."
+  },
+  "dashboardProjectedNoPlanHint": {
+    "message": "Nothing to project against yet",
+    "description": "Hint under the \"Projected\" card when no plan size has been set."
+  },
+  "dashboardProjectedNotYet": {
+    "message": "Not yet",
+    "description": "Value of the \"Projected\" card when a plan exists but no day of the cycle has finished, so no rate can be computed."
+  },
+  "dashboardProjectedNotYetHint": {
+    "message": "No day of this cycle has finished",
+    "description": "Hint under the \"Projected\" card when the cycle has only just begun."
+  },
+  "dashboardProjectedOverPlan": {
+    "message": "$OVER$ over your $PLAN$ plan",
+    "description": "Hint under the \"Projected\" card when the projection lands above the plan size.",
+    "placeholders": {
+      "over": {
+        "content": "$1",
+        "example": "2.1 GB"
+      },
+      "plan": {
+        "content": "$2",
+        "example": "15 GB"
+      }
+    }
+  },
+  "dashboardProjectedSetPlanLink": {
+    "message": "Set your plan size and reset day",
+    "description": "Link on the \"Projected\" card that opens the settings page."
+  },
+  "dashboardProjectedTooEarly": {
+    "message": "Too early",
+    "description": "Value of the \"Projected\" card when too few days have finished for the projection to be stated. No figure is printed at all in this state."
+  },
+  "dashboardProjectedTooEarlyHint": {
+    "message": "Too few finished days to state a figure",
+    "description": "Hint under the \"Projected\" card when the projection is not confident enough to print."
+  },
+  "dashboardProjectedUnderPlan": {
+    "message": "$UNDER$ under your $PLAN$ plan",
+    "description": "Hint under the \"Projected\" card when the projection lands below the plan size.",
+    "placeholders": {
+      "under": {
+        "content": "$1",
+        "example": "3.4 GB"
+      },
+      "plan": {
+        "content": "$2",
+        "example": "15 GB"
+      }
+    }
+  },
+  "dashboardProjectionBasis": {
+    "message": "Projected — $BASIS$",
+    "description": "Line under the stat cards saying what rate the projection assumed and over what window. The basis text comes from the worker and is already a sentence fragment describing the rate.",
+    "placeholders": {
+      "basis": {
+        "content": "$1",
+        "example": "1.2 GB a day over the 6 finished days of this cycle"
+      }
+    }
+  },
+  "dashboardProjectionRunsOutOn": {
+    "message": "At that rate it runs out on $DAY$.",
+    "description": "Second sentence of the projection basis line when the plan is expected to run out on a future day. \"At that rate\" marks it as modelled, unlike dashboardProjectionSpentOn.",
+    "placeholders": {
+      "day": {
+        "content": "$1",
+        "example": "24 Aug"
+      }
+    }
+  },
+  "dashboardProjectionSpentOn": {
+    "message": "The plan was already spent, on $DAY$.",
+    "description": "Second sentence of the projection basis line when the plan ran out on a day that has already passed. This date was found by reading recorded days, so it is measured rather than modelled.",
+    "placeholders": {
+      "day": {
+        "content": "$1",
+        "example": "3 Aug"
+      }
+    }
+  },
+  "dashboardRangeAnnouncement": {
+    "message": "Daily usage and Data Saver results now cover the last $RANGE$.",
+    "description": "Announced to a screen reader after the range picker changes, because the second panel it re-scopes is several hundred pixels below the control.",
+    "placeholders": {
+      "range": {
+        "content": "$1",
+        "example": "30 days"
+      }
+    }
+  },
+  "dashboardRangeGroupLabel": {
+    "message": "Range for the daily chart and the Data Saver results",
+    "description": "Accessible name for the 2 weeks/30 days/3 months picker. It names both panels because the control also re-scopes the Data Saver results far below the fold."
+  },
+  "dashboardRangeOneWeek": {
+    "message": "7 days",
+    "description": "Option in the range picker, and the range name substituted into dashboardTrendCaption and dashboardRangeAnnouncement. The only range a free install can choose."
+  },
+  "dashboardRangeThirtyDays": {
+    "message": "30 days",
+    "description": "Option in the range picker, and the range name substituted into dashboardTrendCaption and dashboardRangeAnnouncement."
+  },
+  "dashboardRangeThreeMonths": {
+    "message": "3 months",
+    "description": "Option in the range picker, and the range name substituted into dashboardTrendCaption and dashboardRangeAnnouncement."
+  },
+  "dashboardRangeTwoWeeks": {
+    "message": "2 weeks",
+    "description": "Option in the range picker, and the range name substituted into dashboardTrendCaption and dashboardRangeAnnouncement."
+  },
+  "dashboardRemoveLimit": {
+    "message": "Remove limit",
+    "description": "Button that deletes the limit on this site."
+  },
+  "dashboardRequestsRefusedOne": {
+    "message": "$COUNT$ request refused",
+    "description": "Count of requests Data Saver refused in the window, singular.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "dashboardRequestsRefusedOther": {
+    "message": "$COUNT$ requests refused",
+    "description": "Count of requests Data Saver refused in the window, plural. Paired with dashboardRequestsRefusedOne.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1,204"
+      }
+    }
+  },
+  "dashboardRequestsSmallerOne": {
+    "message": "$COUNT$ request made smaller",
+    "description": "Count of requests Data Saver rewrote to a smaller variant, singular.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "dashboardRequestsSmallerOther": {
+    "message": "$COUNT$ requests made smaller",
+    "description": "Count of requests Data Saver rewrote to a smaller variant, plural. Paired with dashboardRequestsSmallerOne.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "318"
+      }
+    }
+  },
+  "dashboardReservedNoLimit": {
+    "message": "These requests have no site of their own for a rule to name, so they cannot be limited individually. A limit over Everything covers them along with the rest.",
+    "description": "Shown in place of the limit controls for the reserved ledger buckets, which are not origins. \"Everything\" is the displayed name of the limit that covers all sites; translate it the same way it is translated there."
+  },
+  "dashboardReservedRowTitle": {
+    "message": "Requests that did not belong to a tab: browser services, service workers and other extensions.",
+    "description": "Tooltip on the site row for the reserved ledger buckets, which are not real sites."
+  },
+  "dashboardResumeNow": {
+    "message": "Resume now",
+    "description": "Button that ends a paused limit immediately."
+  },
+  "dashboardRowCountOne": {
+    "message": "$COUNT$ row",
+    "description": "Row count in the storage table, singular.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "dashboardRowCountOther": {
+    "message": "$COUNT$ rows",
+    "description": "Row count in the storage table, plural. Paired with dashboardRowCountOne.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "8,412"
+      }
+    }
+  },
+  "dashboardSavedPerLoad": {
+    "message": "$VALUE$ ± $SPREAD$",
+    "description": "Saved-per-load cell in the comparison table. The spread is never dropped: it is what stops the difference being read as precise.",
+    "placeholders": {
+      "value": {
+        "content": "$1",
+        "example": "1.4 MB"
+      },
+      "spread": {
+        "content": "$2",
+        "example": "310 kB"
+      }
+    }
+  },
+  "dashboardSavedPerLoadHeavier": {
+    "message": "$VALUE$ ± $SPREAD$ heavier",
+    "description": "Saved-per-load cell when optimized loads came out heavier than the control ones. A negative result is reported as it stands rather than hidden.",
+    "placeholders": {
+      "value": {
+        "content": "$1",
+        "example": "220 kB"
+      },
+      "spread": {
+        "content": "$2",
+        "example": "90 kB"
+      }
     }
   },
   "dashboardSaverExcludedHint": {
@@ -651,148 +1037,49 @@
     "message": "Image requests to known CDNs are asked for a smaller variant, analytics beacons are refused, and offscreen images and video wait until they are reached.",
     "description": "Hint under the per-site Data Saver switch when the site is optimized, saying exactly what is being done to it."
   },
-  "dashboardAnnounceSaverOn": {
-    "message": "Data Saver on for $SITE$.",
-    "description": "Announced to a screen reader after Data Saver is switched on for a site.",
+  "dashboardSaverOffEverywhere": {
+    "message": "Data Saver is off everywhere. It rewrites image requests to known CDNs so they return a smaller variant, refuses analytics beacons, and defers offscreen images and video. It applies to every site except the ones you exclude, and the switch that turns it on turns it back off.",
+    "description": "Shown in the detail panel when Data Saver is disabled globally. It names the whole of what the feature does and the whole of how to undo it, rather than selling it."
+  },
+  "dashboardSaverOffForSite": {
+    "message": "Data Saver is off for $SITE$",
+    "description": "Label of the per-site Data Saver switch when the site is excluded.",
     "placeholders": {
-      "site": { "content": "$1", "example": "youtube.com" }
+      "site": {
+        "content": "$1",
+        "example": "youtube.com"
+      }
     }
   },
-  "dashboardAnnounceSaverOff": {
-    "message": "Data Saver off for $SITE$.",
-    "description": "Announced to a screen reader after Data Saver is switched off for a site.",
+  "dashboardSaverOnForSite": {
+    "message": "Data Saver is on for $SITE$",
+    "description": "Label of the per-site Data Saver switch when the site is not excluded.",
     "placeholders": {
-      "site": { "content": "$1", "example": "youtube.com" }
+      "site": {
+        "content": "$1",
+        "example": "youtube.com"
+      }
     }
   },
-  "dashboardErrorSetSiteOptimize": {
-    "message": "Could not change Data Saver for that site.",
-    "description": "Announced when the per-site Data Saver request to the worker fails."
+  "dashboardSaverOpenSettings": {
+    "message": "Open Data Saver settings",
+    "description": "Link from the detail panel to the Data Saver section of the settings page."
   },
-
-  "dashboardAdviceNoFeature": {
-    "message": "$SHARE$ of this site's bytes are $TYPE$. Nothing in Data Saver removes $TYPE$, so a limit is the only lever here.",
-    "description": "Recommendation line for a site whose dominant resource type no Data Saver feature touches. The type name is the same word both times.",
-    "placeholders": {
-      "share": { "content": "$1", "example": "71%" },
-      "type": { "content": "$2", "example": "scripts" }
-    }
+  "dashboardSaverReserved": {
+    "message": "Data Saver acts on requests belonging to a page, so it does not reach these.",
+    "description": "Shown in place of the Data Saver switch for the reserved ledger buckets, which have no page."
   },
-  "dashboardAdviceFeatureOn": {
-    "message": "$SHARE$ of this site's bytes are $TYPE$. The Data Saver setting aimed at that is \"$FEATURE$\", which is on by default.",
-    "description": "Recommendation line naming the Data Saver feature aimed at this site's dominant resource type, when that feature ships switched on. Separate from dashboardAdviceFeatureOff so \"on\" is never a substituted fragment. The quotation marks around the feature name may be replaced with the local ones.",
-    "placeholders": {
-      "share": { "content": "$1", "example": "71%" },
-      "type": { "content": "$2", "example": "video & audio" },
-      "feature": { "content": "$3", "example": "Click to load video" }
-    }
+  "dashboardSaverUnreadable": {
+    "message": "Data Saver settings could not be read.",
+    "description": "Shown in place of the Data Saver switch when the settings request to the worker failed."
   },
-  "dashboardAdviceFeatureOff": {
-    "message": "$SHARE$ of this site's bytes are $TYPE$. The Data Saver setting aimed at that is \"$FEATURE$\", which is off by default.",
-    "description": "Recommendation line naming the Data Saver feature aimed at this site's dominant resource type, when that feature ships switched off. Separate from dashboardAdviceFeatureOn so \"off\" is never a substituted fragment.",
-    "placeholders": {
-      "share": { "content": "$1", "example": "71%" },
-      "type": { "content": "$2", "example": "video & audio" },
-      "feature": { "content": "$3", "example": "Click to load video" }
-    }
+  "dashboardSavingsColumnLoads": {
+    "message": "Loads",
+    "description": "Column header in the comparison table: how many page loads each side is based on."
   },
-
-  "dashboardSavingsTitle": {
-    "message": "Data Saver results",
-    "description": "Heading of the panel reporting what Data Saver prevented."
-  },
-  "dashboardSavingsRangeButton": {
-    "message": "Change range",
-    "description": "Button in the Data Saver results panel that sends focus up to the range picker, which scopes both panels."
-  },
-  "dashboardManageSaverLink": {
-    "message": "Manage Data Saver",
-    "description": "Link from the Data Saver results panel to the Data Saver section of the settings page."
-  },
-  "dashboardSavingsMeasuredLabel": {
-    "message": "Measured",
-    "description": "Label of the left savings tile. This figure is arithmetic: the original size was on file and the smaller version's cost is subtracted from it. It must not be phrased the same way as dashboardSavingsEstimatedLabel — the whole point of the pair is that one is a subtraction and the other is a guess."
-  },
-  "dashboardSavingsMeasuredHint": {
-    "message": "Original sizes on file, minus what the smaller version cost",
-    "description": "Hint under the Measured savings tile, stating the arithmetic. Its figure carries no tilde, unlike the Estimated tile, because nothing about it is approximate."
-  },
-  "dashboardSavingsEstimatedLabel": {
-    "message": "Estimated",
-    "description": "Label of the right savings tile. This figure is the size model's guess for requests refused before any size was known. Its value is printed with a leading tilde meaning \"approximately\". It must not be phrased the same way as dashboardSavingsMeasuredLabel: merging the two into one figure is the one thing this panel exists to prevent."
-  },
-  "dashboardSavingsEstimatedHint": {
-    "message": "The size model's guess for requests refused before they had a size",
-    "description": "Hint under the Estimated savings tile. \"Guess\" is deliberate and should stay a word that admits uncertainty; the tile's tilde says the same thing in punctuation."
-  },
-  "dashboardRequestsRefusedOne": {
-    "message": "$COUNT$ request refused",
-    "description": "Count of requests Data Saver refused in the window, singular.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "1" }
-    }
-  },
-  "dashboardRequestsRefusedOther": {
-    "message": "$COUNT$ requests refused",
-    "description": "Count of requests Data Saver refused in the window, plural. Paired with dashboardRequestsRefusedOne.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "1,204" }
-    }
-  },
-  "dashboardRequestsSmallerOne": {
-    "message": "$COUNT$ request made smaller",
-    "description": "Count of requests Data Saver rewrote to a smaller variant, singular.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "1" }
-    }
-  },
-  "dashboardRequestsSmallerOther": {
-    "message": "$COUNT$ requests made smaller",
-    "description": "Count of requests Data Saver rewrote to a smaller variant, plural. Paired with dashboardRequestsSmallerOne.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "318" }
-    }
-  },
-  "dashboardOriginalSizesOne": {
-    "message": "$COUNT$ original size on file",
-    "description": "Count of un-rewritten resource sizes recorded, which is what makes the measured saving a subtraction rather than a guess. Singular.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "1" }
-    }
-  },
-  "dashboardOriginalSizesOther": {
-    "message": "$COUNT$ original sizes on file",
-    "description": "Count of un-rewritten resource sizes recorded. Plural; paired with dashboardOriginalSizesOne.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "214" }
-    }
-  },
-  "dashboardSavingsHintOff": {
-    "message": "Data Saver is off, so nothing was refused or rewritten in this window. The figures above cover whatever was recorded while it was on.",
-    "description": "Replaces the counts line when Data Saver is switched off, so the tiles above are not read as describing the present."
-  },
-  "dashboardSavingsCompareHeading": {
-    "message": "The same sites, with Data Saver and without",
-    "description": "Heading of the table comparing optimized page loads against the unoptimized control sample."
-  },
-  "dashboardSavingsCompareNoteOn": {
-    "message": "A $PERCENT$% sample of page loads is deliberately left unoptimized, so both columns are real page loads rather than a model. The ± is the 95% interval; a site whose interval crosses zero is left out, because a difference that could be zero is not a saving.",
-    "description": "Note above the comparison table when the control sample is running. It is the product's statement that this table is a measurement and not an estimate, and the interval rule is why a row can be missing.",
-    "placeholders": {
-      "percent": { "content": "$1", "example": "5" }
-    }
-  },
-  "dashboardSavingsCompareNoteOff": {
-    "message": "The unoptimized control sample is switched off, so no new comparisons are being collected. Anything below was recorded while it was on.",
-    "description": "Note above the comparison table when the control sample is switched off."
-  },
-  "dashboardSavingsEmptyOn": {
-    "message": "No site has enough loads on both sides yet. A comparison needs at least five optimized loads and one unoptimized one on the same site.",
-    "description": "Empty state of the comparison table while the control sample is running: nothing yet, and what would be enough."
-  },
-  "dashboardSavingsEmptyOff": {
-    "message": "No comparisons are on file, and none are being collected while the control sample is off.",
-    "description": "Empty state of the comparison table when the control sample is switched off."
+  "dashboardSavingsColumnSavedPerLoad": {
+    "message": "Saved per load",
+    "description": "Column header in the comparison table: the difference between the two means, with its interval."
   },
   "dashboardSavingsColumnSite": {
     "message": "Site",
@@ -806,228 +1093,185 @@
     "message": "Without",
     "description": "Column header in the comparison table: mean bytes of a page load in the unoptimized control sample."
   },
-  "dashboardSavingsColumnSavedPerLoad": {
-    "message": "Saved per load",
-    "description": "Column header in the comparison table: the difference between the two means, with its interval."
+  "dashboardSavingsCompareHeading": {
+    "message": "The same sites, with Data Saver and without",
+    "description": "Heading of the table comparing optimized page loads against the unoptimized control sample."
   },
-  "dashboardSavingsColumnLoads": {
-    "message": "Loads",
-    "description": "Column header in the comparison table: how many page loads each side is based on."
+  "dashboardSavingsCompareNoteOff": {
+    "message": "The unoptimized control sample is switched off, so no new comparisons are being collected. Anything below was recorded while it was on.",
+    "description": "Note above the comparison table when the control sample is switched off."
   },
-  "dashboardSavingsLoadsCellTitle": {
-    "message": "optimized loads / control loads",
-    "description": "Tooltip on the Loads cell, saying which side of the slash is which. Lower case, matching the cell it explains."
-  },
-  "dashboardSavedPerLoad": {
-    "message": "$VALUE$ ± $SPREAD$",
-    "description": "Saved-per-load cell in the comparison table. The spread is never dropped: it is what stops the difference being read as precise.",
+  "dashboardSavingsCompareNoteOn": {
+    "message": "Both columns are real page loads: a $PERCENT$% sample is deliberately left unoptimized. The ± is the 95% interval, and a site whose interval crosses zero is left out — a difference that could be zero is not a saving.",
+    "description": "Note above the comparison table when the control sample is running. It is the product's statement that this table is a measurement and not an estimate, and the interval rule is why a row can be missing.",
     "placeholders": {
-      "value": { "content": "$1", "example": "1.4 MB" },
-      "spread": { "content": "$2", "example": "310 kB" }
-    }
-  },
-  "dashboardSavedPerLoadHeavier": {
-    "message": "$VALUE$ ± $SPREAD$ heavier",
-    "description": "Saved-per-load cell when optimized loads came out heavier than the control ones. A negative result is reported as it stands rather than hidden.",
-    "placeholders": {
-      "value": { "content": "$1", "example": "220 kB" },
-      "spread": { "content": "$2", "example": "90 kB" }
+      "percent": {
+        "content": "$1",
+        "example": "5"
+      }
     }
   },
   "dashboardSavingsDetailsSummary": {
     "message": "Where these numbers come from",
     "description": "Summary line of the collapsed disclosure under the Data Saver results panel."
   },
+  "dashboardSavingsEmptyOff": {
+    "message": "No comparisons are on file, and none are being collected while the control sample is off.",
+    "description": "Empty state of the comparison table when the control sample is switched off."
+  },
+  "dashboardSavingsEmptyOn": {
+    "message": "No site has enough loads on both sides yet. A comparison needs at least five optimized loads and one unoptimized one on the same site.",
+    "description": "Empty state of the comparison table while the control sample is running: nothing yet, and what would be enough."
+  },
+  "dashboardSavingsEstimatedHint": {
+    "message": "The size model's guess for requests refused before they had a size",
+    "description": "Hint under the Estimated savings tile. \"Guess\" is deliberate and should stay a word that admits uncertainty; the tile's tilde says the same thing in punctuation."
+  },
+  "dashboardSavingsEstimatedLabel": {
+    "message": "Estimated",
+    "description": "Label of the right savings tile. This figure is the size model's guess for requests refused before any size was known. Its value is printed with a leading tilde meaning \"approximately\". It must not be phrased the same way as dashboardSavingsMeasuredLabel: merging the two into one figure is the one thing this panel exists to prevent."
+  },
   "dashboardSavingsExplainer": {
     "message": "Three different kinds of number, kept apart. A page-load comparison is the difference between two sets of real loads, from the control sample above. An observed original is arithmetic: the size of the un-rewritten variant, seen before, minus what the smaller one cost now. An estimate is the size model's guess at a request that was refused before it had a size, and it is the only one of the three that depends on this extension's own arithmetic about bytes that never arrived.",
     "description": "Body of the disclosure under the Data Saver results panel. It separates a measurement, an arithmetic subtraction and a model's guess, in that order of confidence. The three must stay distinguishable in translation — collapsing any two of them into the same wording is the failure this paragraph exists to prevent."
   },
-  "dashboardErrorReadSavings": {
-    "message": "Could not read the savings.",
-    "description": "Shown beside the Data Saver results heading when the request to the worker fails."
+  "dashboardSavingsHintOff": {
+    "message": "Data Saver is off, so nothing was refused or rewritten in this window. The figures above cover whatever was recorded while it was on.",
+    "description": "Replaces the counts line when Data Saver is switched off, so the tiles above are not read as describing the present."
   },
-
-  "dashboardPlanTitle": {
-    "message": "Plan and cycle",
-    "description": "Heading of the panel showing the data plan and where the billing cycle stands."
+  "dashboardSavingsLoadsCellTitle": {
+    "message": "optimized loads / control loads",
+    "description": "Tooltip on the Loads cell, saying which side of the slash is which. Lower case, matching the cell it explains."
   },
-  "dashboardPlanNote": {
-    "message": "Day $DAY$ of $TOTAL$ · began $FROM$",
-    "description": "Note beside the Plan and cycle heading: how far into the billing cycle today is.",
+  "dashboardSavingsMeasuredHint": {
+    "message": "Original sizes on file, minus what the smaller version cost",
+    "description": "Hint under the Measured savings tile, stating the arithmetic. Its figure carries no tilde, unlike the Estimated tile, because nothing about it is approximate."
+  },
+  "dashboardSavingsMeasuredLabel": {
+    "message": "Measured",
+    "description": "Label of the left savings tile. This figure is arithmetic: the original size was on file and the smaller version's cost is subtracted from it. It must not be phrased the same way as dashboardSavingsEstimatedLabel — the whole point of the pair is that one is a subtraction and the other is a guess."
+  },
+  "dashboardSavingsNeverRun": {
+    "message": "Data Saver has never run in this window, so there is nothing to report. Turn it on and this panel fills with what it refused, what it shrank, and how the same sites compared with it off.",
+    "description": "Stands in for the whole Data Saver results panel — both figures, the holdout note, the with/without table and the methodology disclosure — on an install where Data Saver has never been on. Shown only when the switch is off and every figure behind the panel is zero; the moment any of them moves, the full panel returns. Says what will appear rather than selling the feature: the panel's 'Manage Data Saver' link is the way in and stays visible either way."
+  },
+  "dashboardSavingsRangeButton": {
+    "message": "Change range",
+    "description": "Button in the Data Saver results panel that sends focus up to the range picker, which scopes both panels."
+  },
+  "dashboardSavingsTitle": {
+    "message": "Data Saver results",
+    "description": "Heading of the panel reporting what Data Saver prevented."
+  },
+  "dashboardShowAllSites": {
+    "message": "Show all $COUNT$ sites",
+    "description": "Button at the foot of the site list revealing the rows past the first 25. Only ever shown with a count above 25, so no singular form is needed.",
     "placeholders": {
-      "day": { "content": "$1", "example": "12" },
-      "total": { "content": "$2", "example": "31" },
-      "from": { "content": "$3", "example": "17 Jul" }
+      "count": {
+        "content": "$1",
+        "example": "37"
+      }
     }
   },
-  "dashboardPlanUsedSince": {
-    "message": "$USED$ used since $FROM$",
-    "description": "Headline figure of the Plan and cycle panel when no plan size has been set, so there is nothing to show a share against.",
+  "dashboardSiteCountOne": {
+    "message": "$COUNT$ site",
+    "description": "Count beside the site list, singular. Chrome's message format has no plural rules, so the singular and plural are separate whole messages.",
     "placeholders": {
-      "used": { "content": "$1", "example": "4.2 GB" },
-      "from": { "content": "$2", "example": "17 Jul" }
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
     }
   },
-  "dashboardPlanNoPlanHint": {
-    "message": "No plan set, so there is nothing to measure that against. Given a plan size, this becomes how much of the cycle is spent, how much a day the rest of it allows, and where the cycle ends at the current rate.",
-    "description": "Hint in the Plan and cycle panel when no plan size is set. It says what the panel will say once it can, rather than rendering the plan as zero."
-  },
-  "dashboardCycleNoteCalendar": {
-    "message": "The cycle above runs from the calendar month. Most carrier cycles do not reset on the 1st, and a figure anchored to the wrong day is never the figure on the bill.",
-    "description": "Hint in the Plan and cycle panel when the cycle is anchored to the calendar month."
-  },
-  "dashboardCycleNoteDay": {
-    "message": "The cycle above runs from the $DAY$ of the month. Most carrier cycles do not reset on the 1st, and a figure anchored to the wrong day is never the figure on the bill.",
-    "description": "Hint in the Plan and cycle panel when the cycle is anchored to a chosen day of the month. A whole separate message from dashboardCycleNoteCalendar so the anchor is never a fragment spliced mid-sentence.",
+  "dashboardSiteCountOther": {
+    "message": "$COUNT$ sites",
+    "description": "Count beside the site list, plural. Paired with dashboardSiteCountOne.",
     "placeholders": {
-      "day": { "content": "$1", "example": "17th" }
+      "count": {
+        "content": "$1",
+        "example": "37"
+      }
     }
   },
-  "dashboardPlanSetLink": {
-    "message": "Set your plan in Settings",
-    "description": "Link from the Plan and cycle panel to the settings page."
+  "dashboardSiteSearchLabel": {
+    "message": "Find a site",
+    "description": "Search box above the site list. Used as both the placeholder and the accessible name, which must stay identical, so it is one message."
   },
-  "dashboardPlanFigure": {
-    "message": "$USED$ of $PLAN$",
-    "description": "Headline figure of the Plan and cycle panel: bytes used in this cycle against the plan size.",
+  "dashboardSiteShareOfTotal": {
+    "message": "$PERCENT$ of total",
+    "description": "Second figure on a site row: this site's share of the period's total.",
     "placeholders": {
-      "used": { "content": "$1", "example": "4.2 GB" },
-      "plan": { "content": "$2", "example": "15 GB" }
+      "percent": {
+        "content": "$1",
+        "example": "31%"
+      }
     }
   },
-  "dashboardPlanMeterNote": {
-    "message": "$SHARE$ of the plan · resets $WHEN$, on $DAY$",
-    "description": "Note under the plan's progress meter: the share spent and when the cycle rolls over.",
+  "dashboardSiteShareOfTotalEstimated": {
+    "message": "$PERCENT$ of total · includes estimates",
+    "description": "Second figure on a site row when under three quarters of the site's bytes were measured. Separate whole message rather than a suffix appended to dashboardSiteShareOfTotal, so the qualifier can be placed wherever the language needs it.",
     "placeholders": {
-      "share": { "content": "$1", "example": "28%" },
-      "when": { "content": "$2", "example": "in 19 days" },
-      "day": { "content": "$3", "example": "17 Aug" }
+      "percent": {
+        "content": "$1",
+        "example": "31%"
+      }
     }
   },
-  "dashboardDayCountOne": {
-    "message": "$COUNT$ day",
-    "description": "Number of days left in the cycle, singular. Substituted into dashboardPlanRemaining.",
+  "dashboardSitesEmpty": {
+    "message": "No usage yet. Browse normally and sites will appear here.",
+    "description": "Empty state of the site list when nothing has been recorded for the chosen period."
+  },
+  "dashboardSitesFilteredCount": {
+    "message": "$SHOWN$ of $TOTAL$",
+    "description": "Count beside the site list while a search filter is active: how many sites match out of how many exist.",
     "placeholders": {
-      "count": { "content": "$1", "example": "1" }
+      "shown": {
+        "content": "$1",
+        "example": "4"
+      },
+      "total": {
+        "content": "$2",
+        "example": "37"
+      }
     }
   },
-  "dashboardDayCountOther": {
-    "message": "$COUNT$ days",
-    "description": "Number of days left in the cycle, plural. Substituted into dashboardPlanRemaining; paired with dashboardDayCountOne.",
+  "dashboardSitesTitle": {
+    "message": "Where your data went",
+    "description": "Heading of the panel listing sites by bytes used."
+  },
+  "dashboardStaleNote": {
+    "message": "Showing figures from $AGO$.",
+    "description": "Notice in the page header when the figures on screen are older than the refresh interval, so a stale number is never presented as live.",
     "placeholders": {
-      "count": { "content": "$1", "example": "19" }
+      "ago": {
+        "content": "$1",
+        "example": "2 minutes ago"
+      }
     }
   },
-  "dashboardPlanRemaining": {
-    "message": "$LEFT$ left. Spread evenly over the $DAYS$ remaining, that is $PERDAY$ a day.",
-    "description": "Hint in the Plan and cycle panel. Division, not a forecast: it says what an even spread would allow, which is a fact about the plan rather than a claim about the days ahead.",
-    "placeholders": {
-      "left": { "content": "$1", "example": "10.8 GB" },
-      "days": { "content": "$2", "example": "19 days" },
-      "perday": { "content": "$3", "example": "568 MB" }
-    }
+  "dashboardStatDataPrevented": {
+    "message": "Data prevented",
+    "description": "Label of the stat card showing bytes that were never transferred. \"Prevented\", not \"saved\": these bytes are not part of the total on the neighbouring card, so the two do not share a denominator."
   },
-  "dashboardPlanSpent": {
-    "message": "The plan is spent. Everything from here is over it.",
-    "description": "Hint in the Plan and cycle panel when the whole plan has been used."
+  "dashboardStatDataUsed": {
+    "message": "Data used",
+    "description": "Label of the stat card showing total bytes for the chosen period."
   },
-  "dashboardPlanEnforced": {
-    "message": "A limit over Everything matches this plan, so alerts fire at 75%, 90% and 100% of it and requests are refused past 100%.",
-    "description": "Hint in the Plan and cycle panel when a limit covering all sites matches the plan size. \"Everything\" is the displayed name of the all-sites limit; translate it the same way it is translated there."
+  "dashboardStatProjected": {
+    "message": "Projected",
+    "description": "Label of the stat card showing where the cycle is expected to end up. Always this word, whatever the card's value says, because the figure is modelled rather than measured."
   },
-  "dashboardPlanMismatch": {
-    "message": "The limit over Everything is set to $LIMIT$, and your plan is $PLAN$. Alerts and enforcement follow the limit, not the plan.",
-    "description": "Hint in the Plan and cycle panel when an all-sites limit exists but is a different size from the plan. \"Everything\" is the displayed name of the all-sites limit.",
-    "placeholders": {
-      "limit": { "content": "$1", "example": "10 GB" },
-      "plan": { "content": "$2", "example": "15 GB" }
-    }
-  },
-  "dashboardPlanUnenforced": {
-    "message": "Nothing is enforcing this plan. A limit over Everything is what turns it into alerts at 75%, 90% and 100%, and into refused requests past 100%.",
-    "description": "Hint in the Plan and cycle panel when a plan size is set but no all-sites limit exists, so the plan is a number that refuses nothing. \"Everything\" is the displayed name of the all-sites limit."
-  },
-  "dashboardPlanAlignSet": {
-    "message": "Set it to $PLAN$ a month",
-    "description": "Button that changes the existing all-sites limit to match the plan size.",
-    "placeholders": {
-      "plan": { "content": "$1", "example": "15 GB" }
-    }
-  },
-  "dashboardPlanAlignCreate": {
-    "message": "Limit everything to $PLAN$ a month",
-    "description": "Button that creates an all-sites limit matching the plan size.",
-    "placeholders": {
-      "plan": { "content": "$1", "example": "15 GB" }
-    }
-  },
-  "dashboardWindowMismatch": {
-    "message": "The two windows do not line up: the limit's allowance resets on $LIMITDAY$ and your cycle resets on $CYCLEDAY$. A monthly limit runs on the calendar month, so what it refuses against is the calendar month's total, not this cycle's.",
-    "description": "Hint in the Plan and cycle panel when the all-sites limit's window and the billing cycle roll over on different days, so the two dates on screen mean different things.",
-    "placeholders": {
-      "limitday": { "content": "$1", "example": "1 Sep" },
-      "cycleday": { "content": "$2", "example": "17 Aug" }
-    }
-  },
-  "dashboardAnnouncePlanAligned": {
-    "message": "Everything is now limited to $PLAN$ a month.",
-    "description": "Announced to a screen reader after an all-sites limit is created or changed to match the plan.",
-    "placeholders": {
-      "plan": { "content": "$1", "example": "15 GB" }
-    }
-  },
-  "dashboardErrorSetLimit": {
-    "message": "Could not set that limit.",
-    "description": "Shown and announced when creating the all-sites limit from the Plan and cycle panel fails."
-  },
-  "dashboardErrorReadCycle": {
-    "message": "Could not read the cycle.",
-    "description": "Shown beside the Plan and cycle heading when the request to the worker fails."
-  },
-
-  "dashboardStorageTitle": {
-    "message": "Stored on this device",
-    "description": "Heading of the panel listing what the extension has written to disk."
-  },
-  "dashboardStorageLink": {
-    "message": "Export or delete",
-    "description": "Link from the storage panel to the data section of the settings page."
-  },
-  "dashboardStorageFlushError": {
-    "message": "Some measurements were not written to disk. The last failure was $WHEN$: $MESSAGE$. Totals from around then are lower than the traffic they describe.",
-    "description": "Shown in the storage panel when a write to the database failed. This is the only surface that can admit a rejected write, so the last sentence — that the totals are understated — must survive translation.",
-    "placeholders": {
-      "when": { "content": "$1", "example": "14 minutes ago" },
-      "message": { "content": "$2", "example": "QuotaExceededError" }
-    }
-  },
-  "dashboardStorageDailyTotals": {
-    "message": "Daily totals",
-    "description": "Row label in the storage table: one row per day."
-  },
-  "dashboardStorageHourlyTotals": {
-    "message": "Hourly totals",
-    "description": "Row label in the storage table: one row per hour."
-  },
-  "dashboardStorageHostDetail": {
-    "message": "Per-host detail",
-    "description": "Row label in the storage table: per-hostname rows."
-  },
-  "dashboardStoragePageLoads": {
-    "message": "Page loads",
-    "description": "Row label in the storage table: one row per recorded page load."
-  },
-  "dashboardStorageSizeModel": {
-    "message": "Learned request sizes",
-    "description": "Row label in the storage table: the mean sizes the extension learned, used to estimate a request that arrived with no size."
+  "dashboardStatTopSite": {
+    "message": "Top site",
+    "description": "Label of the stat card showing the heaviest site of the period."
   },
   "dashboardStorageBaselines": {
     "message": "Original image sizes",
     "description": "Row label in the storage table: sizes of un-rewritten images, which is what makes a measured saving a subtraction."
   },
-  "dashboardStorageNotReported": {
-    "message": "not reported",
-    "description": "Value in the storage table when the worker did not send a count for that store. Lower case, matching the other values in the column."
+  "dashboardStorageDailyTotals": {
+    "message": "Daily totals",
+    "description": "Row label in the storage table: one row per day."
   },
   "dashboardStorageDiskInUse": {
     "message": "Disk in use",
@@ -1037,49 +1281,114 @@
     "message": "Chrome does not report it",
     "description": "Value in the storage table when the browser gives no figure for disk use."
   },
+  "dashboardStorageEmptyNote": {
+    "message": "Nothing is stored yet. The disk figure is the empty database itself — its stores, its indexes and Chrome's own bookkeeping — not recorded usage.",
+    "description": "Replaces dashboardStorageNote when every row count is zero and Chrome still reports disk in use. Without it the table reads as though one of the two figures were invented: seven counts of zero over a non-zero size. The privacy sentences it stands in for describe rows that do not exist yet, and return with the first one."
+  },
+  "dashboardStorageFlushError": {
+    "message": "Some measurements were not written to disk. The last failure was $WHEN$: $MESSAGE$. Totals from around then are lower than the traffic they describe.",
+    "description": "Shown in the storage panel when a write to the database failed. This is the only surface that can admit a rejected write, so the last sentence — that the totals are understated — must survive translation.",
+    "placeholders": {
+      "when": {
+        "content": "$1",
+        "example": "14 minutes ago"
+      },
+      "message": {
+        "content": "$2",
+        "example": "QuotaExceededError"
+      }
+    }
+  },
+  "dashboardStorageHostDetail": {
+    "message": "Per-host detail",
+    "description": "Row label in the storage table: per-hostname rows."
+  },
+  "dashboardStorageHourlyTotals": {
+    "message": "Hourly totals",
+    "description": "Row label in the storage table: one row per hour."
+  },
+  "dashboardStorageLink": {
+    "message": "Export or delete",
+    "description": "Link from the storage panel to the data section of the settings page."
+  },
+  "dashboardStorageNotReported": {
+    "message": "not reported",
+    "description": "Value in the storage table when the worker did not send a count for that store. Lower case, matching the other values in the column."
+  },
   "dashboardStorageNote": {
     "message": "Page-load rows hold the site and the origin, never a path or a query. Original image sizes are capped by count rather than by age, so they are the one store a shorter retention setting does not shorten.",
     "description": "Note under the storage table. Both sentences are privacy claims about what is and is not kept, and the second is an exception to the retention setting."
   },
-  "dashboardRowCountOne": {
-    "message": "$COUNT$ row",
-    "description": "Row count in the storage table, singular.",
+  "dashboardStoragePageLoads": {
+    "message": "Page loads",
+    "description": "Row label in the storage table: one row per recorded page load."
+  },
+  "dashboardStorageSizeModel": {
+    "message": "Learned request sizes",
+    "description": "Row label in the storage table: the mean sizes the extension learned, used to estimate a request that arrived with no size."
+  },
+  "dashboardStorageTitle": {
+    "message": "Stored on this device",
+    "description": "Heading of the panel listing what the extension has written to disk."
+  },
+  "dashboardTopSiteNoUsage": {
+    "message": "No usage yet",
+    "description": "Hint under the \"Top site\" card when nothing has been recorded in this period."
+  },
+  "dashboardTrendCaption": {
+    "message": "Daily usage over $RANGE$",
+    "description": "Caption read out with the daily usage chart, naming the range currently shown.",
     "placeholders": {
-      "count": { "content": "$1", "example": "1" }
+      "range": {
+        "content": "$1",
+        "example": "30 days"
+      }
     }
   },
-  "dashboardRowCountOther": {
-    "message": "$COUNT$ rows",
-    "description": "Row count in the storage table, plural. Paired with dashboardRowCountOne.",
+  "dashboardTrendTitle": {
+    "message": "Daily usage",
+    "description": "Heading of the panel holding the daily usage chart."
+  },
+  "dashboardTypeOfData": {
+    "message": "Type of data",
+    "description": "Heading and chart caption for the breakdown by resource type — video, images, scripts and so on. Used for the panel on the overview and for the block inside the detail panel."
+  },
+  "dashboardWindowDay": {
+    "message": "day",
+    "description": "Names the window a period-over-period comparison is against. Substituted into dashboardComparisonSame/More/Less, e.g. \"18% less than the previous day\". Lower case, mid-sentence."
+  },
+  "dashboardWindowMismatch": {
+    "message": "The two windows do not line up: the limit's allowance resets on $LIMITDAY$ and your cycle resets on $CYCLEDAY$. A monthly limit runs on the calendar month, so what it refuses against is the calendar month's total, not this cycle's.",
+    "description": "Hint in the Plan and cycle panel when the all-sites limit's window and the billing cycle roll over on different days, so the two dates on screen mean different things.",
     "placeholders": {
-      "count": { "content": "$1", "example": "8,412" }
+      "limitday": {
+        "content": "$1",
+        "example": "1 Sep"
+      },
+      "cycleday": {
+        "content": "$2",
+        "example": "17 Aug"
+      }
     }
   },
-  "dashboardKeyCountOne": {
-    "message": "$COUNT$ key",
-    "description": "Key count in the storage table, singular. These stores are keyed maps rather than row tables.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "1" }
-    }
+  "dashboardWindowMonth": {
+    "message": "month",
+    "description": "Names the window a comparison is against when months are counted as calendar months. Substituted into dashboardComparisonSame/More/Less. Lower case, mid-sentence."
   },
-  "dashboardKeyCountOther": {
-    "message": "$COUNT$ keys",
-    "description": "Key count in the storage table, plural. Paired with dashboardKeyCountOne.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "1,940" }
-    }
+  "dashboardWindowSession": {
+    "message": "session",
+    "description": "Names the window a period-over-period comparison is against. Substituted into dashboardComparisonSame/More/Less, e.g. \"18% less than the previous session\". Lower case, mid-sentence."
   },
-  "dashboardErrorReadStorage": {
-    "message": "Could not read storage.",
-    "description": "Shown in the storage panel when the request to the worker fails."
+  "dashboardWindowSevenDays": {
+    "message": "7 days",
+    "description": "Names the window a comparison is against when a week means the last 7 days rather than a calendar week. Substituted into dashboardComparisonSame/More/Less. Lower case, mid-sentence."
   },
-
-  "dashboardErrorReadSeries": {
-    "message": "Could not read the daily series.",
-    "description": "Announced when the daily chart's request to the worker fails."
+  "dashboardWindowThirtyDays": {
+    "message": "30 days",
+    "description": "Names the window a comparison is against when a month means the last 30 days rather than a calendar month. Substituted into dashboardComparisonSame/More/Less. Lower case, mid-sentence."
   },
-  "dashboardErrorReadUsage": {
-    "message": "Could not read usage.",
-    "description": "Shown in place of the stat cards, and announced, when the overview request to the worker fails."
+  "dashboardWindowWeek": {
+    "message": "week",
+    "description": "Names the window a comparison is against when weeks are counted as calendar weeks. Substituted into dashboardComparisonSame/More/Less. Lower case, mid-sentence."
   }
 }

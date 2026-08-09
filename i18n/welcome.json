@@ -1,150 +1,121 @@
 {
-  "welcomePageTitle": {
-    "message": "Byte Budget — set up",
-    "description": "Document title of the first-run page, shown in the browser tab. 'Byte Budget' is the product name and is not translated."
-  },
-  "welcomeTitle": {
-    "message": "Two questions, then it runs on its own",
-    "description": "Main heading of the first-run page. The two questions are the plan size and the reset day; nothing else on the page is required."
-  },
-  "welcomeIntro": {
-    "message": "Byte Budget is already counting. Answering these turns a running total into a position — on track, or not. All of it is optional; skip it and nothing breaks.",
-    "description": "Standfirst under welcomeTitle. Says measurement has already started, so the page is not a setup gate."
-  },
-  "welcomePlanTitle": {
-    "message": "How big is your plan, and when does it reset?",
-    "description": "Heading of the plan panel, and the accessible name of the region. A screen reader announces this on entering, with none of the surrounding page for context, so it names the whole question."
-  },
-  "welcomePlanSizeLabel": {
-    "message": "Allowance per month",
-    "description": "Label of the field where the user types their monthly data allowance."
-  },
-  "welcomePlanSizePlaceholder": {
-    "message": "15 GB",
-    "description": "Placeholder in the allowance field, showing the format expected. Must stay a size the app's own parser reads back: a number, then one of B, kB, MB, GB, TB or KiB, MiB, GiB, TiB. A bare number is read as megabytes."
-  },
-  "welcomePlanSizeBlank": {
-    "message": "Blank is fine. Usage is still measured — there is just nothing to measure it against.",
-    "description": "Hint under the allowance field while it is empty."
-  },
-  "welcomePlanSizeUnreadable": {
-    "message": "Could not read \"$INPUT$\". Try 15 GB, 500 MB or 20 GiB.",
-    "description": "Hint under the allowance field when the parser cannot tell what was typed. The three examples must stay sizes the parser reads.",
+  "welcomeAllowanceFailed": {
+    "message": "$ERROR$ The plan size is saved, but the warnings are not set up — try again from Settings.",
+    "description": "Status under the plan form when the plan size was stored but the allowance behind it was not. Named rather than swallowed: this is the one state where the product looks set up and no warning can ever arrive.",
     "placeholders": {
-      "input": { "content": "$1", "example": "fifteen gigs" }
+      "error": {
+        "content": "$1",
+        "example": "Could not set the allowance."
+      }
     }
   },
-  "welcomePlanSizeZero": {
-    "message": "A plan of nothing is not a plan. Leave it blank instead.",
-    "description": "Hint under the allowance field when the typed size parses to zero."
-  },
-  "welcomePlanSizeRead": {
-    "message": "Read as $SIZE$.",
-    "description": "Hint under the allowance field, echoing back the size the parser actually took. A bare number means megabytes and a comma means different things in different locales, so a figure read as ten times what was typed has to be visible before it is saved.",
-    "placeholders": {
-      "size": { "content": "$1", "example": "15 GB" }
-    }
-  },
-  "welcomeCycleDayLabel": {
-    "message": "Resets on",
-    "description": "Label of the picker for the day of the month the data plan rolls over."
+  "welcomeAllowanceFailedFallback": {
+    "message": "Could not set the allowance.",
+    "description": "Used as the $ERROR$ part of welcomeAllowanceFailed when the failure carried no message of its own."
   },
   "welcomeCycleDayCalendar": {
     "message": "The 1st — the calendar month",
     "description": "First option in the reset-day picker: the cycle is the calendar month."
   },
+  "welcomeCycleDayLabel": {
+    "message": "Resets on",
+    "description": "Label of the picker for the day of the month the data plan rolls over."
+  },
   "welcomeCycleDayOption": {
     "message": "The $DAY$",
     "description": "Every other option in the reset-day picker, running from the 2nd to the 28th. DAY is an ordinal built from the welcomeOrdinal* messages.",
     "placeholders": {
-      "day": { "content": "$1", "example": "17th" }
-    }
-  },
-  "welcomeOrdinalOne": {
-    "message": "$DAY$st",
-    "description": "Ordinal form used in English for days ending in 1 but not 11: 1st, 21st. Which of the four welcomeOrdinal* forms is chosen still follows English rules, so a locale with different ordinal categories needs that selection changed as well.",
-    "placeholders": {
-      "day": { "content": "$1", "example": "21" }
-    }
-  },
-  "welcomeOrdinalTwo": {
-    "message": "$DAY$nd",
-    "description": "Ordinal form used in English for days ending in 2 but not 12: 2nd, 22nd.",
-    "placeholders": {
-      "day": { "content": "$1", "example": "22" }
-    }
-  },
-  "welcomeOrdinalFew": {
-    "message": "$DAY$rd",
-    "description": "Ordinal form used in English for days ending in 3 but not 13: 3rd, 23rd.",
-    "placeholders": {
-      "day": { "content": "$1", "example": "23" }
-    }
-  },
-  "welcomeOrdinalOther": {
-    "message": "$DAY$th",
-    "description": "Ordinal form used in English for every other day: 4th, 11th, 12th, 13th, 20th.",
-    "placeholders": {
-      "day": { "content": "$1", "example": "17" }
+      "day": {
+        "content": "$1",
+        "example": "17th"
+      }
     }
   },
   "welcomeCycleHint": {
     "message": "This cycle started $START$. Next reset $RESET$.",
     "description": "Hint under the reset-day picker, giving the chosen day as the two dates a person can check against a bill.",
     "placeholders": {
-      "start": { "content": "$1", "example": "17 Jul" },
-      "reset": { "content": "$2", "example": "17 Aug" }
+      "start": {
+        "content": "$1",
+        "example": "17 Jul"
+      },
+      "reset": {
+        "content": "$2",
+        "example": "17 Aug"
+      }
     }
   },
-  "welcomePlanSave": {
-    "message": "Save",
-    "description": "Submit button of the plan form. Nothing on this page is written until it is pressed."
+  "welcomeIntro": {
+    "message": "Byte Budget is already counting. Answering these turns a running total into a position — on track, or not. All of it is optional; skip it and nothing breaks.",
+    "description": "Standfirst under welcomeTitle. Says measurement has already started, so the page is not a setup gate."
   },
-  "welcomeSkip": {
-    "message": "Skip for now",
-    "description": "Button that closes the first-run tab without writing anything. The install is already working on its defaults."
+  "welcomeNavDashboard": {
+    "message": "Dashboard",
+    "description": "Link at the foot of the first-run page, opening the full dashboard."
   },
-  "welcomeSaving": {
-    "message": "Saving…",
-    "description": "Status shown while a save is in flight, under the plan form and under the Data Saver switch."
+  "welcomeNavLabel": {
+    "message": "Where to go next",
+    "description": "Accessible name of the link row at the foot of the first-run page."
   },
-  "welcomePlanSaveUnreadable": {
-    "message": "Could not read \"$INPUT$\" as a size. Try 15 GB, or leave it blank.",
-    "description": "Status under the plan form when Save is pressed on a size the parser cannot read. Nothing is written and focus returns to the field.",
+  "welcomeNavSettings": {
+    "message": "Settings",
+    "description": "Link at the foot of the first-run page, opening the settings page."
+  },
+  "welcomeOrdinalFew": {
+    "message": "$DAY$rd",
+    "description": "Ordinal form used in English for days ending in 3 but not 13: 3rd, 23rd.",
     "placeholders": {
-      "input": { "content": "$1", "example": "fifteen gigs" }
+      "day": {
+        "content": "$1",
+        "example": "23"
+      }
     }
   },
-  "welcomePlanSaveFailed": {
-    "message": "Could not save the plan.",
-    "description": "Status under the plan form when the background worker refuses the settings write."
-  },
-  "welcomeAllowanceFailedFallback": {
-    "message": "Could not set the allowance.",
-    "description": "Used as the $ERROR$ part of welcomeAllowanceFailed when the failure carried no message of its own."
-  },
-  "welcomeAllowanceFailed": {
-    "message": "$ERROR$ The plan size is saved, but the warnings are not set up — try again from Settings.",
-    "description": "Status under the plan form when the plan size was stored but the allowance behind it was not. Named rather than swallowed: this is the one state where the product looks set up and no warning can ever arrive.",
+  "welcomeOrdinalOne": {
+    "message": "$DAY$st",
+    "description": "Ordinal form used in English for days ending in 1 but not 11: 1st, 21st. Which of the four welcomeOrdinal* forms is chosen still follows English rules, so a locale with different ordinal categories needs that selection changed as well.",
     "placeholders": {
-      "error": { "content": "$1", "example": "Could not set the allowance." }
+      "day": {
+        "content": "$1",
+        "example": "21"
+      }
     }
   },
-  "welcomePlanSaved": {
-    "message": "Saved. $SIZE$ a month, next reset $RESET$. Change it any time in Settings.",
-    "description": "Status under the plan form after a successful save, repeating back both figures.",
+  "welcomeOrdinalOther": {
+    "message": "$DAY$th",
+    "description": "Ordinal form used in English for every other day: 4th, 11th, 12th, 13th, 20th.",
     "placeholders": {
-      "size": { "content": "$1", "example": "15 GB" },
-      "reset": { "content": "$2", "example": "17 Aug" }
+      "day": {
+        "content": "$1",
+        "example": "17"
+      }
     }
   },
-  "welcomePlanSavedNone": {
-    "message": "Saved. No plan set — usage is measured all the same, and you can set one in Settings later.",
-    "description": "Status under the plan form after saving with the size left blank, which also clears any allowance already stored."
+  "welcomeOrdinalTwo": {
+    "message": "$DAY$nd",
+    "description": "Ordinal form used in English for days ending in 2 but not 12: 2nd, 22nd.",
+    "placeholders": {
+      "day": {
+        "content": "$1",
+        "example": "22"
+      }
+    }
   },
-  "welcomePlanDetailsSummary": {
-    "message": "What saving a plan does",
-    "description": "Summary of the collapsed block under the plan form, which spells out the consequences of pressing Save."
+  "welcomePageTitle": {
+    "message": "Byte Budget — set up",
+    "description": "Document title of the first-run page, shown in the browser tab. 'Byte Budget' is the product name and is not translated."
+  },
+  "welcomePinBody": {
+    "message": "Day to day, Byte Budget is a button on the toolbar. Chrome starts new extensions hidden: open the puzzle-piece icon to the right of the address bar, find Byte Budget in the list, and press the pin beside it to keep the button on the toolbar.",
+    "description": "How to pin the extension. Describes Chrome's own interface, so the wording has to keep matching it — the puzzle-piece icon opens the extensions menu and each entry carries a pin control."
+  },
+  "welcomePinFallback": {
+    "message": "Nothing depends on pinning it. The dashboard and settings are always reachable from that menu, and from Chrome's extensions page.",
+    "description": "Second paragraph of the pin panel, so the instruction reads as convenience rather than a required step. Byte Budget measures whether or not its button is visible."
+  },
+  "welcomePinTitle": {
+    "message": "Where to find it",
+    "description": "Heading of the panel telling the user how to keep Byte Budget's toolbar button visible. Chrome hides a newly installed extension's button behind the puzzle-piece menu, and the button is the surface the extension is used from."
   },
   "welcomePlanDetailsAllowance": {
     "message": "The size becomes an allowance over everything you browse, and that allowance is what the warnings are measured against. They arrive at 75%, 90% and 100%. Those three are fixed; there is no fourth.",
@@ -158,64 +129,144 @@
     "message": "Reset days stop at the 28th because every month has one. A cycle anchored to the 31st would reset on a different date in February, and the reset date is the one figure here you check against a bill.",
     "description": "Third paragraph of welcomePlanDetailsSummary: why the reset-day picker stops at 28."
   },
-  "welcomeSaverKicker": {
-    "message": "Optional",
-    "description": "Kicker above the Data Saver heading, marking the panel as skippable."
+  "welcomePlanDetailsSummary": {
+    "message": "What saving a plan does",
+    "description": "Summary of the collapsed block under the plan form, which spells out the consequences of pressing Save."
   },
-  "welcomeSaverTitle": {
-    "message": "Data Saver",
-    "description": "Heading of the Data Saver panel, and the accessible name of the region. 'Data Saver' is the product's name for its set of page optimizers."
+  "welcomePlanSave": {
+    "message": "Save",
+    "description": "Submit button of the plan form. Nothing on this page is written until it is pressed."
   },
-  "welcomeSaverIntro": {
-    "message": "Asks known image CDNs for a smaller version of the same picture, refuses analytics beacons, and stops video that is off screen from pre-buffering. The individual features, per-site exceptions and the off switch are all in Settings.",
-    "description": "What Data Saver does, in the words of the mechanism, plus where to change or undo it."
+  "welcomePlanSaveFailed": {
+    "message": "Could not save the plan.",
+    "description": "Status under the plan form when the background worker refuses the settings write."
   },
-  "welcomeSaverControl": {
-    "message": "To measure what that saves rather than estimate it, about one page load in ten is deliberately left unoptimized as a control.",
-    "description": "Discloses the holdout: the product deliberately does not optimize a sample of page loads so the saving can be measured rather than modelled."
+  "welcomePlanSaveUnreadable": {
+    "message": "Could not read \"$INPUT$\" as a size. Try 15 GB, or leave it blank.",
+    "description": "Status under the plan form when Save is pressed on a size the parser cannot read. Nothing is written and focus returns to the field.",
+    "placeholders": {
+      "input": {
+        "content": "$1",
+        "example": "fifteen gigs"
+      }
+    }
   },
-  "welcomeSaverSwitchLabel": {
-    "message": "Data Saver",
-    "description": "Visible label of the on/off switch in the Data Saver panel. Same words as welcomeSaverTitle but a control label rather than a heading, so it is kept separate."
+  "welcomePlanSaved": {
+    "message": "Saved. $SIZE$ a month, next reset $RESET$. Change it any time in Settings.",
+    "description": "Status under the plan form after a successful save, repeating back both figures.",
+    "placeholders": {
+      "size": {
+        "content": "$1",
+        "example": "15 GB"
+      },
+      "reset": {
+        "content": "$2",
+        "example": "17 Aug"
+      }
+    }
   },
-  "welcomeSaverOn": {
-    "message": "Data Saver is on for every site. Switch it off with this control, or exclude one site in Settings.",
-    "description": "Status under the Data Saver switch while it is on. States the way back out, not a benefit."
+  "welcomePlanSavedNone": {
+    "message": "Saved. No plan set — usage is measured all the same, and you can set one in Settings later.",
+    "description": "Status under the plan form after saving with the size left blank, which also clears any allowance already stored."
   },
-  "welcomeSaverOff": {
-    "message": "Data Saver is off. No request is being rewritten or refused.",
-    "description": "Status under the Data Saver switch while it is off."
+  "welcomePlanSizeBlank": {
+    "message": "Blank is fine. Usage is still measured — there is just nothing to measure it against.",
+    "description": "Hint under the allowance field while it is empty."
   },
-  "welcomeSaverReadFailed": {
-    "message": "Could not read Data Saver.",
-    "description": "Status under the Data Saver switch when its current state cannot be read from the background worker."
+  "welcomePlanSizeLabel": {
+    "message": "Allowance per month",
+    "description": "Label of the field where the user types their monthly data allowance."
+  },
+  "welcomePlanSizePlaceholder": {
+    "message": "15 GB",
+    "description": "Placeholder in the allowance field, showing the format expected. Must stay a size the app's own parser reads back: a number, then one of B, kB, MB, GB, TB or KiB, MiB, GiB, TiB. A bare number is read as megabytes."
+  },
+  "welcomePlanSizeRead": {
+    "message": "Read as $SIZE$.",
+    "description": "Hint under the allowance field, echoing back the size the parser actually took. A bare number means megabytes and a comma means different things in different locales, so a figure read as ten times what was typed has to be visible before it is saved.",
+    "placeholders": {
+      "size": {
+        "content": "$1",
+        "example": "15 GB"
+      }
+    }
+  },
+  "welcomePlanSizeUnreadable": {
+    "message": "Could not read \"$INPUT$\". Try 15 GB, 500 MB or 20 GiB.",
+    "description": "Hint under the allowance field when the parser cannot tell what was typed. The three examples must stay sizes the parser reads.",
+    "placeholders": {
+      "input": {
+        "content": "$1",
+        "example": "fifteen gigs"
+      }
+    }
+  },
+  "welcomePlanSizeZero": {
+    "message": "A plan of nothing is not a plan. Leave it blank instead.",
+    "description": "Hint under the allowance field when the typed size parses to zero."
+  },
+  "welcomePlanTitle": {
+    "message": "How big is your plan, and when does it reset?",
+    "description": "Heading of the plan panel, and the accessible name of the region. A screen reader announces this on entering, with none of the surrounding page for context, so it names the whole question."
   },
   "welcomeSaverChangeFailed": {
     "message": "Could not change Data Saver.",
     "description": "Status under the Data Saver switch when a change fails to save. The switch is re-read from storage rather than left showing the value that was refused."
   },
+  "welcomeSaverControl": {
+    "message": "To measure what that saves rather than estimate it, about one page load in ten is deliberately left unoptimized as a control.",
+    "description": "Discloses the holdout: the product deliberately does not optimize a sample of page loads so the saving can be measured rather than modelled."
+  },
+  "welcomeSaverIntro": {
+    "message": "Asks sites for less, so a page costs fewer bytes to open: a smaller version of the same picture from known image services, no analytics beacons, and no pre-buffering of video that is off screen. The individual features, per-site exceptions and the off switch are all in Settings.",
+    "description": "What Data Saver does, plus where to change or undo it. The first clause is the outcome and the rest is the mechanism, in that order: this is the first description of the product's main feature anyone reads, and it used to open on \"known image CDNs\" — the whole sentence was true and the first four words were jargon. Nothing was dropped; the same three behaviours are still named."
+  },
+  "welcomeSaverKicker": {
+    "message": "Optional",
+    "description": "Kicker above the Data Saver heading, marking the panel as skippable."
+  },
+  "welcomeSaverOff": {
+    "message": "Data Saver is off. No request is being rewritten or refused.",
+    "description": "Status under the Data Saver switch while it is off."
+  },
+  "welcomeSaverOn": {
+    "message": "Data Saver is on for every site. Switch it off with this control, or exclude one site in Settings.",
+    "description": "Status under the Data Saver switch while it is on. States the way back out, not a benefit."
+  },
+  "welcomeSaverReadFailed": {
+    "message": "Could not read Data Saver.",
+    "description": "Status under the Data Saver switch when its current state cannot be read from the background worker."
+  },
+  "welcomeSaverSwitchLabel": {
+    "message": "Data Saver",
+    "description": "Visible label of the on/off switch in the Data Saver panel. Same words as welcomeSaverTitle but a control label rather than a heading, so it is kept separate."
+  },
+  "welcomeSaverTitle": {
+    "message": "Data Saver",
+    "description": "Heading of the Data Saver panel, and the accessible name of the region. 'Data Saver' is the product's name for its set of page optimizers."
+  },
+  "welcomeSaving": {
+    "message": "Saving…",
+    "description": "Status shown while a save is in flight, under the plan form and under the Data Saver switch."
+  },
+  "welcomeScopeBody": {
+    "message": "Everything Byte Budget counts happens inside this Chrome profile. A second profile, a different browser, apps outside Chrome, system and app updates, and every other device sharing your connection are invisible to an extension — there is no API that would show them — so a carrier’s figure can sit well above this one, sometimes by a factor of several. None of what it counts is uploaded. If you later connect a Plus account, its status is checked separately with ExtensionPay and no usage or site name is sent.",
+    "description": "The scope paragraph. Says plainly that a carrier's bill will read higher than this and why, so the difference is not read later as a defect."
+  },
   "welcomeScopeTitle": {
     "message": "What these numbers do not cover",
     "description": "Heading of the panel bounding what the extension can and cannot see."
-  },
-  "welcomeScopeBody": {
-    "message": "Everything Byte Budget counts happens inside this Chrome profile. A second profile, a different browser, apps outside Chrome, system and app updates, and every other device sharing your connection are invisible to an extension — there is no API that would show them — so a carrier’s figure can sit well above this one, sometimes by a factor of several. Nothing is uploaded and there is no account.",
-    "description": "The scope paragraph. Says plainly that a carrier's bill will read higher than this and why, so the difference is not read later as a defect."
   },
   "welcomeSettingsReadFailed": {
     "message": "Could not read the current settings.",
     "description": "Status under the plan form when the page cannot load the stored plan to prefill the fields."
   },
-  "welcomeNavLabel": {
-    "message": "Where to go next",
-    "description": "Accessible name of the link row at the foot of the first-run page."
+  "welcomeSkip": {
+    "message": "Skip for now",
+    "description": "Button that closes the first-run tab without writing anything. The install is already working on its defaults."
   },
-  "welcomeNavDashboard": {
-    "message": "Dashboard",
-    "description": "Link at the foot of the first-run page, opening the full dashboard."
-  },
-  "welcomeNavSettings": {
-    "message": "Settings",
-    "description": "Link at the foot of the first-run page, opening the settings page."
+  "welcomeTitle": {
+    "message": "Two questions, then it runs on its own",
+    "description": "Main heading of the first-run page. The two questions are the plan size and the reset day; nothing else on the page is required."
   }
 }

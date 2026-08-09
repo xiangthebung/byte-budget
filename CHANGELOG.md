@@ -7,7 +7,167 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **A paid tier, and a seventh settings section for it.** Byte Budget Plus is CA$0.99 a
+  month or CA$7.99 a year (CAD), with a 14-day trial, handled by
+  [ExtensionPay](https://extensionpay.com). The line between free and paid is drawn on
+  one rule: **measurement is free, and so is every disclosure that makes it
+  trustworthy.** The accuracy figure, the measured-versus-modelled split on Data Saved,
+  the projection's basis, the profile-scope admission and the privacy statement are all
+  free and stay that way. What Plus unlocks is depth — the fourteen individual Data
+  Saver switches, site limits past three and windows longer than a day, reporting and
+  export past seven days, the third-party host table, the per-site savings comparison,
+  and the units and week/month rules. Which is also the answer to a problem the settings
+  page has had since it was built: a first install now meets one Data Saver choice
+  instead of fourteen.
+- **Locked controls stay on screen, and say what they are.** A ceiling greys the control
+  and puts a sentence in front of it saying what the free tier does instead — rather than
+  hiding it, which would make the product look like it has fewer features than it does
+  and leave nothing to explain why a chart stops where it does. An option inside a
+  segmented control carries a padlock, a tooltip and an accessible name ending "Part of
+  Byte Budget Plus", and pressing it opens the Plus section rather than doing nothing.
+- **A disabled state for the shared buttons and fields.** The design system had none, so
+  every disabled control had been borrowing the dimming of whatever box it happened to
+  sit in.
+- **The first-run page says where to find the extension afterwards.** Byte Budget is
+  used from a toolbar button, and Chrome starts a newly installed extension hidden
+  behind the puzzle-piece menu — so nothing in the product had ever mentioned the one
+  step that makes its main surface reachable. The panel also says that pinning is
+  optional, because measurement does not depend on it.
+
+### Changed
+
+- **The privacy claim is narrower, because it had to be.** Nothing measured is uploaded.
+  A never-connected free install makes no subscription request; starting a trial,
+  subscribing or restoring creates an opaque ExtensionPay key stored locally. Checks
+  send that key and no usage or site data. The provider's reply can contain account
+  fields including an email, so the extension now reduces it immediately, stores only
+  paid state, dates and plan interval, and says exactly that in the product and policy.
+  Card details remain on ExtensionPay and Stripe's pages. The manifest's `connect-src`
+  names the one reachable origin.
+- **Nothing already configured is disabled by a lapse.** The ceilings are on what can be
+  added or changed, never on what exists: eight limits set while subscribed keep running
+  and stay editable after a subscription ends, and it is the ninth that is refused. A
+  failed subscription check never removes access either — the last successful answer
+  stands, marked as old, because being on a plane is not evidence of not having paid.
+- **Retention stayed free; the reporting window is what is paid for.** The ledger keeps
+  400 days for everyone. A free install draws and exports the most recent seven and the
+  rest sit on disk untouched, so subscribing reveals history that was already recorded
+  and lapsing deletes nothing. Gating retention would have made a billing event destroy
+  data, which is a different kind of thing entirely.
+- **The plan cycle is exempt from that window.** The popup headline, the plan meter and
+  the projection read the whole cycle — up to 31 days — on the free tier. Clipping them
+  to seven would not have made the free tier smaller, it would have made it wrong, and
+  "will I make it to the reset date" is the question the product exists to answer.
+- **A limit can no longer refuse the subscription check.** The limit over Everything
+  installs an unscoped block rule, so at its strictest tier it would have taken out both
+  the check and every asset on the payment page — leaving someone unstyled text at the
+  moment they were trying to subscribe, and silently demoting a paying customer for
+  hitting the limit they were paying to manage. One `allow` rule at a higher priority
+  covers extensionpay.com and nothing else.
+- **A disabled option in a segmented control can no longer be chosen with the keyboard.**
+  Arrow keys move *and* activate in a radio group, so a locked option left in the ring
+  would have been reachable by pressing Right. Found while building the locks; it is a
+  general fix to the shared control.
+- **A locked option is no longer a control that looks ordinary and does nothing.** The
+  first version set `disabled` and dimmed to 45%, which sounds sufficient and was not:
+  on a light panel "30 days" beside "7 days" was all but indistinguishable, so the
+  segment read as available, ignored the press, and never said why. It now carries a
+  padlock — a difference people read rather than one they notice by comparison — and
+  activating it opens the Plus section. `aria-disabled` stays, because "present but not
+  selectable" is the truthful claim; `disabled` would have removed it from the
+  accessibility tree entirely and hidden the tier boundary from screen readers.
+- **"Set limit" no longer looks live while it is disabled.** At the free tier's limit
+  ceiling the add-limit form is disabled top to bottom, and the primary button sat under
+  a faded form in full accent green. The rows fade because `[data-locked]` dims them;
+  the button is a direct child of the row and was reached by nothing. Controls state
+  their own availability now instead of inheriting an ancestor's opacity.
+- **Export ranges the free tier cannot pick say so in their label** — "Last 90 days —
+  Plus". A `<select>` option has no tooltip anyone will find and no room for a glyph, so
+  a greyed row with no explanation was the same defect in a different control.
+- **An empty dashboard says it is empty.** A fresh install used to open on eight panels
+  of confident nothing: a "100% measured" badge over 0 B, a daily chart drawing a date
+  axis over thirty invisible bars, and a Data Saver panel presenting two 0 B figures,
+  the holdout note, the 95% interval rule and the "needs five loads on both sides"
+  line to someone who has never switched it on. The accuracy badge is dropped when
+  there is no total to qualify, the chart says "Nothing recorded yet", and the Data
+  Saver panel holds one sentence until it has something to report. Nothing was deleted:
+  every figure and every disclosure returns with the first byte. The page is a third
+  shorter before you have browsed anything.
+- **The storage table no longer contradicts itself.** Seven counts of zero over "Disk
+  in use 81.1 kB" reads as one of the two figures being invented. Both are right — an
+  empty IndexedDB is not a zero-byte one — and the note now says so while that is the
+  whole explanation.
+- **Data Saver is introduced by what it is for, then by how it works.** The first-run
+  description opened on "Asks known image CDNs…", which is four words of jargon in
+  front of the product's main feature. It now opens on "Asks sites for less, so a page
+  costs fewer bytes to open" and names the same three behaviours after it.
+- The popup's limit card, on a tab that is not showing a website, leads with the reason
+  and what to do rather than with what Byte Budget cannot limit. It is the first thing
+  anyone sees who clicks the toolbar button on the new-tab page.
+- "Site limits" in the settings rail reads "None" instead of nothing when there are no
+  limits, matching "No plan set" and "Off" on the two items above it.
+- **The settings page is six sections behind a rail, not one six-screen scroll.**
+  Every control is a row — what it is on the left, the control on the right — and
+  the paragraph that used to sit above each one is now either the two lines beside
+  it or behind a disclosure. Data plan, Data Saver, Alerts, Appearance and Privacy
+  are two or three rows each.
+- **Data Saver is one choice: Light, Balanced or Maximum.** The eight per-feature
+  switches and the six image-service switches are still there, under Advanced, with
+  their descriptions and impact meters. A set matching no level reads "Custom" and is
+  left exactly as it is.
+- **Plainer words for what a limit does.** "Shed weight" and "Hard stop" are now
+  "Cuts back gradually" and "Stops at the limit", on every surface. A site limit is
+  asked the same question the plan is, instead of a switch labelled "Hard cap".
+- **The plan size saves when you leave the field**, like every other control on the
+  page. Its Save button is gone.
+- The list of site limits is a card per limit at every width, rather than a
+  six-column table that turned into one on a phone.
+- Units and the week/month counting rules moved into Appearance → Advanced.
+
+- Group headings on the settings page use the same treatment as the dashboard's panel
+  headings, so the two surfaces read as one product.
+- **Shorter copy on the dashboard.** The plan panel no longer explains twice that there
+  is no plan, the enforcement note points at the button under it instead of naming the
+  all-sites limit, and the measurement and comparison notes say the same things in
+  fewer words. Nothing they disclose was dropped — the measured-versus-modelled split,
+  the 95% interval rule and the profile-scope admission all still read in full.
+- Prose on the dashboard is 12px. Eleven was the size for a gloss under a figure, and
+  it was also being used for three-paragraph explanations.
+
+### Fixed
+
+- **The popup told you how to switch Data Saver off, next to a button offering to turn
+  it on.** The row's description ended "Switch it off again from here, for this site or
+  for everything" — an instruction for a state the reader was not in.
+- **Seven strings in the shared chart module were never translated.** "Everything else"
+  in both breakdown legends, the two-tone key, the headings and caption of the value
+  table a screen reader reads instead of the picture, and the whole spoken summary of
+  every chart in the product — assembled from English fragments while the rest of the
+  UI followed the browser's language. Text that is correct and read aloud in the wrong
+  language is worse than text left untranslated; all of it now comes from the
+  catalogue, and the chart tests assert the words rather than the key.
+
+- **The Data Saver tile captions were cut off mid-sentence.** They read "Original sizes
+  on file, minus what the sma…" and "The size model's guess for requests refus…" — the
+  two sentences that say which figure is measured and which is modelled, truncated to
+  the half that says nothing. Captions wrap now, and the two tiles fill the panel
+  instead of being capped at 240px with 600px of empty space beside them.
+- The last row of a table drew a hairline under its label and none under its figure, so
+  the storage panel ended in a rule that stopped halfway across.
+- The shorter of the two bottom panels was stretched to match the taller one, leaving a
+  bordered card with a paragraph at the top and a few hundred pixels of nothing below.
+- **The page no longer jumps when you switch between the dashboard and settings.**
+  The two had drifted apart in four ways at once: settings was 60 px narrower, so both
+  centred 30 px apart; the Dashboard/Settings switch sat in a different place on each;
+  the settings header was a line shorter, so everything below it started 18 px higher;
+  and the scrollbar appeared on one and not the other. The frame is now one frame, and
+  the browser test measures it on both pages and fails if they disagree.
+- **Four buttons opened the settings page and ignored the section they named.** The
+  popup's "Set a plan" and "Manage limits", and two links on the dashboard, still
+  pointed at fragments from an earlier layout. The section names are now shared and
+  typed, so naming one that does not exist fails the build.
 
 ## [0.1.0] — unreleased
 
@@ -128,8 +288,7 @@ switched off in it.
   codebase marks deliberate fire-and-forget with a `void` prefix — 70 of them at
   this release, every one of them a real promise. A bare call missing both
   `void` and `await` looks identical and is a write that may never land. ESLint
-  is installed out of tree, like Playwright, and runs as an advisory CI job
-  rather than a gating one.
+  and Playwright are pinned development dependencies. Lint now gates `npm run verify`.
 - `.editorconfig` records what the tree already contains — LF, UTF-8, two-space
   indent, no tabs — so an editor with different defaults cannot turn a two-line
   change into a whole-file diff.

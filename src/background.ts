@@ -15,7 +15,7 @@ import { dayKey, retentionCutoff } from "./core/period";
 import { runtimeFile } from "./core/runtime";
 import { getSettings, onSettingsChanged, saveSettings } from "./core/settings";
 import type { Envelope, ExtensionRequest } from "./core/messages";
-import { emptyTotals, type Settings, type UsageRow } from "./core/types";
+import { ALL_SITES, emptyTotals, type Settings, type UsageRow } from "./core/types";
 import {
   checkAllowanceAlerts,
   clearAlertHistory,
@@ -24,6 +24,7 @@ import {
   saveAlertSettings,
 } from "./limit/alerts";
 import {
+  getBudgets,
   grantBytes,
   putBudget,
   removeBudget,
@@ -64,7 +65,16 @@ import {
 } from "./optimize/holdout";
 import { savingsReport } from "./optimize/report";
 import { pruneBaselines } from "./optimize/savings";
-import { ruleCounts } from "./rules/session";
+import {
+  openPlusPage,
+  plusStatus,
+  refreshPlus,
+  refreshPlusAfterProviderEvent,
+  startPlus,
+} from "./plus/gate";
+import { PLUS_ALLOW_RULES } from "./plus/rules";
+import { budgetPeriodAllowed, FREE_SITE_LIMITS, reportDays } from "./plus/tier";
+import { publishRules, ruleCounts } from "./rules/session";
 import { sizeModel } from "./track/estimate";
 import { ledger, pruneOldRows } from "./track/ledger";
 import { drainPending, expirePending, forgetTab, settleTiming } from "./track/reconcile";
@@ -98,6 +108,23 @@ setOptimizedResolver((site, tabId) => {
 setVisitObserver(noteVisitOutcome);
 registerRequestListeners();
 startGovernor();
+
+/*
+ * Both at the top level, and both for the reason at the head of this file.
+ *
+ * `startPlus` registers ExtensionPay's own message listener, which is what hears the
+ * payment page say a payment succeeded. Registered inside a promise callback it would
+ * not be there yet when that message arrives at a worker it just woke, and the symptom
+ * is somebody paying and the extension not noticing.
+ *
+ * The guard rule is published before anything can install a limit, so there is no window
+ * in which the subscription check is refusable. It never changes, so this is the only
+ * time it is published.
+ */
+startPlus();
+void publishRules("guard", PLUS_ALLOW_RULES).catch((error: unknown) => {
+  console.error("Byte Budget: could not install the subscription allow rule", error);
+});
 
 /**
  * The optimizer settings as last applied.
@@ -308,10 +335,37 @@ async function ensureAlarm(name: string, periodInMinutes: number): Promise<void>
  */
 void setUpAlarms();
 
+/**
+ * Both handlers are named-caught, for the reason `setUpAlarms` gives above.
+ *
+ * These two were the only fire-and-forget paths in this file with no catch anywhere in
+ * the chain, and `maintenance` is the most frequently run async path in the extension —
+ * once a minute, for as long as the browser is open. Anything it rejected with surfaced
+ * on chrome://extensions as a bare "Uncaught (in promise)" with a stack pointing at the
+ * bundle, next to three siblings that name themselves. The one that prompted this said
+ * `Error: No SW` — Chromium's answer when an extension API call reaches a service-worker
+ * version it has already torn down, which is routine: MV3 stops the worker whenever it
+ * likes, and an alarm can fire into the gap.
+ *
+ * Caught at the top rather than per-task on purpose. A rejection here abandons the rest
+ * of that tick — the flush, the window rollover, the alerts, the badge — and that is the
+ * right behaviour: the alarm fires again in a minute and every one of those is
+ * idempotent. What was wrong was only that it happened without saying so. A failed write
+ * in particular is already reported to a person, by `lastFlushError` on the dashboard's
+ * storage panel; this is the log line that says which tick dropped it.
+ */
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === MAINTENANCE_ALARM) void maintenance();
-  if (alarm.name === PRUNE_ALARM) void prune();
+  if (alarm.name === MAINTENANCE_ALARM) void run("maintenance", maintenance);
+  if (alarm.name === PRUNE_ALARM) void run("retention pruning", prune);
 });
+
+async function run(name: string, task: () => Promise<void>): Promise<void> {
+  try {
+    await task();
+  } catch (error) {
+    console.error(`Byte Budget: ${name} did not finish`, error);
+  }
+}
 
 /**
  * The backstop.
@@ -473,6 +527,44 @@ onSettingsChanged((settings) => {
  * Messaging
  * ------------------------------------------------------------------ */
 
+/**
+ * The free tier's ceiling on limits, enforced where a limit is actually created.
+ *
+ * In the worker as well as in the UI, because the UI's job is to explain a lock and
+ * this one's is to be it — the settings form, the popup presets and the dashboard's
+ * drill-down all create budgets, and three surfaces each remembering to check is three
+ * places for it to be forgotten.
+ *
+ * Three exemptions, and each is `plus/tier.ts`'s rule 1 in practice:
+ *
+ * - **`ALL_SITES` is never counted and never period-restricted.** It is the limit a data
+ *   plan sets up for you and the one every alert is measured against. Charging for it
+ *   would be charging for the thing the product is named after.
+ * - **An existing limit can always be edited.** Only a *new* site counts against the
+ *   ceiling, so someone who subscribed, set eight, and lapsed can still fix the size of
+ *   all eight. They just cannot add a ninth.
+ * - **An unchanged period is always allowed.** Otherwise correcting the size of a weekly
+ *   limit set while subscribed would be refused for naming a window the person is not
+ *   trying to change, which reads as the product breaking rather than as a ceiling.
+ */
+async function assertBudgetAllowed(site: string, period: BudgetPeriod): Promise<void> {
+  if (site === ALL_SITES) return;
+  const plus = await plusStatus();
+  if (plus.plus) return;
+
+  const budgets = await getBudgets();
+  const existing = budgets.find((budget) => budget.site === site);
+  if (!existing && budgets.filter((b) => b.site !== ALL_SITES).length >= FREE_SITE_LIMITS) {
+    throw new Error(
+      `Byte Budget Plus is needed for more than ${FREE_SITE_LIMITS} site limits. ` +
+        `Your plan-wide limit does not count towards that.`,
+    );
+  }
+  if (period !== existing?.period && !budgetPeriodAllowed(period, plus)) {
+    throw new Error("Weekly, monthly and per-session limits are part of Byte Budget Plus.");
+  }
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   handle(message as ExtensionRequest, sender)
     .then((payload) => sendResponse({ ok: true, ...payload } satisfies Envelope<object>))
@@ -547,7 +639,17 @@ async function handle(
 
     case "EXPORT": {
       await ledger.flush();
-      return exportData(request.format, request.days);
+      /*
+       * Clamped rather than refused, and that is a deliberate softening of the gate.
+       *
+       * Everything else Plus holds back is a capability. This one is the only route a
+       * person has to their own recorded data, and a paywall across it says "your
+       * measurements are hostage to a subscription" — which is not a thing this
+       * extension gets to say while its privacy section is its main argument. So the
+       * free tier exports, at the same seven-day window it reports over, and what Plus
+       * buys here is reach rather than access.
+       */
+      return exportData(request.format, reportDays(request.days, await plusStatus()));
     }
 
     case "CLEAR_DATA": {
@@ -607,6 +709,7 @@ async function handle(
       if (!Number.isFinite(request.bytes) || request.bytes <= 0) {
         throw new Error("Give the limit a size.");
       }
+      await assertBudgetAllowed(request.site, request.period as BudgetPeriod);
       await putBudget({
         site: request.site,
         bytes: request.bytes,
@@ -679,6 +782,22 @@ async function handle(
     case "GET_SAVINGS": {
       await ledger.flush();
       return savingsReport(request.days);
+    }
+
+    case "GET_PLUS":
+      return { plus: await plusStatus() };
+
+    case "REFRESH_PLUS":
+      return { plus: await refreshPlus(true) };
+
+    case "OPEN_PLUS_PAGE": {
+      await openPlusPage(request.page);
+      return {};
+    }
+
+    case "PLUS_PROVIDER_EVENT": {
+      await refreshPlusAfterProviderEvent(request.event);
+      return {};
     }
 
     case "GET_PAGE_FEATURES": {

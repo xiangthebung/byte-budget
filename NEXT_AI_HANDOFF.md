@@ -1,8 +1,12 @@
 # Byte Budget — Next AI Handoff
 
-**Last updated:** July 31, 2026  
+**Last updated:** August 8, 2026
 **Workspace:** `c:\Users\bing bong\Projects\Network data tracker`  
-**Current status:** The Dashboard/Settings split, the visual Advanced impact indicators and the narrow-viewport layout fix are all implemented and validated. Since then a review pass over the **measurement pipeline** found and fixed three high-severity defects and several smaller ones, all of which were silent — the numbers were wrong or missing with nothing on screen to say so. See section 8. No required implementation work remains; section "Deferred findings" lists what was found and deliberately left.
+**Current status:** The Dashboard/Settings split, the visual Advanced impact indicators and the narrow-viewport layout fix are all implemented and validated. Since then a review pass over the **measurement pipeline** found and fixed three high-severity defects and several smaller ones, all of which were silent — the numbers were wrong or missing with nothing on screen to say so. See section 8. The Settings page was then rebuilt as a rail of six sections (section 9); read that section before changing anything on that page.
+
+**Most recent change: the paid tier** (section 11). Byte Budget now has a free tier and Byte Budget Plus, at CA$0.99 a month or CA$7.99 a year (CAD) through ExtensionPay, with a 14-day trial. Read section 11 before touching `src/plus/`, the settings rail, or anything that reads a period or a range — and read 11.1 before touching the privacy copy, because the sentence this product used to lead with is no longer true and the replacement is load-bearing.
+
+The pass before it was the first-run pass (section 10). Every surface had been reviewed in the state it is in *after* a week of browsing, and none in the state it is in on the first morning. Installed on a clean profile, the dashboard opened on eight panels of confident nothing and the product never mentioned the one step that makes its own toolbar button reachable. Section 10 is what changed and what was deliberately left. No required implementation work remains; section "Deferred findings" lists what was found and deliberately left.
 
 ## Read this first
 
@@ -82,16 +86,14 @@ Files:
 - `src/settings.html`
 - `src/settings.ts`
 
-The Settings page owns all configuration:
+The Settings page owns all configuration, in six sections behind a rail (see section 9 for the layout and why):
 
-- Daily site limits
-- Data Saver master switch
-- Advanced Data Saver options
-- Website exceptions
-- Theme
-- Toolbar usage badge
-- CSV/JSON export
-- Delete usage
+- **Data plan** — plan size, reset day, what happens when it runs out, the current cycle
+- **Data Saver** — master switch, the Light/Balanced/Maximum level, website exceptions; Advanced holds the eight per-feature switches, the image services and the holdout rate
+- **Site limits** — the limits themselves, and the form that adds one
+- **Alerts** — the two notification switches
+- **Appearance** — theme and toolbar badge; Advanced holds units and the week/month rules
+- **Privacy & data** — what is recorded, retention, per-host detail, export, delete, storage report
 
 `settings.ts` is a dedicated controller rather than a conditionally shared dashboard controller. This matters because the project’s `query()` helper is intentionally strict: it throws when an expected element does not exist. Keeping separate controllers prevents missing-element failures and keeps page responsibilities clear.
 
@@ -109,7 +111,7 @@ Current behavior:
 - Vite builds both `dashboard.html` and `settings.html` as independent entries.
 - `public/manifest.json` declares `"options_page": "settings.html"`.
 - The packaging script requires both `settings.html` and `settings.js`.
-- Popup **Manage limits** opens `settings.html#limits-panel`.
+- Popup **Manage limits** opens `settings.html#limits`, and **Set a plan** opens `settings.html#plan`. The fragment names come from `SETTINGS_SECTIONS` in `src/core/types.ts` and `openSettings()` takes that type, so a caller cannot name a section that does not exist — which is exactly what all four deep links did the first time these sections were renamed.
 - Popup **Open dashboard** still opens reporting.
 - Background `OPEN_DASHBOARD` behavior remains a reporting destination.
 
@@ -254,7 +256,7 @@ So all three parts are load-bearing. Removing any one of them brings the sideway
 
 In the card layout `.host-name` wraps instead of ending in an ellipsis, since its `title` tooltip is unreachable on a touch device.
 
-**Desktop is unchanged.** The limits table is still a six-column table with its header row, inline meter, status chip and inline actions. Compare `outputs/settings-limits.png` and `outputs/settings-optimize.png` against the narrow captures.
+**Superseded in part by section 9.** Point 2 is gone: the limits table is a list of cards at every width now, which is what it collapsed into here anyway, so there is no `data-label`, no hidden `thead` and no `#limits-table`. Points 1 and 3 stand and are still load-bearing — 1 for the Dashboard, which still has three tables and a chart, and 3 for the exception chips, which are unchanged. The measurements in the table above are of the layout that no longer exists; the check in `scripts/smoke.mjs` still asserts 390/390 with a limit present, and still passes.
 
 **The Dashboard did not have this defect.** Measured at 390 px with the site drill-down both closed and open, it is 390/390, and its host table is 332 px inside the available space. That is the realistic case rather than an adversarial one; a drill-down with many very long third-party hosts was not tested, though `.host-name`'s 240 px ellipsis and the new `min-width: 0` rule mean such a table should now scroll inside `.table-scroll` rather than widen the page.
 
@@ -341,6 +343,175 @@ The smoke test's network assertion was **demoted to a note**, next to the identi
 
 **Do not restore that assertion, and do not promote the copy back.** A content script cannot beat the preload scanner.
 
+### 9. The Settings page was rebuilt
+
+`src/settings.html`, `src/settings.ts`, `src/settings.css` (new), `src/optimize/features.ts`, `src/core/types.ts`, `i18n/settings.json`, `i18n/core.json`
+
+**What was wrong.** The page had drifted back to everything-at-once. One column, roughly six screens tall at 1280 px, with about thirty controls on screen and a paragraph of prose above each. With Data Saver on it grew to eight feature checkboxes plus six image-service checkboxes plus a holdout percentage — the optimizer matrix that direction 3 above says not to reintroduce — and units, calendar-week rules and retention internals were all in the primary UI, against direction 2. Nothing was hidden, which is the same thing as nothing being findable: the plan size and the export button were the same size, in the same kind of box, three thousand pixels apart.
+
+**The shape now.** Six sections behind a rail, each about one question:
+
+| Section | Default height | Holds |
+| --- | --- | --- |
+| Data plan | 3 rows | size, reset day, what happens when it runs out; the cycle below |
+| Data Saver | 2 rows | the master switch and one three-way level |
+| Site limits | a card per limit | the limits, and a four-row form to add one |
+| Alerts | 2 rows | the two notification switches |
+| Appearance | 2 rows | theme, toolbar badge |
+| Privacy & data | 2 rows | retention, per-host detail; export and delete below |
+
+Four rules hold it together, and each is the answer to something the old page did:
+
+1. **Every control is one row.** What it is on the left, the control on the right, at most two lines of small print between them. A setting that cannot state itself in a row is a setting whose explanation belongs in a disclosure — not in a paragraph above the control, which is what most of the old page's height was.
+2. **Every pane is in the DOM from startup.** Controls are built once and only painted after that, the same rule `bindGroup` documents for its own options. Switching sections cannot destroy a control mid-interaction, and `query()`'s strictness keeps working.
+3. **The rail items are anchors.** Real `href="#saver"` links, so Back works, `settings.html#privacy` opens on the right section, and the browser handles the keyboard. Three of them carry the section's current value ("15.0 GB · resets in 8 days", "Balanced", "2 limits"), because the reason to open a section is usually that its value is wrong.
+4. **Advanced is where the matrix went, not where it died.** All fourteen switches are still there, under a disclosure, with their honest descriptions and their impact meters.
+
+**The savings level.** `SAVER_LEVELS` in `src/optimize/features.ts` — Light, Balanced, Maximum — is the ordinary way to use Data Saver now. Each level is *derived* rather than listed: Light is every feature whose `visibility` is `invisible`, Balanced is every feature with `defaultOn`, Maximum is all of them. That is deliberate. A listed set is a second table to keep in step with `FEATURES`, and the failure when it drifts is silent — a feature added there and forgotten here would be reachable from Advanced and from no preset, so choosing "Maximum" would quietly switch it off. `tests/optimize.test.mjs` pins the property none of the three definitions states alone: that they nest, and that they are distinct.
+
+`levelOf()` returns `null` when a stored set matches no level, and **nothing repairs it**. Someone who opened Advanced and switched one thing off has a selection; the page says "Custom" and warns that picking a level replaces it. Do not round to the nearest preset.
+
+**Deep links are typed now.** `SETTINGS_SECTIONS` lives in `src/core/types.ts` and `openSettings()` takes that type, because when the panels became panes all four deep links from the popup and the dashboard kept pointing at `#…-panel`. That does not throw and does not warn — it opens Settings at the top, so four buttons quietly stopped doing what their labels said. The smoke run also checks every `settings.html#…` string in `dist/`.
+
+**Wording.** The settings-scoped shape labels became outcomes rather than mechanisms: "Just measure / Shed weight / Hard stop" → "Just track it / Cut back gradually / Stop at the limit", and `coreBudgetShape*` followed so the popup and the dashboard say the same words. The site-limit form asks the same question the plan does, with the same two options, instead of a switch labelled "Hard cap" whose off state named nothing. **The disclosures were not softened**: the plan's scope admission, the full privacy statement, the `Save-Data` fingerprinting note and the holdout's cost sentence are all still on the page, word for word — moved under the control they belong to, or behind a summary, rather than stacked above it.
+
+**The plan size saves on `change`.** Its Save button is gone, because it was the only one on the page: the reset day, the enforcement choice and every switch already saved themselves, so a person who changed the size and moved on had no way to know that one field alone had not stuck. Emptying the field still removes the plan and still says so.
+
+#### 9.1 The two surfaces share one frame
+
+The header and the nav under it are the only thing a person sees on both pages, so anything that differs between them reads as the page jumping when they switch. Three things did, and each was invisible from inside either page on its own:
+
+| | Dashboard | Settings | Effect |
+| --- | --- | --- | --- |
+| `.page` max-width | 1160 | 1100 | both centred 30 px apart — the icon, the title and the nav all slid sideways |
+| the Dashboard/Settings nav | its own row under the header | inside the header, far right | it moved 918 px across and 72 px up |
+| header height | 65 px (three-line brand) | 47 px (two lines) | everything below started 18 px higher |
+
+Plus a fourth: the dashboard is always taller than the viewport and Settings usually is not, so the classic scrollbar appeared on one and vanished on the other.
+
+**The rules now, and do not break them:**
+
+1. `.page` carries the width, in `dashboard.css`. Settings sets no `max-width` of its own.
+2. The header holds the brand, and the nav is the block after it. Same markup, same order, on both.
+3. The brand is three lines on every surface. Settings' third line is empty and `settings.css` gives it `min-height: 1lh` — it is there to be as tall as the dashboard's period line, so removing it moves the nav, the rail and every pane.
+4. `html { scrollbar-gutter: stable }` in `dashboard.css`, so the gutter is reserved whether or not there is a scrollbar in it. Deliberately not in `app.css`: a 400 px popup cannot spare the width.
+
+`scripts/smoke.mjs` measures `.page`, `.page-head`, `.section-nav` and `.brand-mark` on both pages at one viewport and asserts they are equal — as equality, not as four remembered numbers, so it keeps holding when the header changes. Only `.page`'s height is exempt; that is the one thing the two are allowed to disagree about.
+
+Two smaller alignments came with it: the group headings use `.panel-title`'s uppercase treatment, so a heading over a group of settings is not a different kind of thing from a heading over a panel of figures, and `.settings-panes` is capped at 820 px — the frame is the dashboard's now, and at the full 854 px a row put "Website" and the field to fill in 700 px apart.
+
+#### 9.2 The dashboard's own pass
+
+Same reading, applied to the surface Settings now matches.
+
+**Cut off.** `.stat-hint` was one line clipped with an ellipsis. That was written for "0 sites" and became nonsense when a tile carried a sentence: the Data Saver panel shipped reading *"Original sizes on file, minus what the sma…"* and *"The size model's guess for requests refus…"* — the two captions that say which of the two figures is measured and which is modelled, truncated to the half that says nothing. They wrap now. `scripts/smoke.mjs` checks that no caption on the page has content wider than its box.
+
+**Bad layout, three instances:**
+
+1. `#savings-panel .stats` capped its two tiles at 240 px, leaving ~600 px of empty panel. There are exactly two and there always will be — a measurement and a model, which README.md:133-141 forbids adding together — so the grid names the count instead of capping the width.
+2. `.bottom-grid` was declared twice, the second silently overriding the first, and stretched its items. The shorter panel became a bordered card with a paragraph at the top and a few hundred pixels of nothing under it. `align-items: start` now.
+3. `.table tbody tr:last-child td { border-bottom: 0 }` cleared the rule on `td` only. The storage table's row labels are `<th scope="row">`, so its last row drew a hairline under the label and none under the figure — a rule that starts at the left edge and stops halfway across. `> *` now.
+
+**Wordy.** Seven messages tightened, and one typographic rule behind them: **a sentence is 12 px, a gloss under a figure stays 11.** The disclosures, the projection basis and the comparison notes are paragraphs and were being set at the size the product uses for an aside. The rule is applied by selector in `dashboard.css` rather than on `.field-hint`, because that class legitimately carries both kinds of text.
+
+**Nothing disclosed was dropped**, and this is the constraint on any further trimming here: the measured-versus-modelled split, the "100% measured means every body was measured, not that the total is exact" sentence, the 95% interval rule, the profile-scope admission and both privacy claims under the storage table all still read in full. What went was repetition — the plan panel explaining twice that there is no plan — and jargon: "A limit over Everything" now reads "Turn it into a limit", which is also the label on the button directly beneath it.
+
+### 10. The first-run pass
+
+`src/welcome.html`, `src/welcome.css`, `src/dashboard.html`, `src/dashboard.ts`, `src/settings.ts`, `src/core/chart.ts`, `i18n/*.json`, `tests/chart.test.mjs`, `scripts/smoke.mjs`
+
+**How this was found, because the method is the reusable part.** Every previous pass read the surfaces in the state the smoke run leaves them in: usage recorded, a limit set, Data Saver on. That is the state they are in on the *second* day. This pass loaded `dist/` into a Chromium with an empty profile and photographed what a person actually meets — the welcome tab, the popup on a real site with no traffic yet, the dashboard with an empty ledger, and each settings section with nothing configured. Four of the six findings below are invisible in every screenshot in `outputs/`, because every one of those was taken with data behind it. **`outputs/dashboard-first-run.png` and `outputs/welcome.png` now exist so this is no longer true.**
+
+**What was wrong, and what it now does.**
+
+1. **The accuracy pill claimed 100% of nothing.** `measuredShare` returns 1 for an empty total on purpose — 0% confidence in nothing is the wrong reading, and the comment on it says so — but the Data Used card then shipped "0 B" wearing "100% measured". The pill is a qualifier on the total; with no total it qualifies nothing, so it is not rendered. **Do not "fix" this by changing `measuredShare`.** Its return value is right for what it is; the card was the wrong place to use it unconditionally.
+
+2. **The daily chart drew an axis over thirty invisible bars.** `chartInto`'s empty test was `series.length === 0`, and `GET_SERIES` answers a thirty-day request with thirty rows whether or not anything is in them — so the empty branch could only ever fire for a range with no days in it. The test is on the values now. This was the one panel on the page with no empty state, which made it the one whose emptiness read as a fault.
+
+3. **The Data Saver panel presented its methodology to someone who had never used it.** Two 0 B tiles, the holdout disclosure, the 95%-interval rule and the "needs five optimized loads and one unoptimized one" line — about four hundred pixels of statistics, and the tallest thing on an empty dashboard. `savingsUntouched()` gates it: the switch off **and** `saved`, `blocked`, `rewritten` and `deltas` all zero. One sentence stands in until then.
+
+   **Every one of those five has to be zero, and that is not fussiness.** Someone who ran Data Saver last week and turned it off yesterday has results the panel exists to defend. It is only the install that has never had it on that is spared. And the panel's "Manage Data Saver" link is in the header, outside everything this hides, so the way in is unchanged.
+
+4. **The storage table contradicted itself.** Seven counts of "0 rows" over "Disk in use 81.1 kB". Both figures are correct — an empty IndexedDB is not a zero-byte one — and nothing said so, which leaves one reading available: that one of the two is invented. `dashboardStorageEmptyNote` replaces the privacy note while that is the whole explanation, and the privacy note returns with the first row, since it describes rows.
+
+5. **Nothing in the product mentioned pinning it.** Byte Budget is used from a toolbar button and Chrome starts a new extension hidden in the puzzle-piece menu. An install can be set up perfectly and leave the person with no reason to know its main surface exists. `#pin-panel` on the first-run page says how, and says in its second paragraph that nothing depends on it — measurement runs whether or not the button is visible. This is the only place the fact is worth stating; do not repeat it on the dashboard.
+
+6. **Three pieces of copy said the wrong thing.**
+   - The popup's Data Saver row, while off and beside a button reading "Turn on", ended "Switch it off again from here, for this site or for everything" — the exit from a state the reader is not in.
+   - `popupNoLimitHere` — what a person sees if their first act after installing is to click the button on the new-tab page — led with what Byte Budget cannot limit. It leads with the reason and the next step now. Its last sentence is a disclosure and stays.
+   - `welcomeSaverIntro` opened on "Asks known image CDNs…": four words of jargon in front of the product's main feature, where Settings already had "Ask sites for less, so a page costs fewer bytes to open". Outcome first, then the same three mechanisms, none dropped.
+
+**A seventh, found on the way and unrelated to first run.** `src/core/chart.ts` had seven strings that never reached the catalogue: "Everything else" in both breakdown legends, "Total" in the two-tone key, "When"/"Data"/"Chart values" in the value table, "Breakdown" as the stacked bar's fallback name — and the whole of `describeSeries`, which is assembled from English fragments and is the only reading of the primary chart a screen reader gets. Wave 6 internationalized every surface and missed the module both of them import. All of it is `t()` now, one message per clause.
+
+`tests/chart.test.mjs` **serves the real `i18n/core.json` through a `chrome.i18n` stub** rather than asserting the keys. Without it `t()` falls back to the key in Node and the assertions would have passed against `coreChartEverythingElse` — pinning the fallback, not the string. The stub resolves `$NAME$` through `placeholders` to `$1`, as Chrome does, so a key deleted from the catalogue fails here instead of shipping as its own name in a legend.
+
+**The browser checks for all of this live at one specific point in `scripts/smoke.mjs`** — immediately after the `CLEAR_DATA` before the blocking experiment, and *before* the `SET_ENFORCEMENT` under it. That is the only moment in the run where the first-run state exists: every store empty, no plan, Data Saver never on. A refusal credits `blocked`, which would take the savings panel out of its untouched state, so the order is load-bearing. All four were mutation-verified together: reverting the four predicates produces four named FAILs, including "30 bars" for the chart — which is the proof the old length test could never have fired.
+
+The `waitForSelector` there goes through `checkWait`. A bare wait would report the regression by throwing, which under this script's rule 2 deletes every check after it from the evidence.
+
+### 11. The paid tier
+
+`src/plus/` (new: `tier.ts`, `gate.ts`, `plans.ts`, `lock.ts`, `rules.ts`), `src/background.ts`, `src/settings.*`, `src/dashboard.*`, `src/popup.ts`, `src/core/dom.ts`, `src/core/types.ts`, `src/app.css`, `public/manifest.json`, `scripts/smoke.mjs`, `tests/plus.test.mjs`
+
+**The rule the split is drawn on, and it is not negotiable without the user saying so:** *measurement is free, and so is every disclosure that makes it trustworthy.* The accuracy percentage, the measured-versus-modelled split on Data Saved, the projection's basis, the profile-scope admission and the privacy statement are free forever. A figure a person cannot audit is not a preview of a better figure; it is a worse one, and this project's whole argument is that it does not ship those. **Do not gate a disclosure to make the paid tier look better.**
+
+**The four modules and why they are four.**
+
+| File | Holds | May import |
+| --- | --- | --- |
+| `plus/tier.ts` | the ceilings, `PlusStatus`, `PlusPage` | nothing but types |
+| `plus/plans.ts` | prices, `TRIAL_DAYS`, the two refresh intervals | nothing |
+| `plus/gate.ts` | the reduced cache and failure policy | `plus/provider.ts` |
+| `plus/provider.ts` | ExtensionPay protocol, local opaque key, response reduction | nothing |
+| `plus/lock.ts` | the lock notice DOM, `setControlsEnabled` | `core/dom`, `core/i18n` |
+| `plus/rules.ts` | one `allow` rule | `core/types`, `rules/session` |
+
+`provider.ts` is the only module that can reach the provider. It stores the opaque key in local storage, never sync, and reduces the provider reply without persisting the raw object. The payment-page content script only relays a completion event. **Nothing outside the worker may import the provider** — `core/messages.ts` names `PlusPage` from `tier.ts` for exactly that reason.
+
+**Three ceilings, in `tier.ts`.** `FREE_SITE_LIMITS = 3` (the `ALL_SITES` limit is outside the count), `FREE_BUDGET_PERIODS = ["day"]`, `FREE_REPORT_DAYS = 7`. Plus the derived `FREE_PERIODS`, which is every period except `month`.
+
+**Three rules the ceilings obey. Each is a promise the product keeps, and each is easy to break by accident:**
+
+1. **A ceiling limits what you can change, never what you already have.** Someone who subscribes, sets eight limits and a custom Data Saver selection, then lapses, keeps every one of them — running, enforcing, and still editable. `assertBudgetAllowed` in `background.ts` therefore counts only *new* sites and only gates a period that *differs* from the stored one. The alternative is a billing event silently deleting a limit somebody relied on.
+2. **Retention is not the paid setting; the reporting window is.** The ledger keeps 400 days for everyone. `FREE_REPORT_DAYS` bounds what is *drawn and exported*, never what is kept, so subscribing reveals history that was already there and lapsing destroys nothing. **Do not "simplify" this by gating `retentionDays`.**
+3. **The plan cycle is exempt from the reporting window.** The popup headline, the plan meter and the projection read the whole cycle — up to 31 days — on the free tier. `reportDays()` is never applied to `cycleDays`. Clipping it would not make the free tier smaller, it would make it wrong, and "will I make it to the reset date" is the question this product exists to answer.
+
+**The failure policy, at the head of `gate.ts`.** A failed check never removes access: the last successful answer stands, marked `stale`, with no expiry. A failed check never grants it either — `unknownStatus()` is free. The asymmetry is deliberate; only one of the two errors hurts someone who paid.
+
+**A lock is an attribute, not CSS.** `plus/lock.ts` sets `disabled` on a whole block; `[data-locked]` only dims. `pointer-events: none` stops a mouse and leaves Tab and Space working, which is not a lock. `bindGroup` in `core/dom.ts` also steps over locked options when the arrow keys move, because arrow keys *activate* in a radio group — a locked option left in the ring was choosable by pressing Right.
+
+**A locked option is not a disabled one, and the difference cost a round of rework.** The first version of the segmented-control lock set `disabled` and dimmed to 45%. Measured on the shipped build that was invisible — "30 days" beside "7 days" is muted text on a light panel either way — so the segment looked ordinary, ignored the press and never said why. Three defects from one attribute. `setGroupOptionsLocked` in `core/dom.ts` is what replaced it, and each part of it is load-bearing:
+
+| | why |
+| --- | --- |
+| padlock glyph | a difference people *read*, not one they notice by comparison |
+| `title` + `aria-label` suffix | carries the reason without adding a note to the layout |
+| `aria-disabled`, not `disabled` | truthful (present, unselectable) and stays in the accessibility tree; `disabled` hides the tier boundary from screen readers entirely |
+| stays operable, `onActivate` opens Plus | a control that cannot do the thing can at least say what would |
+| out of the arrow ring | arrow keys activate, so leaving it in would throw someone onto another page for pressing Right |
+
+Two consequences to know about. Playwright reads `aria-disabled` as "not enabled" and will not click, so the smoke check passes `force: true` — a browser has no such rule and the click fires normally, so that is reproducing real behaviour rather than working around a defect. And `bindGroup` stashes `dataset.label`, because the accessible name has to be rebuilt from the words after a glyph is appended.
+
+**A `<select>` cannot do any of that**, so a locked export range says it in its own label (`settingsExportRangeDaysLocked` → "Last 90 days — Plus"). Any future gated `<option>` needs the same.
+
+**The shared controls have a `:disabled` state now** (`app.css`, `dashboard.css`), and they need it: at the limit ceiling the add-limit form is disabled top to bottom and "Set limit" was rendering in full accent green, because `[data-locked]` dims `.row-copy` and `.row-control` and the button is a direct child of `.row`. **A control must state its own availability rather than inherit an ancestor's opacity** — that is the general rule, and the button was the instance that proved it.
+
+**One `allow` rule, in `plus/rules.ts`.** The limit over Everything installs an unscoped block, so at `strict` it would refuse both the subscription check and every asset on the payment page — leaving unstyled text at the moment someone was trying to pay, and silently demoting a paying customer for hitting the limit they pay to manage. The rule sits at priority 4, above `limit/rules.ts`'s 3, because Chrome only falls back to allow-over-block to break a tie *within* one priority and this is not a thing to rest on a tie. It is published once at worker start under the new `guard` source in `rules/session.ts`.
+
+#### 11.1 The privacy claim had to be narrowed
+
+Byte Budget used to say, in `settings.html`, the welcome page, `README.md` and `PRIVACY_POLICY.md`, that it made **no network request of its own**. A subscription cannot be checked without asking something, so that sentence is false now and has been replaced in all four places rather than left standing.
+
+What is claimed instead: nothing measured is uploaded. A never-connected free install makes no provider request. Once an account flow creates an opaque key, checks send that key and no usage or site data. ExtensionPay can return account fields including an email; `provider.ts` discards fields Byte Budget does not use and persists only reduced status. `PRIVACY_POLICY.md` and the Plus pane say all of this directly.
+
+`connect-src` in `public/manifest.json` names `https://extensionpay.com` and nothing else, so the narrower claim is enforced the same way the old one was. **If you add anything that talks to a network, that policy line and these four documents are part of the change, not a follow-up.**
+
+#### 11.2 What the smoke run needed
+
+`setPlus(paid)` in `scripts/smoke.mjs` writes the same `chrome.storage.local` record the worker writes. It is not a test-only branch in production code — there is none — it works because `startPlus` drops its memo on `storage.onChanged`, a listener that exists for its own reasons (rule 16: a copy held for the life of a worker must not outlive the record it came from). The run asserts the free tier's locks first, because that is the only moment in the run where the free tier is the live state, then unlocks for everything after it.
+
+Two things there are easy to get wrong and are commented in place: `heldRules()` filters the permanent guard out of every assertion about what a limit or the optimizer installed, and the `SETTINGS_SECTIONS` count is read out of `core/types.ts` rather than remembered — the check used to assert `panes.length === 6` and a seventh section made it fail, which is a test failing because the product grew.
+
 ## Earlier simplification work that remains important
 
 Before the page split, the application received a broader simplicity pass. Preserve these improvements:
@@ -376,12 +547,16 @@ Before the page split, the application received a broader simplicity pass. Prese
 
 - `src/settings.html`, `src/settings.ts`
   - Configuration only
-  - Limits, Data Saver, Advanced, exceptions, appearance, privacy/data
+  - Six sections behind a rail; every control exists from startup and is only painted after that
+
+- `src/settings.css`
+  - The options page's own layout: the rail, the panes, the group and the row
+  - `@import`s `dashboard.css` for the primitives the two surfaces share
 
 - `src/dashboard.css`
-  - Currently shared by Dashboard and Settings
-  - Contains shell, reporting, settings, limits, Data Saver, and impact-meter styles
-  - Also owns the page-grid `min-width: 0` rule and the under-640 px limit card layout
+  - Shared by the Dashboard, the first-run screen and (through `settings.css`) Settings
+  - Contains shell, reporting, form controls, the table, the switch, the meters and the status chip
+  - Also owns the page-grid `min-width: 0` rule
 
 - `src/app.css`
   - Shared design tokens and base controls
@@ -477,7 +652,13 @@ npm run build:throttle
 npm run smoke -- --shots
 ```
 
-Results:
+The original paid-tier pass finished with 267/267 tests and a green browser suite. Release hardening later removed the copied ExtPay library and `homepage_url`; the current verification counts and archive contents must be read from the latest run, not this historical count.
+
+`tests/plus.test.mjs` is the 13 new tests, and all seven properties in it were **mutation-verified**: making the month free, removing the `reportDays` clamp, making it widen a small request, freeing every budget window, dropping the window below a week, unlocking `unknownStatus`, and cutting the limit ceiling to 1 each produce exactly one failure.
+
+Six existing browser checks had to be repartitioned rather than relaxed, because the new guard `allow` rule is present in every reading of Chrome's session rules. `heldRules()` filters it out; the assertions themselves are unchanged, and one new check confirms the guard survives every install and teardown in the run.
+
+The earlier sequence, for the record:
 
 ### `npm run verify`
 
@@ -526,10 +707,18 @@ Checks added by the earlier UI work:
 - The Settings appearance control works through actual UI interaction.
 - Settings does not scroll sideways at 390 px, with a limit present.
 - Every limit row action stays on screen at 390 px.
-- The stacked limit card labels its figures once the header row is gone.
+- The limit card says what each of its four figures is.
 - Advanced does not scroll sideways at 390 px.
-- The impact cards stack to one column at 390 px.
+- All eight feature switches stay on screen at 390 px.
 - The impact meters still read High 3 / Medium 2 / Low 1 at 390 px, all on screen.
+
+Checks added by the Settings rebuild (section 9):
+
+- Choosing a savings level sets the individual switches under Advanced to exactly that level's set — read back off the checkboxes, not off the settings object, because the defect it guards against is a picker that saves one thing and shows another.
+- Switching one of those back off makes the level read **Custom** rather than being rounded to the nearest preset.
+- Every `settings.html#…` deep link in `dist/` names a section that exists. This is the check that would have caught all four links breaking when the panels became panes.
+- The Dashboard and Settings frames are equal: `.page` position and width, `.page-head`, `.section-nav` and `.brand-mark`, measured on both at one viewport with fonts settled (section 9.1).
+- No caption on the dashboard has content wider than the box it is in (section 9.2). Read the comment on it before trusting it as a regression net — it covers the class of defect, not the one instance that produced it.
 
 - Existing measurement, site drill-down, exports, limits, notices, optimizer rules, image rewriting, Save-Data behavior, prefetch blocking, savings reporting, and service-worker behavior remain functional.
 
@@ -537,38 +726,60 @@ The six narrow-viewport checks run on a plain `npm run smoke`, not only with `--
 
 The smoke log includes expected `net::ERR_BLOCKED_BY_CLIENT` messages when the extension intentionally blocks requests. Those are not regressions.
 
-Playwright is expected to be installed out of tree for the smoke script. It is intentionally not a permanent extension dependency.
+Playwright is a pinned development dependency for the smoke script. The release packager
+walks `dist/` only, so development dependencies cannot enter the store archive.
 
 ## Current screenshots
 
 Authoritative current captures:
 
+- `outputs/dashboard-first-run.png`
+  - **The state a new install opens on**, and the one every other capture here hides. Taken at the one point in the smoke run where it exists (see section 10), with the site drill-down explicitly closed first.
+  - Read it before making the dashboard busier: no accuracy pill, an empty chart that says so, a one-sentence Data Saver panel, and a storage note that explains its own disk figure.
+
+- `outputs/welcome.png`
+  - The first-run page, including `#pin-panel`
+  - At 390 px the document measures 380 against a 390 px viewport, so it does not scroll sideways either. That is not asserted anywhere; re-measure it if the page grows a table or a wide control.
+
 - `outputs/dashboard.png`
   - Report-only Dashboard
   - Two-item Dashboard/Settings navigation
   - No limit or setting controls
+  - **With usage behind it.** Every panel section 10 collapsed is expanded here, which is the check that the collapse is conditional rather than a deletion.
 
 - `outputs/dashboard-dark.png`
   - Current report-only Dashboard in dark mode
 
 - `outputs/settings.png`
-  - Settings with Data Saver off and Advanced hidden
+  - The Data plan section, which is what the page opens on
+  - The whole section is under 400 px tall. That is the point of section 9; compare it with anything in `outputs-before/`.
 
 - `outputs/settings-optimize.png`
-  - Settings with Data Saver on and Advanced open
+  - The Data Saver section with Advanced **open**, which is a state a person has to ask for
   - Best screenshot for reviewing the High/Medium/Low visual meters
+  - Closed — the default — that section is three rows
+  - **Taken with Plus unlocked**, like every capture here except the two below
+
+- `outputs/settings-plus.png`
+  - The Plus section on a free install: the state, the two prices, what is unlocked, and the four actions
+  - Read it before changing the free/paid split — the list on it is the promise
+
+- `outputs/settings-saver-locked.png`
+  - **The state every new install is in**, and the one no other capture shows
+  - Advanced open, the fourteen switches and the holdout dimmed and disabled, the lock notice above them
+  - Both of these are photographed at the end of the smoke run, which sets the tier back to free for exactly that purpose and restores it afterwards
 
 - `outputs/settings-limits.png`
-  - Settings with an active daily limit
-  - Desktop reference for the six-column limits table
+  - The Site limits section with an active daily limit
+  - Desktop reference for the limit card and the add-limit form
 
 - `outputs/settings-narrow.png`
-  - Settings at 390 px with a limit over its allowance
-  - Shows the stacked limit card: Limit / Used / Status / Resets labelled, meter over-limit, all three actions on screen
+  - Site limits at 390 px with a limit over its allowance
+  - Shows the rail lying down as a horizontal scroller, and the limit card with all three actions on screen
 
 - `outputs/settings-narrow-advanced.png`
-  - Settings at 390 px with Data Saver on and Advanced open
-  - Shows the impact cards stacked to one column with their meters intact
+  - Data Saver at 390 px with Advanced open
+  - Shows the feature rows with their switches and meters intact
 
 - `outputs/popup.png`
 - `outputs/popup-limit.png`
@@ -585,7 +796,11 @@ If an image in the conversation still shows Limits, Data Saver controls, Appeara
 
 None.
 
-Both builds, 105 unit tests, the full browser suite and the screenshots are green. Do not make further product changes solely to "finish" this handoff.
+Both builds, 254 unit tests, the full browser suite and the screenshots are green. Do not make further product changes solely to "finish" this handoff.
+
+`npm run lint` is part of `npm run verify`. ESLint, typescript-eslint and Playwright are
+pinned development dependencies; use `npm install` and `npx playwright install chromium`
+on a clean machine.
 
 ## Deferred findings
 
@@ -602,6 +817,10 @@ These were found in the same review and deliberately **not** fixed. They are rec
 9. **The `?? 1970` / `?? 1` defaults in `addDaysTo` do not catch `NaN`.** `??` only fires on null and undefined, so a malformed key yields an Invalid Date and `"NaN-NaN-NaN"`. Latent — every call site passes `dayKey` output — but the defaults read as protection they do not provide.
 10. **`sessionUsage()` hands out the live `sites` object.** All five callers copy before mutating, so it is latent, but one `addTotals(delta, …)` would corrupt the ledger in place.
 11. **`Visit.saved` is never populated.** `addTabSaved` was the only writer, was never called from anywhere, and was removed rather than left as an invitation to reintroduce the 8.2 bug with a new signature. Either wire it up or drop the field.
+
+12. **`describeSeries` joins its clauses with a literal `", "`.** Each clause is a whole message now (section 10), which is the part that matters, but the separator between them is still punctuation chosen in English. Most locales take a comma; the ones that do not can carry their own inside the clauses, which is why this was left rather than turned into a thirteenth message. Revisit it with the first non-English catalogue, not before.
+
+13. **The first-run page has no narrow-viewport assertion.** Measured by hand at 390 px after `#pin-panel` was added: 380 against a 390 px viewport, so it does not scroll sideways. It is prose in a single column and nothing on it can widen a grid item, which is why the six checks in section 7 were not extended to a third surface. Re-measure if it ever grows a table, a wide control, or a row layout — rule 13 below is about exactly this.
 
 ## Recommended future improvements
 
@@ -702,6 +921,20 @@ Current impact meters include visible text and `aria-label`, and segmented contr
 18. **Do not assert a network outcome for a DOM-level optimization.** A content script cannot beat Chrome's preload scanner. This has now cost the project twice — once for the image features (PLAN.md §5.2) and once for `dropHints` (section 8.6). Assert what the script did to the document; report what the network did.
 19. **Mutation-test a new test before trusting it.** Break the fix, confirm the test fails, restore. Both new checks in this pass were verified that way, and one of them turned out to have a companion assertion that passed under the bug — which is how it became clear the two were measuring different things.
 
+20. **An empty state is a state, and it is the one every user sees first.** Four of section 10's six findings were on a surface that had been reviewed a dozen times, and all four were invisible because every review and every screenshot had data behind it. Before shipping a change to any surface, load `dist/` into a Chromium with a fresh profile and look at it with nothing recorded. The four collapses in section 10 are conditional, not deletions: check that the panel comes *back*, which is what `outputs/dashboard.png` is for.
+
+21. **Do not gate a disclosure.** The accuracy figure, the measured-versus-modelled split, the projection's basis, the scope admission and the privacy statement are free forever. See section 11.
+
+22. **A paid ceiling limits what can be added or changed, never what already exists.** A lapse must leave every configured limit running and editable. The failure it prevents is a billing event silently deleting something a person relied on.
+
+23. **A lock is the `disabled` attribute.** CSS may show a lock; it may not be one. `pointer-events: none` leaves Tab and Space working, and in a segmented control arrow keys activate as well as move.
+
+24. **Retention is a deletion control and must stay free.** Gate the reporting window instead — `FREE_REPORT_DAYS` bounds what is drawn, never what is kept.
+
+25. **Nothing outside the service worker may import `plus/gate.ts`.** It is the only module that can reach a network, and that is what makes the privacy claim checkable rather than promised.
+
+26. **A test that runs without `chrome` asserts `t()`'s fallback unless you give it a catalogue.** `core/i18n.ts` returns the key when there is no `chrome.i18n`, by design, so an assertion against a translated string passes against `coreChartEverythingElse` just as happily as against "Everything else". `tests/chart.test.mjs` stubs the API over the real `i18n/core.json`. Any new test that asserts user-facing text needs the same, or it is pinning nothing.
+
 ## Suggested next-AI starting checklist
 
 Before changing anything:
@@ -731,6 +964,17 @@ npm run smoke -- --shots
 
 Earlier Git commands reported that this workspace is not a Git repository (`fatal: not a git repository`). Do not claim a commit or clean working tree unless Git is initialized later and verified. No commit was created during this work.
 
+## Before shipping the paid tier
+
+Three things are outside what code can do and none of them is optional:
+
+1. **Keep the `byte-budget` ExtensionPay configuration aligned with the UI.** Its public
+   plan endpoint currently reports CA$0.99/month and CA$7.99/year (CAD). `EXTENSION_ID`
+   in `plus/provider.ts` names it. The prices in `plus/plans.ts` are display strings only,
+   so check the code and provider dashboard together before every price change.
+2. **Declare the paid tier in the Chrome Web Store listing**, host `PRIVACY_POLICY.md` at a stable direct URL, and put that URL in the Store Privacy practices field. The manifest intentionally has no product homepage.
+3. **Give reviewers a trial or test subscription** and the steps in `STORE_LISTING.md`; the automated browser suite tests gates and UI, not a real charge.
+
 ## Final state in one sentence
 
-Byte Budget has a focused report-only Dashboard, a dedicated Settings page whose Advanced section communicates High/Medium/Low impact honestly and holds together at a phone width — and, since the measurement review, a tracking pipeline that no longer loses streamed requests when the worker sleeps, no longer charges them to the wrong page load, and no longer keeps a hostname-keyed model alive after the user has deleted it.
+Byte Budget has a focused report-only Dashboard, a dedicated Settings page whose Advanced section communicates High/Medium/Low impact honestly and holds together at a phone width; a tracking pipeline that no longer loses streamed requests when the worker sleeps, no longer charges them to the wrong page load, and no longer keeps a hostname-keyed model alive after the user has deleted it — and, since the first-run pass, a first morning that says what it does not know yet instead of stating it confidently, and tells you where to find the button everything else is behind.

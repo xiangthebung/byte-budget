@@ -409,16 +409,64 @@ are recorded on cache hits too, which is where most of a repeat visit's images c
 from, so the file fills in from ordinary browsing rather than only from the loads a
 control was spent on.
 
+## Free and Plus
+
+Byte Budget has a paid tier, and the line between the two is drawn on one principle:
+**measurement is free, and so is every disclosure that makes it trustworthy.** The
+accuracy percentage, the measured-versus-modelled split on Data Saved, the projection's
+basis, the profile-scope admission and the privacy statement are free forever, because a
+figure a reader cannot audit is not a preview of a better figure — it is a worse one, and
+this project's whole argument is that it does not ship those.
+
+What Plus holds back is depth, which also makes it the simplifier a first install wants:
+
+| Free | Plus |
+| --- | --- |
+| All measurement, all four period tabs bar one, the whole popup, the plan cycle and the projection at full accuracy | — |
+| Data Saver on/off, Light/Balanced/Maximum, site exceptions | The eight individual switches, the six image services, the holdout rate |
+| The plan-wide limit, plus 3 site limits, daily | Unlimited site limits, and weekly/monthly/per-session windows |
+| Alerts, theme, toolbar badge, retention, delete, storage report | Units, and the calendar-versus-rolling week and month rules |
+| The last 7 days of reporting and export | Everything on disk — up to 400 days — reported and exported |
+| The dashboard, the drill-down, the charts, both Data Saved figures | The third-party host table, and the per-site with/without comparison |
+
+Two of those are worth spelling out because they are the ones easiest to get wrong.
+
+**Retention is not the paid setting; the reporting window is.** The ledger keeps 400 days
+for everyone. A free install draws and exports the last seven of them and the rest sit on
+disk untouched, so subscribing reveals history that was already there and lapsing deletes
+nothing. Gating retention instead would mean a billing event destroying data, which is not
+a trade anyone agreed to.
+
+**The plan cycle is exempt from the seven-day window.** The popup headline, the plan meter
+and the projection read the whole cycle — up to 31 days — on the free tier. Clipping them
+would not make the free tier smaller, it would make it wrong, and "will I make it to the
+reset date" is the question the product exists to answer.
+
+Nothing already configured is ever disabled by a lapse. The ceilings are on what can be
+*added or changed*: eight limits set while subscribed keep running and stay editable, and
+the ninth is what is refused.
+
+Payments go through [ExtensionPay](https://extensionpay.com); `src/plus/` is all of the
+code involved, and `PRIVACY_POLICY.md` describes the account key, reply and retention.
+
 ## What it stores, and where
 
-Everything stays in the browser profile. There is no account, no endpoint, and no
-network request of the extension's own — `default-src 'self'` in the manifest
-enforces that rather than promising it. It has to start at `default-src`: this was
-written at first as `connect-src 'self'` alone, which covers `fetch` and leaves
-`new Image().src`, a stylesheet, a font, a frame and a form submission free to
-reach any host on the internet. The policy also pins `form-action 'none'` and
-`base-uri 'none'`, neither of which inherits from `default-src` and both of which
-are exfiltration routes that need no script at all.
+Everything measured stays in the browser profile, and none of it is ever sent
+anywhere. `default-src 'self'` in the manifest enforces that rather than promising
+it. It has to start at `default-src`: this was written at first as `connect-src
+'self'` alone, which covers `fetch` and leaves `new Image().src`, a stylesheet, a
+font, a frame and a form submission free to reach any host on the internet. The
+policy also pins `form-action 'none'` and `base-uri 'none'`, neither of which
+inherits from `default-src` and both of which are exfiltration routes that need no
+script at all.
+
+There is one hole in that policy and it is deliberate: `connect-src` also allows
+`https://extensionpay.com`, for the paid tier (see "Free and Plus"). A never-connected
+free install makes no request. Starting a trial, subscribing or restoring creates an
+opaque provider key stored locally; later checks send that key and no measured usage,
+site name, limit or setting. The provider can return account fields, including an email;
+`plus/provider.ts` reduces the reply immediately and persists only the paid state,
+dates and plan interval. One origin is reachable, and it is named.
 
 | Store | Holds | Kept for |
 | --- | --- | --- |
@@ -628,11 +676,12 @@ one side of the comparison, the report claims no page-load delta at all.
 The script refuses to run against a `dist/` older than `src/`. Results from a stale
 build are worse than no results, and they do not announce themselves.
 
-It needs Playwright, installed out of tree so it stays out of the extension's
-dependencies:
+It uses the pinned Playwright development dependency. Install the package dependencies
+and the matching Chromium build once:
 
 ```sh
-npm install --no-save playwright
+npm install
+npx playwright install chromium
 ```
 
 Add `--shots` to write ten screenshots into `outputs/`: the popup empty and over a

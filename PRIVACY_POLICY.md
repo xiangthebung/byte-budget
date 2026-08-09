@@ -5,8 +5,15 @@ Last updated: 8 August 2026
 ## The short version
 
 Byte Budget measures how much data each website costs you. Everything it measures
-stays in your browser profile. Nothing is uploaded, and the extension makes no
-network requests of its own.
+stays in your browser profile, and none of it is ever uploaded.
+
+If you start a trial, subscribe, or restore a subscription, the extension checks
+that account with extensionpay.com. It sends an opaque account key and never sends a
+usage figure, site name, limit, or setting. ExtensionPay can return account and
+subscription fields; Byte Budget keeps only the paid state, relevant dates and plan
+interval, and discards fields it does not use. A free install that has never opened
+one of those account flows has no key and makes no subscription request. Details are
+under "The subscription check" below.
 
 ## What these numbers cover
 
@@ -72,7 +79,9 @@ any time, and export it all as CSV or JSON first.
   the `Content-Length` request header, never from the body itself.
 - No URLs beyond the site and origin described above.
 - No cookies, credentials, or authentication tokens.
-- No identifiers of you, your device, or your browser.
+- No identifier is attached to the browsing measurements. If you use a Plus account,
+  the extension separately stores an opaque ExtensionPay account key and its reduced
+  subscription status as described below.
 
 ## One thing worth stating plainly about optimizing
 
@@ -120,14 +129,54 @@ it is about to show one, so with alerts off it never asks.
 
 ## What leaves your device
 
-Nothing of yours. The extension has no server, no analytics, and no third-party
-components. Its content security policy starts at `default-src 'self'`, so every
-way an extension page could reach the network — a script, a stylesheet, a font, an
-image, a frame, a `fetch` — resolves to the extension's own package and nothing
-else, and forms have nowhere to submit to. Chrome enforces that; it is not a
-promise about our own code. (Earlier versions of this file cited `connect-src
-'self'` alone. That covers `fetch` and would have left an `<img>` free to reach any
-host on the internet, which is a weaker claim than the one being made here.)
+None of the measured usage, site names, limits, exceptions, or learned request sizes
+leaves your device. The extension has no analytics. Its content security policy
+starts at `default-src 'self'`, so every way an extension page could reach the network
+— a script, a stylesheet, a font, an image, a frame, a `fetch` — resolves to the
+extension's own package and nothing else, and forms have nowhere to submit to. The one
+exception is written into the policy and is visible in the manifest: `connect-src`
+also allows `https://extensionpay.com`, which is the subscription check and nothing
+more. Chrome enforces all of that; it is not a promise about our own code. (Earlier
+versions of this file cited `connect-src 'self'` alone. That covers `fetch` and would
+have left an `<img>` free to reach any host on the internet, which is a weaker claim
+than the one being made here.)
+
+## The subscription check
+
+Byte Budget has a paid tier. Everything that measures, reports and limits your usage
+is in the free tier and stays there; what is paid for is a set of settings and a longer
+reporting window.
+
+**Before an account flow.** A free install that has never started a trial, subscribed,
+or restored a subscription has no provider key. Checking its tier is answered locally
+and makes no request.
+
+**What is sent.** Starting one of those account flows creates an opaque account key,
+stores it in `chrome.storage.local`, and sends it to `https://extensionpay.com` when
+checking the account. No usage figure, site name, hostname, limit, preference, or part
+of the measurement database is sent. The key is not stored in Chrome Sync.
+
+**What comes back.** ExtensionPay's account response may contain an email address,
+payment and trial dates, a plan, and subscription status. Byte Budget reduces that
+response immediately to whether Plus is active, the reason, the relevant dates, and
+the plan interval. That reduced status is stored locally. The email and the rest of
+the provider response are not stored by Byte Budget and are not synced.
+
+**How often.** Once a provider key exists, the check runs about four times a day while
+the browser is running, plus immediately after a payment or a trial starts. The answer
+is cached, so being offline does not lock anything: a check that cannot be made leaves
+the previous answer in place rather than downgrading it.
+
+**Payment.** Handled on [ExtensionPay](https://extensionpay.com), which uses Stripe.
+If you subscribe, you give them an email address and payment details on their pages.
+Card details never enter this extension. As described above, the account response can
+include the account email; Byte Budget discards it and stores only its reduced status.
+ExtensionPay's and Stripe's handling of the account and payment data is governed by
+their policies.
+
+**Turning it off.** There is no switch once an account has been connected. The check
+is what keeps a trial or subscription current; disabling it would silently disable the
+feature it is attached to. A never-connected free install makes no check.
 
 Your **preferences** — theme, badge, how long counts are kept, whether per-host
 detail is recorded, your plan size, your reset day, and which alerts you want — are
@@ -145,6 +194,23 @@ reason and no other: it is keyed by the sites you capped. The cost of that is re
 worth stating rather than discovering: a limit you set on your laptop does not appear
 on your desktop. Your measurements — byte counts, per-host counts, page loads — never
 leave the device by either route.
+
+## Chrome Web Store Limited Use
+
+Byte Budget's use of information received from Chrome APIs complies with the Chrome
+Web Store User Data Policy, including its Limited Use requirements.
+
+- Request metadata and browsing measurements are handled only because they are
+  strictly necessary to provide Byte Budget's disclosed single purpose: measuring and
+  reducing the network data used by Chrome browsing.
+- That data is not sold, used for advertising, used for credit or lending decisions,
+  or transferred for purposes unrelated to that single purpose.
+- The developer cannot read the locally stored browsing data. A human sees it only if
+  you deliberately send an export for support, or where access is required for security
+  or legal compliance.
+- Browsing measurements and site lists are not transferred to ExtensionPay, Stripe or
+  any other third party. The subscription exchange described below is limited to its
+  opaque account key and the account fields needed to determine Plus access.
 
 ## Why the permissions are needed
 
@@ -192,19 +258,9 @@ from anyone.
 ## Where this lives
 
 This file is the policy of record, but a policy only a developer can read is not a
-policy. The Chrome Web Store requires one reachable at a stable public URL that
-survives version changes, and the same URL belongs in the store listing's privacy
-field and in the extension's `homepage_url` so the product itself links to it.
-
-Not yet done, and the one thing a person has to do by hand before submitting: the
-manifest still carries the placeholder `https://REPLACE-ME.example/byte-budget`.
-Publish this document at a real URL, put that URL in the store listing, and replace
-the placeholder with it.
-
-Checked again at the date above, and still the only such item. Nothing in the build
-catches it — `scripts/package.mjs` verifies the version and the channel's permissions
-and does not look at `homepage_url` — so it is written down here instead, where the
-person doing the submission will be reading anyway.
+policy. Before submission, publish it at a stable public URL and put that direct URL in
+the Chrome Web Store Privacy practices field. The extension intentionally declares no
+`homepage_url`; a product homepage is not required for the policy link to work.
 
 ## Changes
 

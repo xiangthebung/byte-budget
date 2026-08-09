@@ -12,8 +12,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   defaultOptimizeSettings,
+  featuresForLevel,
+  levelOf,
   FEATURES,
   FEATURE_IDS,
+  SAVER_LEVELS,
+  SAVER_LEVEL_FEATURES,
   activePageFeatures,
   anyPageFeature,
   optimizes,
@@ -258,4 +262,75 @@ test("an excluded site is never used as a control", () => {
   const decision = decideHoldout(site, on({ exclusions: [site] }), new Date(), always);
   assert.equal(decision.hold, false);
   assert.equal(decision.reason, "excluded");
+});
+
+/* ------------------------------------------------------------------ *
+ * The preset levels
+ *
+ * The settings page offers Light, Balanced and Maximum in place of eight checkboxes,
+ * and the checkboxes are still there under Advanced. That only holds together if the
+ * three levels are a ladder and if the page can tell which rung a stored feature set
+ * is standing on — neither of which any one definition in `features.ts` states, because
+ * all three are derived from fields on `FEATURES`.
+ * ------------------------------------------------------------------ */
+
+test("the levels are a ladder: each switches on everything the one below does", () => {
+  const [light, balanced, maximum] = SAVER_LEVELS.map(
+    (level) => new Set(SAVER_LEVEL_FEATURES[level]),
+  );
+
+  for (const id of light) {
+    assert.ok(balanced.has(id), `Balanced drops ${id}, which Light switches on`);
+  }
+  for (const id of balanced) {
+    assert.ok(maximum.has(id), `Maximum drops ${id}, which Balanced switches on`);
+  }
+  // Not just nested — actually distinct, or the picker offers three names for two
+  // things and choosing between them changes nothing.
+  assert.ok(light.size < balanced.size, "Light and Balanced are the same set");
+  assert.ok(balanced.size < maximum.size, "Balanced and Maximum are the same set");
+  assert.equal(maximum.size, FEATURE_IDS.length, "Maximum is not all of them");
+});
+
+test("Light is exactly the changes that are invisible on the page", () => {
+  // The level's promise is the group heading's promise, so they cannot be two lists.
+  assert.deepEqual(
+    [...SAVER_LEVEL_FEATURES.light].sort(),
+    FEATURES.filter((feature) => feature.visibility === "invisible")
+      .map((feature) => feature.id)
+      .sort(),
+  );
+});
+
+test("a fresh install reads as Balanced rather than as Custom", () => {
+  // If this drifts, every install that has never opened Advanced shows "Custom" and is
+  // warned that choosing a level will replace a selection it never made.
+  assert.equal(levelOf(defaultOptimizeSettings().features), "balanced");
+});
+
+test("every level round-trips through the features it sets", () => {
+  for (const level of SAVER_LEVELS) {
+    assert.equal(levelOf(featuresForLevel(level)), level);
+  }
+});
+
+test("a set matching no level is Custom, and is not rounded to the nearest one", () => {
+  const features = featuresForLevel("balanced");
+  const [first] = SAVER_LEVEL_FEATURES.balanced;
+  features[first] = false;
+  assert.equal(levelOf(features), null);
+  // The point of returning null: nothing here repairs the set. Someone who switched one
+  // thing off under Advanced still has it switched off.
+  assert.equal(features[first], false);
+});
+
+test("choosing a level switches features off as well as on", () => {
+  const features = featuresForLevel("light");
+  for (const id of FEATURE_IDS) {
+    assert.equal(
+      features[id],
+      SAVER_LEVEL_FEATURES.light.includes(id),
+      `${id} is not what Light says it is`,
+    );
+  }
 });

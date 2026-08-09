@@ -55,7 +55,8 @@
             It is the one modelled figure on the overview payload, and `forecast.ts`
             makes `basis` a required field precisely so it cannot reach a screen
             without saying what rate it assumed and over what window. It sits here
-            rather than inside the card because a `.stat-hint` is one ellipsised line.
+            rather than inside the card because it is three clauses long, and a 265px
+            tile is not where a sentence that names a rate and a window belongs.
           -->
           <p class="basis-note" id="projection-basis" hidden></p>
         </section>
@@ -172,6 +173,8 @@
             </div>
             <div class="detail-block">
               <h3 class="detail-heading" data-i18n="dashboardDetailHostsHeading"></h3>
+              <!-- Filled by `renderLocks()` on a free install; empty otherwise. -->
+              <div class="plus-lock-slot" id="detail-hosts-lock"></div>
               <table class="table" id="detail-hosts">
                 <thead>
                   <tr>
@@ -231,7 +234,7 @@
               ></button>
               <a
                 class="panel-link"
-                href="./settings.html#optimize-panel"
+                href="./settings.html#saver"
                 data-i18n="dashboardManageSaverLink"
               ></a>
             </div>
@@ -244,8 +247,17 @@
           <div class="stats" id="savings-stats"></div>
           <p class="field-hint" id="savings-hint"></p>
 
-          <div class="savings-compare">
+          <!--
+            Stands in for everything below it while Data Saver has never run. The
+            methodology under this panel is worth its length once there are numbers to
+            defend; in front of a fresh install it is four paragraphs of statistics
+            about nothing, and it was the tallest thing on an empty dashboard.
+          -->
+          <p class="empty" id="savings-idle" hidden></p>
+
+          <div class="savings-compare" id="savings-compare">
             <h3 class="detail-heading" data-i18n="dashboardSavingsCompareHeading"></h3>
+            <div class="plus-lock-slot" id="savings-compare-lock"></div>
             <p class="field-hint" id="savings-compare-note"></p>
             <div class="table-scroll">
               <table class="table" id="savings-table">
@@ -268,7 +280,7 @@
             <p class="empty" id="savings-empty" hidden></p>
           </div>
 
-          <details class="inline-details savings-details">
+          <details class="inline-details savings-details" id="savings-details">
             <summary data-i18n="dashboardSavingsDetailsSummary"></summary>
             <p class="field-hint" id="savings-explainer"></p>
           </details>
@@ -288,7 +300,7 @@
               <h2 class="panel-title" id="storage-title" data-i18n="dashboardStorageTitle"></h2>
               <a
                 class="panel-link"
-                href="./settings.html#data-panel"
+                href="./settings.html#privacy"
                 data-i18n="dashboardStorageLink"
               ></a>
             </div>

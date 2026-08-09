@@ -2,6 +2,19 @@
 
 html {
   scroll-behavior: smooth;
+  /*
+   * The gutter is reserved whether or not there is a scrollbar in it.
+   *
+   * The dashboard is always taller than the viewport and Settings usually is not, so
+   * without this the classic scrollbar appears on one and vanishes on the other — and
+   * every centred thing on the page moves several pixels sideways at the moment
+   * someone switches surfaces. It costs a strip of empty gutter on the short page,
+   * which is the cheaper of the two.
+   *
+   * Not in `app.css`: that one is also the popup's, and a 400px-wide popup cannot
+   * spare the width for a gutter it is not using.
+   */
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -29,10 +42,11 @@ body {
   padding: 28px 24px 64px;
 }
 
-.settings-page {
-  max-width: 980px;
-}
-
+/*
+ * Shared with the first-run screen, which is built on this stylesheet and lays its
+ * two questions out the same way. The options page has its own layout in
+ * `settings.css` and no longer uses it.
+ */
 .settings-stack {
   display: grid;
   gap: 16px;
@@ -53,12 +67,17 @@ body {
  * Nothing laid out by the page grid may be sized by its own contents.
  *
  * A grid item's automatic minimum size is its min-content size, and min-content
- * propagates up through ancestors: the six-column limits table gave
- * `#limits-panel` a min-content width of 760px, so at a 390px phone viewport the
- * whole Settings document was 772px wide and scrolled sideways, with the row
- * actions off screen. The `.table-scroll` wrapper never got a chance to scroll,
- * because the overflow had already been pushed onto the page. Measured, not
- * assumed: see the narrow-viewport checks in `scripts/smoke.mjs`.
+ * propagates up through ancestors: the six-column limits table Settings used to
+ * carry gave its panel a min-content width of 760px, so at a 390px phone viewport
+ * the whole document was 772px wide and scrolled sideways, with the row actions off
+ * screen. The `.table-scroll` wrapper never got a chance to scroll, because the
+ * overflow had already been pushed onto the page.
+ *
+ * That table is a list of cards now and Settings has its own layout, so the
+ * measurement that produced this rule no longer has anywhere to come from — which is
+ * exactly why it stays. The dashboard still has three tables and a chart, the
+ * invariant holds at every width, and the narrow-viewport checks in
+ * `scripts/smoke.mjs` are what would notice it going.
  */
 .page > *,
 .page-main > *,
@@ -66,8 +85,7 @@ body {
   min-width: 0;
 }
 
-section[id],
-#preferences-panel {
+section[id] {
   scroll-margin-top: 76px;
 }
 
@@ -234,26 +252,30 @@ section[id],
   color: var(--text-soft);
 }
 
+/*
+ * Wraps. It used to be one line, clipped with an ellipsis.
+ *
+ * That was fine for "0 sites" and became nonsense the moment a tile carried a
+ * sentence: the two on the Data Saver panel read "Original sizes on file, minus what
+ * the sma…" and "The size model's guess for requests refus…". Both of those sentences
+ * are the product saying which of its numbers is measured and which is modelled, so
+ * the half of them that fits is the half that says nothing.
+ *
+ * Nothing is lost by wrapping. The tiles are grid items and stretch to the tallest of
+ * the row, so a two-line hint makes a taller row rather than a ragged one.
+ */
 .stat-hint {
-  overflow: hidden;
   margin-top: 3px;
-  font-size: 11px;
   color: var(--text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .stat-hint[data-tone="over"] {
   color: var(--danger);
 }
 
-/*
- * Wraps, where `.stat-hint` is a single ellipsised line.
- *
- * "18% less than the previous 30 days" is a whole clause and does not survive being
- * cut at the card's width — and a comparison that reads "18% less than the previou…"
- * is worse than no comparison.
- */
+/* Set apart from the hint above it by a rule, for a whole clause rather than a gloss. */
 .stat-note {
   margin-top: 5px;
   padding-top: 5px;
@@ -342,16 +364,58 @@ section[id],
   border-color: var(--border-strong);
 }
 
-.columns,
-.bottom-grid {
+/*
+ * Same reasoning as the disabled buttons in `app.css`: a field states its own
+ * availability rather than borrowing an ancestor's opacity, so it still reads correctly
+ * wherever it is used.
+ *
+ * `:hover` is reset because the rule above would otherwise brighten the border of a
+ * field that cannot be typed in.
+ */
+.search-input:disabled,
+.select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.search-input:disabled:hover,
+.select:disabled:hover {
+  border-color: var(--border);
+}
+
+/*
+ * A `<select>` option this tier does not include.
+ *
+ * Its label already carries the reason — `settingsExportRangeDaysLocked` reads
+ * "Last 90 days — Plus" — because an option has no tooltip anyone will find and no room
+ * for a glyph. This only makes it look like what it says. Chrome renders a disabled
+ * option greyed already; the explicit colour is here so the two agree in dark mode,
+ * where the default grey is nearly the background.
+ */
+.select option:disabled {
+  color: var(--text-muted);
+}
+
+.columns {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
   gap: 14px;
 }
 
+/*
+ * Two equal columns, each as tall as its own contents.
+ *
+ * It was `stretch`, which is the grid default and was also written out twice — a
+ * second `.bottom-grid` block overrode the first, so the 1.55fr above never applied
+ * here. Stretching made the shorter of the two panels a bordered card with a
+ * paragraph at the top and two hundred pixels of nothing under it, which reads as a
+ * panel that failed to load rather than as a panel with less to say.
+ */
 .bottom-grid {
+  display: grid;
+  align-items: start;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: stretch;
+  gap: 14px;
 }
 
 .dashboard-chart .chart {
@@ -436,16 +500,34 @@ section[id],
 
 /* Progressive disclosure */
 
+/*
+ * Sentences are 12px. A gloss under a control stays 11.
+ *
+ * That is the whole rule, and it is here rather than on `.field-hint` because that
+ * class carries both: "0 sites" under a figure, and three paragraphs on how usage is
+ * measured. At 11px a paragraph is a 460px ribbon of small grey text beside 1112px
+ * panels — the size the product uses for an aside, applied to the thing it most wants
+ * read. The selectors below are the places that hold whole sentences.
+ *
+ * The measure is in `ch`, so it widens with the type and the line length does not.
+ */
+.method-details,
+.inline-details,
+.basis-note,
+#savings-compare-note,
+#savings-empty {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .method-details,
 .inline-details {
   color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.55;
 }
 
 .method-details {
   justify-self: start;
-  max-width: 78ch;
+  max-width: 82ch;
   padding: 0 2px;
 }
 
@@ -463,7 +545,7 @@ section[id],
 }
 
 .method-details p {
-  margin-top: 7px;
+  margin-top: 9px;
 }
 
 .inline-details {
@@ -473,7 +555,7 @@ section[id],
 }
 
 .inline-details > p {
-  max-width: 78ch;
+  max-width: 82ch;
   margin-top: 8px;
 }
 
@@ -698,7 +780,15 @@ section[id],
   font-variant-numeric: tabular-nums;
 }
 
-.table tbody tr:last-child td {
+/*
+ * `> *`, not `td`.
+ *
+ * The storage table's row labels are `<th scope="row">`, so clearing the rule on `td`
+ * alone left the last row with a border under its label cell and none under its
+ * figure — a hairline that starts at the left edge of the table and stops halfway
+ * across, under "Disk in use", looking like a border that failed to paint.
+ */
+.table tbody tr:last-child > * {
   border-bottom: 0;
 }
 
@@ -750,37 +840,12 @@ section[id],
   color: var(--text-soft);
 }
 
-.friendly-empty {
-  padding: 12px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-}
-
 /* Limits */
 
-.limit-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 10px;
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.limit-field,
 .field {
   display: grid;
   align-content: start;
   gap: 6px;
-}
-
-.limit-field .search-input {
-  width: 180px;
-}
-
-.limit-form .primary-button {
-  min-height: 34px;
 }
 
 .field-label {
@@ -789,8 +854,7 @@ section[id],
   color: var(--text-soft);
 }
 
-.field-hint,
-.defaults-note {
+.field-hint {
   font-size: 11px;
   line-height: 1.5;
   color: var(--text-muted);
@@ -869,21 +933,6 @@ section[id],
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
-}
-
-.feature-icon {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border-radius: 13px;
-  background: var(--saved-soft);
-  color: var(--saved);
-}
-
-.feature-icon svg {
-  width: 23px;
-  height: 23px;
 }
 
 .setting-hero-copy {
@@ -980,218 +1029,6 @@ section[id],
   color: var(--text-soft);
 }
 
-.optimize-body {
-  margin-top: 14px;
-  padding-top: 13px;
-  border-top: 1px solid var(--border);
-}
-
-.optimize-body .inline-details {
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.advanced-settings > summary {
-  font-size: 12px;
-}
-
-.advanced-intro {
-  margin-top: 9px;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.advanced-options {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.advanced-option {
-  display: grid;
-  grid-template-columns: auto 30px minmax(0, 1fr);
-  align-items: center;
-  gap: 9px;
-  padding: 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  cursor: pointer;
-}
-
-.advanced-option:hover {
-  border-color: var(--border-strong);
-}
-
-.advanced-option input {
-  margin: 0;
-  accent-color: var(--saved);
-}
-
-.advanced-symbol {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--saved-soft);
-  color: var(--saved);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.advanced-symbol-text {
-  font-weight: 750;
-  letter-spacing: -0.04em;
-}
-
-.advanced-copy {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.advanced-heading {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.advanced-title {
-  min-width: 0;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--text);
-}
-
-.advanced-hint {
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--text-muted);
-}
-
-.impact-meter {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-}
-
-.impact-bars {
-  display: inline-grid;
-  grid-template-columns: repeat(3, 9px);
-  gap: 2px;
-}
-
-.impact-segment {
-  display: block;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--bar-track);
-}
-
-.impact-segment[data-filled="true"] {
-  background: var(--saved);
-}
-
-.impact-label {
-  min-width: 41px;
-  color: var(--text-muted);
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  /* The label is the last item in the meter's flex row, and its 41px column is wider
-     than the word in it; `end` keeps it against the outer edge as the row swaps. */
-  text-align: end;
-  text-transform: uppercase;
-}
-
-.exception-settings {
-  margin-top: 15px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border);
-}
-
-.exception-head {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-}
-
-.exception-settings > p {
-  margin-top: 3px;
-  color: var(--text-muted);
-  font-size: 11px;
-}
-
-.exclusion-form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  margin-top: 10px;
-}
-
-.chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 9px;
-}
-
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  /* Asymmetric: the hostname needs a full inset, the 24px remove button after it
-     brings its own. Both follow the text, so both are inline values. */
-  padding-block: 2px;
-  padding-inline: 10px 3px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface-2);
-  font-size: 12px;
-  /*
-   * A domain has no spaces, so a long one is a single unbreakable word: 57
-   * characters of hostname was still enough to push the whole page 17px wider
-   * than a 390px viewport after the layout fixes below. `anywhere` rather than
-   * `break-word` because only `anywhere` also reduces the chip's min-content
-   * width, which is what the page grid is measured against. It changes nothing
-   * where the chip already fits.
-   */
-  overflow-wrap: anywhere;
-}
-
-/*
- * 24px square, not 18.
- *
- * These sit in a wrapping flex with a 6px gap, so the SC 2.5.8 spacing exception —
- * which needs a 24px-diameter circle around the target that no other target enters —
- * is unavailable to them. Padding cannot supply it either, because the chip clips to
- * its own border radius. And this button is the only way to undo an exclusion.
- */
-.chip button {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-muted);
-  line-height: 1;
-}
-
-.chip button:hover {
-  background: var(--surface-3);
-  color: var(--text);
-}
-
 .save-status {
   min-height: 15px;
   color: var(--text-muted);
@@ -1199,27 +1036,30 @@ section[id],
   font-variant-numeric: tabular-nums;
 }
 
-#optimize-note {
-  margin-top: 10px;
-  color: var(--saved);
-  font-weight: 650;
-}
-
-#optimize-note[data-active="false"] {
-  color: var(--text-muted);
-}
-
 /*
- * Two tiles side by side, not one pinned column with 760px of nothing beside it.
- * They are capped rather than stretched: "Measured" and "Estimated" are a pair to be
- * compared, and a pair reads worse the further apart it is set.
+ * Two halves, not two tiles capped at 240px with 600px of nothing beside them.
+ *
+ * The cap was there to stop a single tile stretching the width of the panel, which
+ * `auto-fit` would have done. There are exactly two of these and there always will be
+ * — a measurement and a model, which README.md:133-141 says must never be added
+ * together — so naming the count says what the cap was reaching for and leaves no
+ * void: the pair is still adjacent, and each half now fits the sentence under it.
  */
 #savings-panel .stats {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 240px));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 #savings-hint {
   margin-top: 10px;
+}
+
+/*
+ * `.empty` carries a 2px inset for the lists it was written for. Here it stands in
+ * for the comparison table, directly under a note that has none, and two lines of
+ * muted text at two different insets read as two different kinds of thing.
+ */
+#savings-empty {
+  padding-inline: 0;
 }
 
 /*
@@ -1277,32 +1117,6 @@ section[id],
   font-weight: 550;
   letter-spacing: normal;
   text-transform: none;
-}
-
-/* Settings and privacy */
-
-.simple-settings {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.field .segmented {
-  justify-self: start;
-}
-
-.defaults-note {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 13px;
 }
 
 /* Responsive */
@@ -1365,14 +1179,18 @@ section[id],
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .switch-control {
+  /*
+   * Scoped to the hero it exists for. Unscoped, it also reached the switch in every
+   * settings row, where `grid-column` and `justify-self` mean nothing to a flex item
+   * and the `auto auto` template is a claim about a layout that is not there.
+   */
+  .setting-hero .switch-control {
     grid-column: 1 / -1;
     grid-template-columns: auto auto;
     justify-self: start;
     align-items: center;
   }
 
-  .simple-settings,
   #savings-panel .stats {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1385,85 +1203,74 @@ section[id],
   .detail-controls .segmented {
     overflow-x: auto;
   }
+}
 
-  .limit-field,
-  .limit-field .search-input,
-  .limit-form .primary-button {
-    width: 100%;
-  }
+/* ------------------------------------------------------------------ *
+ * The paid-tier lock notice
+ *
+ * Here rather than in `settings.css` because both surfaces draw it: the settings page
+ * in front of four blocks of controls, the dashboard in place of two tables. One
+ * appearance, because it is one restriction — a lock that looked different on the two
+ * pages would read as two unrelated things rather than as one tier.
+ *
+ * What it does NOT do is enforce anything. `plus/lock.ts` sets `disabled`, for the
+ * reason stated there: `pointer-events: none` stops a mouse and leaves a keyboard
+ * free.
+ * ------------------------------------------------------------------ */
 
+.plus-lock {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border));
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+}
+
+.plus-lock-icon {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+}
+
+.plus-lock-icon svg {
+  width: 100%;
+  height: 100%;
+}
+
+.plus-lock-copy {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* An anchor styled as a button, so it needs the centring a `<button>` has by default. */
+.plus-lock-link {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+@media (max-width: 640px) {
   /*
-   * The limits table becomes one card per limit.
-   *
-   * Six columns cannot be made to fit a phone, and the alternative — letting
-   * `.table-scroll` scroll horizontally — puts Pause and Remove off screen with
-   * nothing on screen to suggest they are there. Each cell carries its column
-   * name in `data-label` (set in `settings.ts`) so the figures still say what
-   * they are once the header row is gone. Scoped to `#limits-table` so the
-   * dashboard's own breakdown tables keep scrolling instead.
+   * The lock notice becomes two rows rather than three columns. At 390px the icon, a
+   * two-line sentence and a "Unlock with Plus" button cannot share a line without the
+   * sentence collapsing to about twelve characters a line — and this is the one element
+   * on the page whose whole job is to be read.
    */
-  #limits-table thead {
-    display: none;
+  .plus-lock {
+    grid-template-columns: auto minmax(0, 1fr);
   }
 
-  #limits-table,
-  #limits-table tbody,
-  #limits-table tr,
-  #limits-table td {
-    display: block;
+  .plus-lock-link {
+    grid-column: 1 / -1;
+    justify-content: center;
   }
 
-  #limits-table tr {
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-  }
-
-  #limits-table tr + tr {
-    margin-top: 8px;
-  }
-
-  #limits-table td {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 3px 0;
-    border: 0;
-    text-align: start;
-  }
-
-  #limits-table td[data-label]::before {
-    flex: 0 0 auto;
-    color: var(--text-muted);
-    content: attr(data-label);
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  #limits-table td.numeric {
-    text-align: start;
-  }
-
-  #limits-table .limit-meter {
-    min-width: 0;
-    flex: 1 1 auto;
-  }
-
-  #limits-table .row-actions {
-    min-width: 0;
-    justify-content: flex-start;
-  }
-
-  /* No column to hold open, so the name wraps instead of ending in an ellipsis
-     whose `title` a touch device cannot show. */
-  #limits-table .host-name {
-    max-width: 100%;
-    font-weight: 650;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
 }

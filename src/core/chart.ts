@@ -14,6 +14,7 @@
  */
 
 import { element, hueFor, type Child } from "./dom";
+import { t } from "./i18n";
 
 export interface BarPoint {
   /** Identifies the bar to a click handler. */
@@ -179,6 +180,14 @@ export function barChart(options: BarChartOptions): HTMLElement {
  * dashboard is a thirty-item run-on that has to be heard in full before the first
  * useful fact arrives. Peak, latest and total are what the picture is read for;
  * the per-bucket numbers are below in a table that can be skipped or navigated.
+ *
+ * Every clause is a whole message rather than a word glued to a formatted figure.
+ * This is the only reading of the primary chart a screen reader gets, and a summary
+ * assembled from English fragments is text that is *correct* and read aloud in the
+ * wrong language — the failure `applyDocumentLanguage` exists to prevent. The list
+ * separator stays a literal comma: it is punctuation between whole clauses, not a
+ * word, and every catalogue that needs a different one can carry it inside the
+ * clauses themselves.
  */
 function describeSeries(
   points: readonly BarPoint[],
@@ -191,28 +200,32 @@ function describeSeries(
   const used = points.filter((point) => point.value > 0);
   const first = points[0];
   const last = points.at(-1);
-  if (used.length === 0 || !first || !last) return `${lead}No usage recorded.`;
+  if (used.length === 0 || !first || !last) return `${lead}${t("coreChartSummaryNone")}`;
 
   const total = used.reduce((sum, point) => sum + point.value, 0);
   const peak = used.reduce((best, point) => (point.value > best.value ? point : best));
   const empty = points.length - used.length;
-  const tail = overlayTotal > 0 ? `, ${format(overlayTotal)} ${overlayLabel}` : "";
+  const overlay = t("coreChartSummaryOverlay", [format(overlayTotal), overlayLabel]);
 
   // The hourly chart is down to one bucket just after midnight, where "1 columns
   // from 00:00 to 00:00, highest X at 00:00, latest X at 00:00" says one number
   // four times.
-  if (points.length === 1) return `${lead}One column, ${first.label}, ${format(total)}${tail}.`;
+  if (points.length === 1) {
+    const one = [t("coreChartSummaryOne", [first.label, format(total)])];
+    if (overlayTotal > 0) one.push(overlay);
+    return `${lead}${one.join(", ")}.`;
+  }
 
   const parts = [
-    `${points.length} columns from ${first.label} to ${last.label}`,
-    `total ${format(total)}`,
-    `highest ${format(peak.value)} at ${peak.label}`,
+    t("coreChartSummaryColumns", [String(points.length), first.label, last.label]),
+    t("coreChartSummaryTotal", format(total)),
+    t("coreChartSummaryHighest", [format(peak.value), peak.label]),
   ];
   // Usually today, and usually also the peak — saying so twice buries the one fact
   // that is not on the screen anywhere else.
-  if (peak !== last) parts.push(`latest ${format(last.value)} at ${last.label}`);
-  if (empty > 0) parts.push(`${empty} with nothing recorded`);
-  if (overlayTotal > 0) parts.push(`${format(overlayTotal)} ${overlayLabel}`);
+  if (peak !== last) parts.push(t("coreChartSummaryLatest", [format(last.value), last.label]));
+  if (empty > 0) parts.push(t("coreChartSummaryEmpty", String(empty)));
+  if (overlayTotal > 0) parts.push(overlay);
   return `${lead}${parts.join(", ")}.`;
 }
 
@@ -227,7 +240,7 @@ function chartKey(overlayLabel: string): HTMLElement {
   return element("p", { className: "chart-key", ariaHidden: true }, [
     element("span", { className: "chart-key-item" }, [
       element("span", { className: "chart-key-swatch" }),
-      "Total",
+      t("coreChartKeyTotal"),
     ]),
     element("span", { className: "chart-key-item" }, [
       element("span", { className: "chart-key-swatch", dataset: { tone: "overlay" } }),
@@ -253,7 +266,11 @@ function valueTable(
 ): HTMLElement {
   // Both series shipped today are over time. A bar chart of something else would
   // need this heading to become an option rather than a literal.
-  const headings = ["When", "Data", ...(hasOverlay ? [overlayLabel] : [])].map((text) => {
+  const headings = [
+    t("coreChartTableColumnWhen"),
+    t("coreChartTableColumnData"),
+    ...(hasOverlay ? [overlayLabel] : []),
+  ].map((text) => {
     const cell = element("th", { text });
     cell.scope = "col";
     return cell;
@@ -272,7 +289,7 @@ function valueTable(
     });
 
   return element("table", { className: "chart-table" }, [
-    element("caption", { text: caption ?? "Chart values" }),
+    element("caption", { text: caption ?? t("coreChartTableCaption") }),
     element("thead", {}, [element("tr", {}, headings)]),
     element("tbody", {}, rows),
   ]);
@@ -338,7 +355,7 @@ export function stackedBar(options: StackedBarOptions): HTMLElement {
 
   if (total <= 0) {
     return element("div", { className: "stack stack-empty" }, [
-      element("p", { className: "stack-note", text: "Nothing recorded yet." }),
+      element("p", { className: "stack-note", text: t("coreChartNothingRecorded") }),
     ]);
   }
 
@@ -357,7 +374,9 @@ export function stackedBar(options: StackedBarOptions): HTMLElement {
   }
 
   const fold: StackSegment | null =
-    folded > 0 ? { key: FOLD_KEY, label: "Everything else", value: folded, hue: FOLD_HUE } : null;
+    folded > 0
+      ? { key: FOLD_KEY, label: t("coreChartEverythingElse"), value: folded, hue: FOLD_HUE }
+      : null;
   const shown = fold ? [...kept, fold] : kept;
 
   const swatchStyle = (segment: StackSegment): Record<string, string> => ({
@@ -399,7 +418,11 @@ export function stackedBar(options: StackedBarOptions): HTMLElement {
   const summary = shown.map((segment) => `${segment.label} ${format(segment.value)}`).join(", ");
   return element(
     "div",
-    { className: "stack", role: "group", ariaLabel: `${caption ?? "Breakdown"}: ${summary}` },
+    {
+      className: "stack",
+      role: "group",
+      ariaLabel: `${caption ?? t("coreChartBreakdownLabel")}: ${summary}`,
+    },
     [track, legend],
   );
 }

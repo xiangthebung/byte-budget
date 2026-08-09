@@ -12,21 +12,26 @@
  * by `updateSessionRules` is a read-modify-write, and two of them interleaving would
  * lose rules.
  *
- * Ordering within the set is fixed, but it is about ids and nothing else: limits are
- * numbered first, and that is the whole of what `SOURCE_ORDER` does. Which rule wins
- * a request is Chrome's decision, and Chrome compares `priority` first, falling back
- * to the allow > block > redirect ordering only to break a tie *within* one priority.
- * So "a site over its budget is refused rather than rewritten" is a claim about the
- * priority numbers in `limit/rules.ts` and `optimize/rules.ts`, not about the order
+ * Ordering within the set is fixed, but it is about ids and nothing else: the guard is
+ * numbered first, then limits, and that is the whole of what `SOURCE_ORDER` does. Which
+ * rule wins a request is Chrome's decision, and Chrome compares `priority` first,
+ * falling back to the allow > block > redirect ordering only to break a tie *within* one
+ * priority. So "a site over its budget is refused rather than rewritten" is a claim about
+ * the priority numbers in `limit/rules.ts` and `optimize/rules.ts`, not about the order
  * they are composed in here — this file cannot make it true.
+ *
+ * The third source, `guard`, is one permanent `allow` rule and exists because the other
+ * two can otherwise refuse the extension's own subscription check. See `plus/rules.ts`;
+ * the reason it needs a higher priority rather than just an earlier id is the sentence
+ * above.
  */
 
 import type { ResourceType } from "../core/types";
 
-export type RuleSource = "limit" | "optimize";
+export type RuleSource = "guard" | "limit" | "optimize";
 
 /** The order sources are laid out in. Earlier sources get lower ids. */
-const SOURCE_ORDER: readonly RuleSource[] = ["limit", "optimize"];
+const SOURCE_ORDER: readonly RuleSource[] = ["guard", "limit", "optimize"];
 
 export interface RuleCondition {
   resourceTypes: ResourceType[];
@@ -51,6 +56,7 @@ export interface RuleCondition {
 }
 
 export type RuleAction =
+  | { type: "allow" }
   | { type: "block" }
   | { type: "redirect"; redirect: { regexSubstitution: string } }
   | {
@@ -117,6 +123,7 @@ async function install(): Promise<number> {
 /** How many rules each source currently contributes, for the UI and for tests. */
 export function ruleCounts(): Record<RuleSource, number> {
   return {
+    guard: bySource.get("guard")?.length ?? 0,
     limit: bySource.get("limit")?.length ?? 0,
     optimize: bySource.get("optimize")?.length ?? 0,
   };

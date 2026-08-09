@@ -25,12 +25,9 @@ const artifacts = path.join(root, 'artifacts');
 /**
  * Strings that must never reach an upload.
  *
- * `homepage_url` ships as `https://REPLACE-ME.example/byte-budget`. It was flagged
- * in wave 1, written down as a pre-submission step, and is still there — which is
- * what a pre-submission step that lives only in a document does. `.example` is a
- * reserved TLD that can never resolve, so anything under it is a placeholder by
- * definition; both patterns are checked because filling in the name and leaving the
- * domain is the likelier half-fix.
+ * Checked generically rather than field by field so a future support URL, OAuth id or
+ * other fill-me-in value cannot quietly reach the Store. `.example` is a reserved TLD
+ * that can never resolve, so anything under it is a placeholder by definition.
  */
 const PLACEHOLDER_PATTERNS = [/REPLACE[-_ ]?ME/i, /\.example(?![a-z0-9-])/i];
 
@@ -99,9 +96,8 @@ function verifyManifestReferences(manifest, present) {
 /**
  * Refuse to package a manifest that still carries a fill-me-in value.
  *
- * Reports the field path, because "REPLACE-ME is still in the manifest" sends the
- * reader looking and `homepage_url` does not. Walks every string rather than
- * checking `homepage_url` by name: the next placeholder will be somewhere else.
+ * Reports the field path because a bare "REPLACE-ME is still in the manifest" sends
+ * the reader looking. Every string is walked so the next placeholder is caught too.
  */
 function verifyNoPlaceholders(manifest) {
   const found = [];

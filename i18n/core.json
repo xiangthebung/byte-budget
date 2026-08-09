@@ -16,12 +16,138 @@
     "description": "How often a limit's allowance refills. Appears after a byte figure, e.g. '2 GB per week'."
   },
   "coreBudgetShapeHard": {
-    "message": "Nothing until it runs out",
+    "message": "Stops at the limit",
     "description": "One of two choices for what a limit does as it fills. This one changes nothing until the allowance is spent, then refuses every subresource. It is what most people mean by 'a cap'."
   },
   "coreBudgetShapeProgressive": {
-    "message": "Shed weight as it fills",
+    "message": "Cuts back gradually",
     "description": "One of two choices for what a limit does as it fills. This one refuses video first, then images and fonts, then everything, so the site stays usable for longer."
+  },
+  "coreChartBreakdownLabel": {
+    "message": "Breakdown",
+    "description": "Fallback accessible name for the stacked share bar when its caller passes no caption. Every caller ships one today, so this is the name of last resort rather than a string normally on screen."
+  },
+  "coreChartEverythingElse": {
+    "message": "Everything else",
+    "description": "Legend label for the segment the stacked share bar folds every small category into. Visible on both the popup and the dashboard, next to a byte figure."
+  },
+  "coreChartKeyTotal": {
+    "message": "Total",
+    "description": "Legend label for the full height of a bar, in the two-tone key under a chart that also draws a second band for the part that was prevented."
+  },
+  "coreChartNothingRecorded": {
+    "message": "Nothing recorded yet.",
+    "description": "Shown in place of the stacked share bar when every category is zero."
+  },
+  "coreChartSummaryColumns": {
+    "message": "$COUNT$ columns from $FIRST$ to $LAST$",
+    "description": "First clause of a chart's spoken summary, naming its extent. Joined to the clauses after it with a comma and ended with a full stop by the caller, so it carries no punctuation of its own.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "30"
+      },
+      "first": {
+        "content": "$2",
+        "example": "12 July"
+      },
+      "last": {
+        "content": "$3",
+        "example": "8 August"
+      }
+    }
+  },
+  "coreChartSummaryEmpty": {
+    "message": "$COUNT$ with nothing recorded",
+    "description": "Clause of a chart's spoken summary, giving the number of buckets with no usage in them. Those buckets are left out of the value table, so this sentence is the only place their count is stated.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "22"
+      }
+    }
+  },
+  "coreChartSummaryHighest": {
+    "message": "highest $VALUE$ at $LABEL$",
+    "description": "Clause of a chart's spoken summary, naming the tallest bar and when it was.",
+    "placeholders": {
+      "value": {
+        "content": "$1",
+        "example": "1.3 MB"
+      },
+      "label": {
+        "content": "$2",
+        "example": "8 August"
+      }
+    }
+  },
+  "coreChartSummaryLatest": {
+    "message": "latest $VALUE$ at $LABEL$",
+    "description": "Clause of a chart's spoken summary, naming the newest bar. Omitted when the newest bar is also the tallest, which is the usual case.",
+    "placeholders": {
+      "value": {
+        "content": "$1",
+        "example": "402 kB"
+      },
+      "label": {
+        "content": "$2",
+        "example": "8 August"
+      }
+    }
+  },
+  "coreChartSummaryNone": {
+    "message": "No usage recorded.",
+    "description": "Whole spoken summary of a chart whose every bar is zero. Ends with a full stop because it replaces the assembled clauses rather than joining them."
+  },
+  "coreChartSummaryOne": {
+    "message": "One column, $LABEL$, $VALUE$",
+    "description": "Whole spoken summary of a chart with a single bucket — the hourly chart just after midnight, where the general form would state the same figure four times.",
+    "placeholders": {
+      "label": {
+        "content": "$1",
+        "example": "00:00"
+      },
+      "value": {
+        "content": "$2",
+        "example": "402 kB"
+      }
+    }
+  },
+  "coreChartSummaryOverlay": {
+    "message": "$VALUE$ $LABEL$",
+    "description": "Closing clause of a chart's spoken summary, giving the total of the second band drawn inside the bars. LABEL is the caller's name for that band, e.g. 'prevented, partly estimated'.",
+    "placeholders": {
+      "value": {
+        "content": "$1",
+        "example": "481 kB"
+      },
+      "label": {
+        "content": "$2",
+        "example": "prevented, partly estimated"
+      }
+    }
+  },
+  "coreChartSummaryTotal": {
+    "message": "total $VALUE$",
+    "description": "Clause of a chart's spoken summary, giving the sum of every bar.",
+    "placeholders": {
+      "value": {
+        "content": "$1",
+        "example": "4.7 MB"
+      }
+    }
+  },
+  "coreChartTableCaption": {
+    "message": "Chart values",
+    "description": "Fallback caption of the visually hidden table that carries a chart's numbers for a screen reader, used when the caller passes none."
+  },
+  "coreChartTableColumnData": {
+    "message": "Data",
+    "description": "Column heading in the visually hidden table under a chart, over the byte figure for each bucket."
+  },
+  "coreChartTableColumnWhen": {
+    "message": "When",
+    "description": "Column heading in the visually hidden table under a chart, over the day or hour each row is for."
   },
   "coreFeatureBlockBeaconsDescription": {
     "message": "Refuses fire-and-forget pings to known analytics services. Small individually, constant in aggregate. Beacons to the site itself are left alone — a page also uses them to save your work as you leave it.",
@@ -213,6 +339,10 @@
       }
     }
   },
+  "corePlusLockedOption": {
+    "message": "Part of Byte Budget Plus",
+    "description": "Tooltip and accessible-name suffix on an option the free tier does not include — a period tab, a chart range, the holdout rate, the units picker. Shown beside a padlock. Kept to a short phrase because it is appended to the option's own label, e.g. \"30 days — Part of Byte Budget Plus\"."
+  },
   "coreResourceTypeFont": {
     "message": "Fonts",
     "description": "Name of a network resource category in the type breakdown chart and legend. Downloadable web fonts."
@@ -306,8 +436,8 @@
     "description": "Tooltip on the toolbar button. Same product name as extensionName."
   },
   "extensionDescription": {
-    "message": "See what each site costs you in data — session, today, week, month. Counts this Chrome profile only; nothing is uploaded.",
-    "description": "The extension's one-paragraph description in the store listing and in chrome://extensions. The second sentence is a scope claim, not a marketing line: the figures cover one Chrome profile on one machine, and nothing leaves the device. Keep both halves."
+    "message": "See what each site costs you in data — session, today, week, month. Usage measurements stay in this Chrome profile.",
+    "description": "The extension's short description in the store listing and chrome://extensions. The second sentence applies specifically to measured usage; account checks and Chrome-synced preferences are disclosed separately."
   },
   "extensionName": {
     "message": "Byte Budget",

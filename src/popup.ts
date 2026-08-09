@@ -37,6 +37,7 @@ import {
   query,
   queryAll,
   replaceChildren,
+  setGroupOptionsLocked,
   type Child,
 } from "./core/dom";
 import { formatAgo, formatBytes, formatCount, formatPercent, splitBytes } from "./core/format";
@@ -64,6 +65,12 @@ import type { BudgetPeriod } from "./limit/budgets";
 import { TIER_DESCRIPTIONS, TIERS } from "./limit/tiers";
 import type { OptimizeSettings } from "./optimize/features";
 import {
+  FREE_SITE_LIMITS,
+  periodAllowed,
+  unknownStatus,
+  type PlusStatus,
+} from "./plus/tier";
+import {
   ALL_SITES,
   isReservedSite,
   measuredShare,
@@ -75,6 +82,7 @@ import {
   totalBytes,
   type Period,
   type Settings,
+  type SettingsSection,
 } from "./core/types";
 
 /** Live figures: the ledger flushes on every one of these, so it is also the write cadence. */
@@ -213,6 +221,8 @@ let savingsLoaded = false;
 /** Measured bytes since the plan cycle began, or `null` while unknown or with no plan. */
 let cycleUsed: number | null = null;
 let optimizeDismissed = false;
+/** Free until the worker says otherwise. Read on the slow clock with the preferences. */
+let plus: PlusStatus = unknownStatus();
 let siteLimit = SITE_ROWS;
 let pollFailures = 0;
 let fastTimer: ReturnType<typeof setInterval> | null = null;
@@ -830,7 +840,11 @@ function renderSites(payload: OverviewPayload): void {
  * Navigation
  * ------------------------------------------------------------------ */
 
-function openPage(page: "dashboard.html" | "settings.html", site?: string, section?: string): void {
+function openPage(
+  page: "dashboard.html" | "settings.html",
+  site?: string,
+  section?: SettingsSection,
+): void {
   const url = new URL(chrome.runtime.getURL(page));
   if (site) url.hash = `site=${encodeURIComponent(site)}`;
   else if (section) url.hash = section;
@@ -842,7 +856,7 @@ function openDashboard(site?: string): void {
   openPage("dashboard.html", site);
 }
 
-function openSettings(section?: string): void {
+function openSettings(section?: SettingsSection): void {
   openPage("settings.html", undefined, section);
 }
 
@@ -1020,8 +1034,19 @@ function renderLimit(payload: OverviewPayload, primary: BudgetStatus | null, sec
     limitPrevented.hidden = true;
     limitActions.hidden = true;
     limitNote.hidden = false;
-    limitPresets.hidden = !site;
-    limitNote.textContent = site ? t("popupNoLimitOnSite", site) : t("popupNoLimitHere");
+    // The free tier's ceiling, reached before the button rather than after it. The
+    // worker refuses the create either way, but a preset that produces an error is a
+    // worse way to learn about a limit than a preset that is not offered — and this
+    // panel has no room for a lock notice, so the sentence carries it.
+    const atCeiling =
+      !plus.plus &&
+      statuses.filter((status) => status.budget.site !== ALL_SITES).length >= FREE_SITE_LIMITS;
+    limitPresets.hidden = !site || atCeiling;
+    limitNote.textContent = !site
+      ? t("popupNoLimitHere")
+      : atCeiling
+        ? t("popupPlusLimitCeiling", formatCount(FREE_SITE_LIMITS))
+        : t("popupNoLimitOnSite", site);
   }
 
   if (secondary) {
@@ -1123,6 +1148,14 @@ function paint(): void {
   if (!payload) return;
 
   paintGroup(periodTabs, period);
+  // Locked rather than disabled, and it opens Settings rather than doing nothing. In a
+  // 400px panel there is no room for a note explaining a dead segment, so the segment
+  // has to explain itself: a padlock, a tooltip, and a tap that goes somewhere.
+  setGroupOptionsLocked(periodTabs, {
+    isLocked: (value) => !periodAllowed(value as Period, plus),
+    reason: t("corePlusLockedOption"),
+    onActivate: () => openSettings("plus"),
+  });
   renderPace(payload);
   renderHeadline(payload);
   renderPlanAlerts(payload);
@@ -1218,6 +1251,24 @@ async function loadSlow(): Promise<void> {
   } catch {
     // Leave the last known settings up rather than blanking the row: a failed read
     // is not evidence that Data Saver changed.
+  }
+
+  try {
+    plus = (await sendRequest({ type: "GET_PLUS" })).plus;
+  } catch {
+    // Same rule, and it matters more here: a failed read must never be the reason
+    // something is taken away. See the failure policy at the head of `plus/gate.ts`.
+  }
+
+  // A period stored while subscribed can outlive the subscription. Corrected here
+  // rather than left to the disabled option, because `period` is what the overview was
+  // *fetched* with — leaving it would draw a month of data under a control that can no
+  // longer select one.
+  if (!periodAllowed(period, plus)) {
+    period = "today";
+    siteLimit = SITE_ROWS;
+    void chrome.storage.local.set({ [PERIOD_STORAGE_KEY]: period });
+    await loadFast();
   }
 
   // Read after the await, not before: on the first load this runs beside `loadFast`,
@@ -1318,7 +1369,7 @@ function disarmRemove(): void {
 
 query<HTMLButtonElement>("#dashboard-button").addEventListener("click", () => openDashboard());
 query<HTMLButtonElement>("#settings-button").addEventListener("click", () => openSettings());
-query<HTMLButtonElement>("#plan-cta-button").addEventListener("click", () => openSettings("plan-panel"));
+query<HTMLButtonElement>("#plan-cta-button").addEventListener("click", () => openSettings("plan"));
 
 query<HTMLButtonElement>("#plan-alerts-button").addEventListener("click", () => {
   const plan = overview?.settings.planBytes;
@@ -1391,7 +1442,7 @@ limitRemove.addEventListener("click", () => {
   void ask({ type: "REMOVE_BUDGET", site: status.budget.site }, t("popupErrorRemove"));
 });
 
-query<HTMLButtonElement>("#limit-more").addEventListener("click", () => openSettings("limits-panel"));
+query<HTMLButtonElement>("#limit-more").addEventListener("click", () => openSettings("limits"));
 
 optimizeCheck.addEventListener("change", () => {
   const site = overview?.current.site;

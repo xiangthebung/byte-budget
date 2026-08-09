@@ -3,7 +3,6 @@
   "name": "__MSG_extensionName__",
   "description": "__MSG_extensionDescription__",
   "default_locale": "en",
-  "homepage_url": "https://REPLACE-ME.example/byte-budget",
   "icons": {
     "16": "icon.png",
     "32": "icon.png",
@@ -23,7 +22,7 @@
   ],
   "host_permissions": ["http://*/*", "https://*/*"],
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; font-src 'self'; form-action 'none'; base-uri 'none'"
+    "extension_pages": "default-src 'self'; script-src 'self'; object-src 'self'; connect-src 'self' https://extensionpay.com; img-src 'self' data:; style-src 'self'; font-src 'self'; form-action 'none'; base-uri 'none'"
   },
   "background": {
     "service_worker": "background.js",
@@ -46,6 +45,11 @@
       "js": ["timing.js"],
       "run_at": "document_start",
       "all_frames": true
+    },
+    {
+      "matches": ["https://extensionpay.com/*"],
+      "js": ["subscription.js"],
+      "run_at": "document_start"
     }
   ]
 }

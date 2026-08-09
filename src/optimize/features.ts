@@ -137,6 +137,78 @@ export const FEATURES_BY_ID: ReadonlyMap<FeatureId, FeatureInfo> = new Map(
 );
 
 /* ------------------------------------------------------------------ *
+ * Preset levels
+ * ------------------------------------------------------------------ */
+
+/**
+ * Three named sets of the eight features above, so the ordinary way to use Data Saver
+ * is one choice rather than eight.
+ *
+ * The switches are still all there, under Advanced, and none of this removes one. What
+ * it removes is the requirement to have an opinion about `trimSrcset` before the
+ * feature does anything: a settings page that opens on eight checkboxes is asking a
+ * question most people cannot answer, and the honest answer to "which of these do I
+ * want" is "the safe ones" or "all of them".
+ *
+ * Each level is *derived* rather than listed, and that is the point. A listed set is a
+ * second table to keep in step with `FEATURES`, and the failure when it drifts is
+ * silent — a feature added above and forgotten here would be reachable from Advanced
+ * and from no preset, so choosing "Maximum" would quietly turn it off. Deriving from
+ * fields `FEATURES` already carries means a new feature lands in a level by describing
+ * itself.
+ */
+export const SAVER_LEVELS = ["light", "balanced", "maximum"] as const;
+
+export type SaverLevel = (typeof SAVER_LEVELS)[number];
+
+/**
+ * The features each level switches on.
+ *
+ * - `light` is every feature whose `visibility` is `invisible` — which is the same
+ *   claim the group heading makes on the page, so the level cannot promise something
+ *   the feature descriptions contradict.
+ * - `balanced` is what a fresh install ships with, so an install that has never
+ *   touched Advanced reads as Balanced rather than as Custom.
+ * - `maximum` is all of them.
+ *
+ * `tests/optimize.test.mjs` pins the one property none of these three definitions
+ * states on its own: that they nest. A ladder whose middle rung switches something off
+ * that the rung below switches on is not a ladder, and the control that presents it as
+ * one would be lying.
+ */
+export const SAVER_LEVEL_FEATURES: Record<SaverLevel, readonly FeatureId[]> = {
+  light: FEATURES.filter((feature) => feature.visibility === "invisible").map(
+    (feature) => feature.id,
+  ),
+  balanced: FEATURES.filter((feature) => feature.defaultOn).map((feature) => feature.id),
+  maximum: FEATURE_IDS,
+};
+
+/** The full feature record a level implies, including the ones it switches off. */
+export function featuresForLevel(level: SaverLevel): Record<FeatureId, boolean> {
+  const on = new Set(SAVER_LEVEL_FEATURES[level]);
+  const features = {} as Record<FeatureId, boolean>;
+  for (const id of FEATURE_IDS) features[id] = on.has(id);
+  return features;
+}
+
+/**
+ * Which level a stored feature set is, or `null` when it is none of them.
+ *
+ * `null` is not a failure and is not repaired. Someone who opened Advanced and
+ * switched one thing off has a selection, and a control that rounded it to the
+ * nearest preset would silently undo it the next time the page painted. The surface
+ * says "Custom" instead and leaves it alone.
+ */
+export function levelOf(features: Record<FeatureId, boolean>): SaverLevel | null {
+  return (
+    SAVER_LEVELS.find((level) =>
+      FEATURE_IDS.every((id) => features[id] === SAVER_LEVEL_FEATURES[level].includes(id)),
+    ) ?? null
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * Settings
  * ------------------------------------------------------------------ */
 

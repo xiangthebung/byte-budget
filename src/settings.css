@@ -1,0 +1,740 @@
+/* ------------------------------------------------------------------ *
+ * The options page.
+ *
+ * `@import`s the dashboard's stylesheet rather than `app.css` directly, because the
+ * primitives both surfaces genuinely share — the form controls, the table, the
+ * switch, the meters, the status chip, the disclosure — live there. Lifting them into
+ * `app.css` would be the tidier arrangement and would touch the popup, the dashboard
+ * and this file at once; it is worth doing and it is not this change.
+ *
+ * What is here is the layout the settings page stopped sharing with anything: a rail
+ * of sections, and a grouped row.
+ *
+ * The row is the whole idea. Every control on this page is one line — what it is on
+ * the left, the control on the right, at most two lines of small print between them —
+ * and lines are stacked into a card with hairlines between. That constraint is what
+ * keeps the page short: a setting that cannot state itself in a row is a setting whose
+ * explanation belongs in a disclosure, not above the control.
+ * ------------------------------------------------------------------ */
+
+@import "./dashboard.css";
+
+/*
+ * This page does not set its own `max-width`, and that is the point.
+ *
+ * It used to, at 1100px against the dashboard's 1160 — which centred the two
+ * surfaces 30px apart, so the icon, the title and the nav all slid sideways every
+ * time someone switched. The width of the frame is a property of the product, not of
+ * a page, and it lives on `.page` in `dashboard.css`.
+ */
+
+/*
+ * The empty third line of the header. See the comment on it in `settings.html`: its
+ * only job is to be as tall as the dashboard's period line, so that everything below
+ * the header starts at the same y on both surfaces.
+ */
+.settings-page .brand-sub {
+  min-height: 1lh;
+}
+
+/* ------------------------------------------------------------------ *
+ * The rail and the panes
+ * ------------------------------------------------------------------ */
+
+.settings-shell {
+  display: grid;
+  align-items: start;
+  gap: 26px;
+  grid-template-columns: 232px minmax(0, 1fr);
+}
+
+/*
+ * Sticky under the Dashboard/Settings bar, which is itself sticky at `top: 10px` and
+ * about 42px tall. A rail that scrolled away would make the six sections findable only
+ * from the top of a page whose whole point is that you no longer have to be at the top
+ * of it.
+ */
+.settings-rail {
+  position: sticky;
+  top: 66px;
+  display: grid;
+  gap: 2px;
+}
+
+.rail-item {
+  display: grid;
+  align-items: center;
+  gap: 11px;
+  grid-template-columns: 22px minmax(0, 1fr);
+  padding: 9px 11px;
+  border-radius: var(--radius-md);
+  color: var(--text-soft);
+  text-decoration: none;
+}
+
+.rail-item:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.rail-item[aria-current="true"] {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.rail-icon {
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+.rail-item[aria-current="true"] .rail-icon {
+  color: var(--accent);
+}
+
+.rail-icon svg {
+  width: 21px;
+  height: 21px;
+}
+
+.rail-copy {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.rail-label {
+  font-size: 13px;
+  font-weight: 620;
+}
+
+/*
+ * The current value under the section name — "15 GB · resets in 9 days", "Balanced",
+ * "3 limits".
+ *
+ * Three of the six carry one. It is not decoration: the reason to open a section is
+ * usually that its value is wrong, and a rail that only listed names would make
+ * checking four of them cost four clicks. Empty for the three whose state is not one
+ * short phrase, rather than padded out with something invented.
+ */
+.rail-value {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * Capped, and left against the rail rather than centred in what is left.
+ *
+ * The page frame is the dashboard's now, which gives the panes 854px — and a row is a
+ * label at one end and a control at the other, so at that width "Website" and the
+ * field to fill in sit 700px apart with nothing between them. The dashboard earns its
+ * full width by putting charts and tables in it; a list of settings does not.
+ *
+ * Left rather than centred because the rail is aligned with the icon and the title in
+ * the header above it, and that alignment is the thing that stops the page appearing
+ * to move when someone switches surfaces. Centring the pair would break it again.
+ */
+.settings-panes {
+  min-width: 0;
+  max-width: 820px;
+}
+
+.pane {
+  display: grid;
+  gap: 9px;
+  align-content: start;
+}
+
+.pane-head {
+  margin-bottom: 3px;
+}
+
+.pane-title {
+  font-size: 22px;
+  font-weight: 680;
+  letter-spacing: -0.022em;
+}
+
+.pane-sub {
+  max-width: 64ch;
+  margin-top: 4px;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ *
+ * Groups and rows
+ * ------------------------------------------------------------------ */
+
+.group {
+  display: grid;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.group-danger {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+}
+
+/*
+ * The same treatment as `.panel-title` on the dashboard, and for that reason.
+ *
+ * These were sentence case, which made the heading over a group of settings look
+ * like a different kind of thing from the heading over a panel of figures — two
+ * surfaces of one product with two typographic systems. It is also how a grouped list
+ * labels its groups on the platform this page is modelled on, so the consistent
+ * choice and the conventional one are the same choice.
+ */
+.group-title {
+  margin-top: 14px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* Not the heading itself: a count beside it is a value, and values are not shouted. */
+.group-title .summary-note {
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* The first thing in a pane or a disclosure has nothing above it to be spaced from. */
+.pane > .group-title:first-of-type,
+.inline-details > .group-title:first-of-type {
+  margin-top: 4px;
+}
+
+/*
+ * A disclosure that opens a section carries no rule above it. `.inline-details` draws
+ * one to separate itself from the controls it follows, and directly under a heading
+ * there are none — so the rule reads as a stray line under the title.
+ */
+.pane-head + .inline-details {
+  margin-top: 2px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.group-note {
+  max-width: 78ch;
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* A note that introduces the group under it rather than qualifying the one above. */
+.group-note-lead {
+  margin-bottom: 6px;
+}
+
+/*
+ * Flex rather than a two-column grid, so a control too wide for the space left beside
+ * its label drops to a line of its own instead of squeezing the label to nothing. The
+ * four-segment window picker at a 390px viewport is the case that decides it.
+ */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 13px 16px;
+}
+
+.row + .row {
+  border-top: 1px solid var(--border);
+}
+
+.row-copy {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 240px;
+  gap: 3px;
+}
+
+.row-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.row-label {
+  font-size: 13px;
+  font-weight: 620;
+  color: var(--text);
+}
+
+.row-sub {
+  color: var(--text-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.row-control {
+  display: flex;
+  align-items: center;
+  /* Keeps the control against the far edge whether or not it wrapped to its own line. */
+  margin-inline-start: auto;
+  gap: 8px;
+}
+
+.row-control-wrap {
+  flex-wrap: wrap;
+}
+
+/* A row whose control needs the width of the card: a form, a list, a meter. */
+.row-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.row-stack > .row-control {
+  margin-inline-start: 0;
+}
+
+.row-actions-only {
+  justify-content: flex-end;
+}
+
+.row-glyphed {
+  flex-wrap: nowrap;
+}
+
+.row-glyphed .row-copy {
+  flex: 1 1 auto;
+}
+
+/*
+ * The value a text field holds, set against the end of the row like every other
+ * control. `text-align: end` follows the inline direction; the width is fixed so a
+ * column of them lines up rather than each sizing to its own placeholder.
+ */
+.value-input {
+  width: 190px;
+  text-align: end;
+}
+
+/* ------------------------------------------------------------------ *
+ * Data Saver
+ * ------------------------------------------------------------------ */
+
+#optimize-body {
+  display: grid;
+  gap: 9px;
+}
+
+.advanced-symbol {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--saved-soft);
+  color: var(--saved);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.advanced-symbol-text {
+  font-weight: 750;
+  letter-spacing: -0.04em;
+}
+
+/*
+ * Relative potential, not a percentage.
+ *
+ * Three bars and a word, next to the feature's own label. It is here rather than in a
+ * sentence because "high" and "low" only mean anything against each other, and a
+ * column of three-bar meters is comparable at a glance in a way three paragraphs
+ * claiming to save "a lot" are not.
+ */
+.impact-meter {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.impact-bars {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 9px);
+  gap: 2px;
+}
+
+.impact-segment {
+  display: block;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--bar-track);
+}
+
+.impact-segment[data-filled="true"] {
+  background: var(--saved);
+}
+
+.impact-label {
+  min-width: 41px;
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  /* The label is the last item in the meter's flex row, and its 41px column is wider
+     than the word in it; `end` keeps it against the outer edge as the row swaps. */
+  text-align: end;
+  text-transform: uppercase;
+}
+
+/*
+ * The switch, inside a row.
+ *
+ * `dashboard.css` hides the input at 1px and relies on a `<label>` wrapping the track
+ * to make the track clickable. In a row the label is the row's own text, so the input
+ * is stretched over the track instead and becomes the click target itself. Sibling
+ * order is unchanged, so the `input:checked + .switch-track` rules still match.
+ */
+.row .switch-control {
+  position: relative;
+}
+
+.row .switch-control input {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  inset: 0;
+  opacity: 0;
+}
+
+.exclusion-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* No chips, no box: an empty flex container still takes the row's gap above it. */
+.chip-list:empty {
+  display: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* Asymmetric: the hostname needs a full inset, the 24px remove button after it
+     brings its own. Both follow the text, so both are inline values. */
+  padding-block: 2px;
+  padding-inline: 10px 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12px;
+  /*
+   * A domain has no spaces, so a long one is a single unbreakable word: 57
+   * characters of hostname was still enough to push the whole page 17px wider
+   * than a 390px viewport after the layout fixes below. `anywhere` rather than
+   * `break-word` because only `anywhere` also reduces the chip's min-content
+   * width, which is what the page grid is measured against. It changes nothing
+   * where the chip already fits.
+   */
+  overflow-wrap: anywhere;
+}
+
+/*
+ * 24px square, not 18.
+ *
+ * These sit in a wrapping flex with a 6px gap, so the SC 2.5.8 spacing exception —
+ * which needs a 24px-diameter circle around the target that no other target enters —
+ * is unavailable to them. Padding cannot supply it either, because the chip clips to
+ * its own border radius. And this button is the only way to undo an exclusion.
+ */
+.chip button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.chip button:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------------ *
+ * Site limits
+ * ------------------------------------------------------------------ */
+
+.limit-list {
+  display: grid;
+  gap: 9px;
+}
+
+/*
+ * One card per limit, which is what the six-column table it replaces turned itself
+ * into under 640px anyway. Five of those columns held a different kind of thing about
+ * one site — an allowance, a meter, a state, a date, four buttons — so lining them up
+ * vertically compared nothing, and the header row was six words of chrome above a
+ * table that is usually one row long.
+ */
+.limit-card {
+  display: grid;
+  gap: 9px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.limit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.limit-site {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.limit-allowance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 10px;
+}
+
+.limit-card .limit-meter,
+.row-stack .limit-meter {
+  min-width: 0;
+}
+
+.limit-card .row-actions,
+.row-stack .row-actions {
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.friendly-empty {
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ *
+ * Save feedback
+ * ------------------------------------------------------------------ */
+
+/*
+ * `.save-status` and `.form-status` come from `dashboard.css`. Two things differ here:
+ * the inset, because these sit under a card rather than inside a panel's padding, and
+ * the margin, because the pane's own row gap already separates them — keeping the
+ * dashboard's 7px on top of it left a visible band of nothing under every group that
+ * had not just been saved. The reserved height stays: a status line that appears from
+ * nowhere moves everything below it at the moment someone is reading it.
+ */
+.save-status,
+.form-status {
+  margin-top: 0;
+  padding: 0 2px;
+}
+
+#optimize-note {
+  color: var(--saved);
+  font-weight: 650;
+}
+
+#optimize-note[data-active="false"] {
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ *
+ * Plus
+ * ------------------------------------------------------------------ */
+
+/*
+ * A locked block is dimmed, not hidden, and the dimming is the *only* thing this
+ * selector does.
+ *
+ * Everything that actually enforces the lock is the `disabled` attribute, set by
+ * `setControlsEnabled` in `settings.ts`. That distinction is worth stating because the
+ * tempting shortcut here — `pointer-events: none` on the container — is not a lock at
+ * all: it stops a mouse and does nothing to a keyboard, so Tab and Space would still
+ * reach every switch behind it. CSS may describe a lock. It may not be one.
+ *
+ * `opacity` on the container would take the lock notice down with it, so the fade is
+ * applied to the rows rather than the block, and `.plus-lock` sits outside it anyway.
+ */
+[data-locked="true"] .row-copy,
+[data-locked="true"] .row-control {
+  opacity: 0.55;
+}
+
+.plus-card {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.plus-card[data-tone="on"] {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border));
+  background: var(--accent-soft);
+}
+
+/*
+ * `--estimate` rather than `--danger`. A failed renewal and an ended subscription are
+ * both states to act on, and neither is an error the person made — the danger colour on
+ * this page is spent on deleting recorded usage, and spending it here too would make
+ * the two read as the same weight of thing.
+ */
+.plus-card[data-tone="warn"] {
+  border-color: color-mix(in srgb, var(--estimate) 34%, var(--border));
+  background: var(--estimate-soft);
+}
+
+.plus-card-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.plus-card-detail {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.plus-price {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.plus-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  list-style: none;
+}
+
+.plus-list li {
+  position: relative;
+  padding-inline-start: 20px;
+  color: var(--text-soft);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/*
+ * A drawn tick rather than a list marker or a character. `list-style` cannot be
+ * coloured independently of the text, and a literal "✓" is a glyph whose presence and
+ * width depend on the platform's fonts — this page already learned that lesson with
+ * the Advanced symbols.
+ */
+.plus-list li::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 3px;
+  top: 6px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--accent);
+  border-width: 0 1.8px 1.8px 0;
+  transform: rotate(45deg);
+}
+
+.plus-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ------------------------------------------------------------------ *
+ * Responsive
+ * ------------------------------------------------------------------ */
+
+/*
+ * Below the two-column width the rail lies down above the panes and scrolls sideways,
+ * rather than collapsing into a select. It is six short words; a picker for six words
+ * is a control to learn in place of a list to read.
+ */
+@media (max-width: 900px) {
+  .settings-shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .settings-rail {
+    position: static;
+    display: flex;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .rail-item {
+    flex: 0 0 auto;
+    grid-template-columns: auto auto;
+    padding: 8px 12px;
+  }
+
+  .rail-value {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .value-input {
+    width: 100%;
+    text-align: start;
+  }
+
+  .row-control {
+    margin-inline-start: 0;
+  }
+
+  .row-glyphed {
+    flex-wrap: wrap;
+  }
+
+  .exclusion-form .search-input {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+}

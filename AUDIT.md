@@ -1,5 +1,10 @@
 # Byte Budget — Audit
 
+> Historical engineering audit. Its findings drove later implementation work; paths,
+> line numbers and release advice here are not the current ship checklist. Use
+> `STORE_LISTING.md`, `PRIVACY_POLICY.md`, `TERMS_OF_SALE.md` and the latest verification
+> run for the current Chrome Web Store submission.
+
 ## 1. Verdict
 
 This is a finished, unusually honest measurement engine wrapped in a product that has not yet been connected to the question it exists to answer. The measurement layer earns the README's claims: the three-source waterfall (`Content-Length` → `transferSize` → learned mean) is real, `estimatedDown` is threaded end-to-end so the measured share is computed rather than asserted, the holdout is a genuine randomised control that produces a subtraction instead of a model output, and the smoke test uses the local server and Playwright's route handler as the witness rather than the extension's own arithmetic — `770,830 served / 771,820 counted` is the kind of number most trackers cannot produce.
@@ -22,7 +27,11 @@ Eight, in the order they would sink a submission or a first user.
 
 4. **The limit banner appears exactly once per site, ever.** `notice.js` is not a manifest content script ([public/manifest.json:41](public/manifest.json:41)); it exists in a page only because `announce()` injected it, and `announce` has one caller, inside `if (wanted !== enforcementFor(site))` ([src/limit/governor.ts:166](src/limit/governor.ts:166)). A reload or a second tab finds the tier unchanged and skips the block. So a site at `strict` — the terminal tier, where every subresource is refused — shows the explanation on the load that crossed 100% and never again. That is precisely the "reads as a broken website" failure the banner exists to prevent ([src/limit/notify.ts:1](src/limit/notify.ts:1), README.md:71-74). **High**
 
-5. **No hosted privacy policy and no link to one from the product.** The policy exists only as a repo file. The Privacy & data panel is export/range/delete with no statement of what is stored ([src/settings.html:254](src/settings.html:254)); the manifest has no `homepage_url` and no `author`. Publish the policy at a stable URL, put it in the listing and in the manifest, and add a two-sentence summary plus link to the Privacy panel. Fix blocker 1 first — a reviewer who catches the retention discrepancy will discount the whole document. **Medium**
+5. **Historical: no hosted privacy policy.** The current build now includes an accurate
+   in-product disclosure and intentionally has no product homepage. Before submission,
+   publish `PRIVACY_POLICY.md` at a stable HTTPS URL and put that direct URL in the Chrome
+   Web Store Privacy practices field; do not re-add a `homepage_url` just to carry it.
+   **Medium (external release step)**
 
 6. **The privacy policy says sync carries no browsing data; it carries site names.** Budgets are `chrome.storage.sync` and each carries a `site` ([src/limit/budgets.ts:243](src/limit/budgets.ts:243)); optimize settings sync the `exclusions` array of site keys ([src/optimize/features.ts:216](src/optimize/features.ts:216)). PRIVACY_POLICY.md:62-65 says the transfer "carries no browsing data". A list of domains someone capped and a list they excluded is the most opinionated slice of their browsing. Move both to `chrome.storage.local` with a one-time sync fallback read, or amend the sentence. **Medium**
 

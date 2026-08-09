@@ -1,4 +1,4 @@
-import "./dashboard.css";
+import "./settings.css";
 import {
   bindGroup,
   button,
@@ -7,6 +7,7 @@ import {
   query,
   queryAll,
   replaceChildren,
+  setGroupOptionsLocked,
 } from "./core/dom";
 import {
   formatAgo,
@@ -15,7 +16,7 @@ import {
   formatPercent,
   parseByteSize,
 } from "./core/format";
-import { t } from "./core/i18n";
+import { applyDocumentLanguage, t } from "./core/i18n";
 import {
   errorMessage,
   sendRequest,
@@ -29,7 +30,9 @@ import {
   ALL_SITES,
   MAX_CYCLE_START_DAY,
   RETENTION_OPTIONS,
+  SETTINGS_SECTIONS,
   type Settings,
+  type SettingsSection,
 } from "./core/types";
 import { ALERT_THRESHOLDS, type AlertSettings } from "./limit/alerts";
 import {
@@ -42,60 +45,93 @@ import {
 } from "./limit/budgets";
 import { TIER_DESCRIPTIONS, TIER_LABELS } from "./limit/tiers";
 import { PACKS } from "./optimize/packs";
+import { lockNotice, setControlsEnabled } from "./plus/lock";
+import { PRICE_MONTHLY, PRICE_YEARLY, TRIAL_DAYS } from "./plus/plans";
+import {
+  FREE_BUDGET_PERIODS,
+  FREE_REPORT_DAYS,
+  FREE_SITE_LIMITS,
+  unknownStatus,
+  type PlusPage,
+  type PlusStatus,
+} from "./plus/tier";
 import {
   FEATURES,
   HOLDOUT_OPTIONS,
+  SAVER_LEVELS,
   SAVINGS_IMPACT_BY_FEATURE,
+  featuresForLevel,
+  levelOf,
   type FeatureId,
   type FeatureInfo,
   type OptimizeSettings,
+  type SaverLevel,
   type SavingsImpact,
 } from "./optimize/features";
 
-const planForm = query<HTMLFormElement>("#plan-form");
 const planSizeInput = query<HTMLInputElement>("#plan-size");
 const planCycleSelect = query<HTMLSelectElement>("#plan-cycle");
 const planEcho = query<HTMLSpanElement>("#plan-echo");
-const planNote = query<HTMLSpanElement>("#plan-note");
 const planStatus = query<HTMLParagraphElement>("#plan-status");
 const planShapeGroup = query<HTMLDivElement>("#plan-shape-group");
-const planShapeHint = query<HTMLParagraphElement>("#plan-shape-hint");
+const planShapeHint = query<HTMLSpanElement>("#plan-shape-hint");
 const planAllowance = query<HTMLDivElement>("#plan-allowance");
 
-const limitsTable = query<HTMLTableElement>("#limits-table");
-const limitsBody = query<HTMLTableSectionElement>("#limits-table tbody");
+const limitsList = query<HTMLUListElement>("#limits-list");
 const limitsEmpty = query<HTMLParagraphElement>("#limits-empty");
-const limitsNote = query<HTMLSpanElement>("#limits-note");
 const limitStatus = query<HTMLParagraphElement>("#limit-form-status");
 const limitPeriodGroup = query<HTMLDivElement>("#limit-period-group");
-const limitShapeField = query<HTMLDivElement>("#limit-shape-field");
+const limitShapeGroup = query<HTMLDivElement>("#limit-shape-group");
+const limitShapeHint = query<HTMLSpanElement>("#limit-shape-hint");
 
 const optimizeToggle = query<HTMLInputElement>("#optimize-toggle");
 const optimizeBody = query<HTMLDivElement>("#optimize-body");
 const optimizeNote = query<HTMLParagraphElement>("#optimize-note");
+const saverState = query<HTMLSpanElement>("#saver-state");
+const saverLevelGroup = query<HTMLDivElement>("#saver-level-group");
+const saverLevelHint = query<HTMLSpanElement>("#saver-level-hint");
+const saverLevelCustom = query<HTMLSpanElement>("#saver-level-custom");
 const featureGroups = query<HTMLDivElement>("#feature-groups");
 const packList = query<HTMLDivElement>("#pack-list");
 const packsIntro = query<HTMLParagraphElement>("#packs-intro");
 const holdoutGroup = query<HTMLDivElement>("#holdout-group");
-const holdoutHint = query<HTMLParagraphElement>("#holdout-hint");
+const holdoutHint = query<HTMLSpanElement>("#holdout-hint");
 const exclusionCount = query<HTMLSpanElement>("#exclusion-count");
 const exclusionList = query<HTMLUListElement>("#exclusion-list");
 
 const alertOptions = query<HTMLDivElement>("#alert-options");
-const alertsStatus = query<HTMLSpanElement>("#alerts-status");
+const alertsStatus = query<HTMLParagraphElement>("#alerts-status");
 const alertsPlanNote = query<HTMLParagraphElement>("#alerts-plan-note");
 
-const settingsStatus = query<HTMLSpanElement>("#settings-status");
+const settingsStatus = query<HTMLParagraphElement>("#settings-status");
 const unitsHint = query<HTMLSpanElement>("#units-hint");
 const periodOptions = query<HTMLDivElement>("#period-options");
 
 const privacyOptions = query<HTMLDivElement>("#privacy-options");
 const dataStatus = query<HTMLParagraphElement>("#data-status");
-const deleteScopeNote = query<HTMLParagraphElement>("#delete-scope-note");
+const deleteScopeNote = query<HTMLSpanElement>("#delete-scope-note");
 const deleteActions = query<HTMLDivElement>("#delete-actions");
 const deleteStatus = query<HTMLParagraphElement>("#delete-status");
 const storageDetails = query<HTMLDetailsElement>("#storage-details");
 const storageReportBlock = query<HTMLDivElement>("#storage-report");
+
+const unitsGroup = query<HTMLDivElement>("#units-group");
+const exportDaysSelect = query<HTMLSelectElement>("#export-days");
+
+const saverAdvancedLock = query<HTMLDivElement>("#saver-advanced-lock");
+const limitFormLock = query<HTMLDivElement>("#limit-form-lock");
+const appearanceAdvancedLock = query<HTMLDivElement>("#appearance-advanced-lock");
+const exportLock = query<HTMLDivElement>("#export-lock");
+const limitForm = query<HTMLFormElement>("#limit-form");
+const plusState = query<HTMLDivElement>("#plus-state");
+const plusList = query<HTMLUListElement>("#plus-list");
+const plusActions = query<HTMLDivElement>("#plus-actions");
+const plusStatusLine = query<HTMLParagraphElement>("#plus-status");
+
+const railPlanValue = query<HTMLSpanElement>("#rail-value-plan");
+const railSaverValue = query<HTMLSpanElement>("#rail-value-saver");
+const railLimitsValue = query<HTMLSpanElement>("#rail-value-limits");
+const railPlusValue = query<HTMLSpanElement>("#rail-value-plus");
 
 const liveRegion = query<HTMLParagraphElement>("#live-region");
 
@@ -104,6 +140,15 @@ let settings: Settings | null = null;
 let optimize: OptimizeSettings | null = null;
 let statuses: readonly BudgetStatus[] = [];
 let alerts: AlertSettings | null = null;
+/**
+ * Free until a check says otherwise, which is also what an install with no network
+ * reads as. See the failure policy at the head of `plus/gate.ts`: the worker never
+ * downgrades a successful answer, so anything this page is handed is either the truth
+ * or the last truth there was.
+ */
+let plus: PlusStatus = unknownStatus();
+/** Site limits that exist, not counting the plan's own. Drives the free-tier ceiling. */
+let siteLimitCount = 0;
 
 function bytes(value: number): string {
   return formatBytes(value, units);
@@ -154,7 +199,7 @@ function ordinal(day: number): string {
  * branch for markup that does not exist is a branch nothing would notice breaking.
  *
  * Called before anything else in `start()`. Running it after the first render would
- * leave whichever panel painted first in the wrong language until its next refresh.
+ * leave whichever pane painted first in the wrong language until its next refresh.
  */
 function localizeMarkup(): void {
   for (const node of queryAll<HTMLElement>("[data-i18n]")) {
@@ -177,75 +222,178 @@ function localizeMarkup(): void {
 }
 
 /* ------------------------------------------------------------------ *
- * Shared controls
+ * Sections
  * ------------------------------------------------------------------ */
 
-interface SwitchOptions {
-  id: string;
-  label: string;
-  hint?: string;
-  onChange: (checked: boolean) => void;
+/**
+ * `SETTINGS_SECTIONS` is shared, not local, because the popup and the dashboard link
+ * into these sections by name and this page decides what the names are.
+ *
+ * The first entry is the fallback: a missing fragment, and one from an older build
+ * that named a panel this page no longer has, both open on the plan. Falling back
+ * rather than showing nothing is the only sensible answer to a fragment nobody here
+ * wrote — but it is also silent, which is why the names are in one place now.
+ */
+type Pane = SettingsSection;
+
+const DEFAULT_PANE: Pane = SETTINGS_SECTIONS[0];
+
+function paneFromHash(): Pane {
+  const name = location.hash.replace(/^#/, "");
+  return (SETTINGS_SECTIONS as readonly string[]).includes(name)
+    ? (name as Pane)
+    : DEFAULT_PANE;
 }
 
-/** A labelled switch inside a `.field`, matching the Toolbar control's markup. */
-function switchField(options: SwitchOptions): { field: HTMLDivElement; input: HTMLInputElement } {
-  const input = element("input");
-  input.type = "checkbox";
-  input.id = options.id;
-  input.addEventListener("change", () => options.onChange(input.checked));
-
-  const field = element("div", { className: "field" }, [
-    element("label", { className: "switch-control preference-switch" }, [
-      input,
-      element("span", { className: "switch-track", ariaHidden: true }, [element("span")]),
-      element("span", { className: "switch-label", text: options.label }),
-    ]),
-    options.hint ? element("span", { className: "field-hint", text: options.hint }) : null,
-  ]);
-  return { field, input };
+/**
+ * Shows one section and hides the rest.
+ *
+ * Nothing is built or destroyed here — every control on all six panes exists from
+ * startup and is only ever painted after that, which is the same rule `bindGroup`
+ * documents for its own options. A section that built itself on first view would take
+ * the focused control with it every time someone came back to it, and the state a
+ * half-typed field holds is not in the settings.
+ *
+ * `aria-current="true"`, not `"page"`. These are links to parts of the document that
+ * is already open, and the Dashboard/Settings bar above them uses `"page"` for the
+ * thing that really is one — two elements claiming to be the current page is a
+ * screen reader being told something that cannot be true. Not `aria-selected`
+ * either: that is a claim about a tab in a tablist, which this deliberately is not.
+ *
+ * `moveFocus` is false on the first paint and true from then on. Choosing a section
+ * changes everything below the heading and nothing at the point of the click, so
+ * without it a screen reader announces the link and then reads on into a pane that is
+ * no longer there; with it on load, the page would open having stolen focus from the
+ * address bar.
+ */
+function showPane(pane: Pane, moveFocus: boolean): void {
+  for (const section of queryAll<HTMLElement>(".pane")) {
+    section.hidden = section.dataset.pane !== pane;
+  }
+  for (const item of queryAll<HTMLAnchorElement>(".rail-item")) {
+    if (item.dataset.pane === pane) item.setAttribute("aria-current", "true");
+    else item.removeAttribute("aria-current");
+  }
+  if (!moveFocus) return;
+  const heading = document.querySelector<HTMLElement>(`#pane-${pane} .pane-title`);
+  heading?.focus();
 }
 
-interface CheckOptions {
-  id: string;
-  symbol: string;
-  symbolIsText: boolean;
-  title: string;
-  hint: string;
-  /** Rendered under the hint, for what the shipped description does not say. */
+/* ------------------------------------------------------------------ *
+ * Rows
+ * ------------------------------------------------------------------ */
+
+interface RowOptions {
+  /** Rendered as a `<label for>` when `control` names an input id, so the text toggles it. */
+  labelFor?: string;
+  label?: string;
+  /** Small print under the label. */
+  sub?: string;
+  /** A second line of small print, for what the shipped description does not say. */
   note?: string;
+  /** A decorative glyph before the label. */
+  glyph?: { text: string; isText: boolean };
+  /** Feature id, when the row should carry a relative-savings meter. */
   impact?: FeatureId;
-  onChange: (checked: boolean) => void;
+  className?: string;
 }
 
-/** One `.advanced-option` card: checkbox, glyph, title, description. */
-function checkCard(options: CheckOptions): { card: HTMLLabelElement; input: HTMLInputElement } {
+/**
+ * One line of a settings group: what it is on the left, the control on the right.
+ *
+ * The page used to say what a control did in a paragraph above it and again in a hint
+ * below it. A row says it once, in the two lines beside the control, and the reason a
+ * setting exists — which is what most of those paragraphs were — moved to the note
+ * under the group or into a disclosure.
+ */
+function row(options: RowOptions, control: Node): HTMLDivElement {
+  const label = options.labelFor
+    ? element("label", { className: "row-label", text: options.label ?? "" })
+    : element("span", { className: "row-label", text: options.label ?? "" });
+  if (options.labelFor && label instanceof HTMLLabelElement) label.htmlFor = options.labelFor;
+
+  const heading = options.impact
+    ? element("span", { className: "row-heading" }, [
+        label,
+        element("span", {
+          className: "impact-meter",
+          dataset: { impactFeature: options.impact },
+        }),
+      ])
+    : label;
+
+  const className = `${options.className ?? "row"}${options.glyph ? " row-glyphed" : ""}`;
+
+  return element("div", { className }, [
+    options.glyph
+      ? element("span", {
+          className: options.glyph.isText
+            ? "advanced-symbol advanced-symbol-text"
+            : "advanced-symbol",
+          text: options.glyph.text,
+          ariaHidden: true,
+        })
+      : null,
+    element("div", { className: "row-copy" }, [
+      options.label === undefined ? null : heading,
+      options.sub ? element("span", { className: "row-sub", text: options.sub }) : null,
+      options.note ? element("span", { className: "row-sub", text: options.note }) : null,
+    ]),
+    element("div", { className: "row-control" }, [control]),
+  ]);
+}
+
+/**
+ * The switch itself, matching the markup `settings.html` writes by hand.
+ *
+ * A `span` rather than the `label` this control is elsewhere: the row's own label
+ * already names the input. `settings.css` stretches the input over the track, so the
+ * track is still what a click lands on.
+ */
+function switchControl(id: string, onChange: (checked: boolean) => void): HTMLInputElement {
   const input = element("input");
   input.type = "checkbox";
-  input.id = options.id;
-  input.addEventListener("change", () => options.onChange(input.checked));
+  input.id = id;
+  input.addEventListener("change", () => onChange(input.checked));
+  return input;
+}
 
-  const card = element("label", { className: "advanced-option" }, [
+function switchBox(input: HTMLInputElement): HTMLSpanElement {
+  return element("span", { className: "switch-control" }, [
     input,
-    element("span", {
-      className: options.symbolIsText ? "advanced-symbol advanced-symbol-text" : "advanced-symbol",
-      text: options.symbol,
-      ariaHidden: true,
-    }),
-    element("span", { className: "advanced-copy" }, [
-      element("span", { className: "advanced-heading" }, [
-        element("span", { className: "advanced-title", text: options.title }),
-        options.impact
-          ? element("span", {
-              className: "impact-meter",
-              dataset: { impactFeature: options.impact },
-            })
-          : null,
-      ]),
-      element("span", { className: "advanced-hint", text: options.hint }),
-      options.note ? element("span", { className: "advanced-hint", text: options.note }) : null,
-    ]),
+    element("span", { className: "switch-track", ariaHidden: true }, [element("span")]),
   ]);
-  return { card, input };
+}
+
+/** A row whose control is a switch, wired to `onChange`. */
+function switchRow(
+  options: RowOptions & { id: string; label: string; onChange: (checked: boolean) => void },
+): { row: HTMLDivElement; input: HTMLInputElement } {
+  const input = switchControl(options.id, options.onChange);
+  return { row: row({ ...options, labelFor: options.id }, switchBox(input)), input };
+}
+
+/** A row whose control is a segmented group, for `bindGroup` to fill. */
+function groupRow(
+  id: string,
+  options: RowOptions & { label: string },
+): { row: HTMLDivElement; group: HTMLDivElement } {
+  const group = element("div", { className: "segmented" });
+  group.id = id;
+  const node = row({ ...options, className: "row" }, group);
+  const label = query<HTMLElement>(".row-label", node);
+  label.id = `${id}-label`;
+  group.setAttribute("aria-labelledby", label.id);
+  return { row: node, group };
+}
+
+/** A rounded card holding one or more rows. */
+function group(children: (Node | null)[]): HTMLDivElement {
+  return element("div", { className: "group" }, children);
+}
+
+function groupTitle(text: string, note?: HTMLElement): HTMLHeadingElement {
+  return element("h4", { className: "group-title", text }, note ? [" ", note] : []);
 }
 
 function fillSelect(
@@ -269,25 +417,6 @@ function headerCell(text: string, numeric = false): HTMLTableCellElement {
   const cell = element("th", numeric ? { className: "numeric", text } : { text });
   cell.scope = "col";
   return cell;
-}
-
-/** A `.field` holding a label and an empty segmented group, wired by `bindGroup`. */
-function groupField(
-  id: string,
-  label: string,
-  hint?: string,
-): { field: HTMLDivElement; group: HTMLDivElement } {
-  const labelNode = element("span", { className: "field-label", text: label });
-  labelNode.id = `${id}-label`;
-  const group = element("div", { className: "segmented" });
-  group.id = id;
-  group.setAttribute("aria-labelledby", labelNode.id);
-  const field = element("div", { className: "field" }, [
-    labelNode,
-    group,
-    hint ? element("span", { className: "field-hint", text: hint }) : null,
-  ]);
-  return { field, group };
 }
 
 /* ------------------------------------------------------------------ *
@@ -344,7 +473,7 @@ function renderImpactMeters(): void {
  * `""` for, which is almost anything.
  *
  * `"YouTube"` has no public suffix, so it came back as the site key `youtube` — a
- * budget that can never match a request, sitting in the table at 0% forever. A pasted
+ * budget that can never match a request, sitting in the list at 0% forever. A pasted
  * `https://youtube.com/watch` tripped the IPv6 colon guard in `sites.ts` and the whole
  * URL became the key, with the same result. Both said "Daily limit saved."
  *
@@ -475,13 +604,20 @@ function paintPlanEcho(): void {
     return;
   }
   const size = parseByteSize(raw);
+  if (size === null || size <= 0) {
+    planEcho.textContent = t("settingsPlanEchoUnreadable");
+    return;
+  }
   // Echoed on every keystroke, because the one thing a size field cannot do is take a
   // number and mean a different one. "1,5 GB" is 1.5 GB in most of the world and 15 GB
   // in some parsers; whichever this build reads it as, it says so before you save.
-  planEcho.textContent =
-    size === null || size <= 0
-      ? t("settingsPlanEchoUnreadable")
-      : t("settingsPlanEchoReads", bytes(size));
+  //
+  // And it says nothing when the field already holds exactly what the product would
+  // print. "Reads as 15.0 GB" under a field reading 15.0 GB is a warning about a
+  // disagreement that is not there, and a page whose every control carries a line of
+  // small print is the page this one replaced.
+  const reading = bytes(size);
+  planEcho.textContent = reading === raw ? "" : t("settingsPlanEchoReads", reading);
 }
 
 function paintPlan(): void {
@@ -501,13 +637,13 @@ function paintPlan(): void {
   paintGroup(planShapeGroup, planEnforcement);
   planShapeHint.textContent = t(PLAN_ENFORCEMENT_HINT_KEYS[planEnforcement]);
 
-  planNote.textContent =
+  railPlanValue.textContent =
     settings.planBytes === null
       ? t("settingsPlanNoteUnset")
       : t("settingsPlanNote", [bytes(settings.planBytes), formatAgo(cycleResetsAt(settings))]);
 
   replaceChildren(planAllowance, planAllowanceBlock(settings, total));
-  // The alerts panel's warning depends on whether that allowance exists, and this is
+  // The alerts pane's warning depends on whether that allowance exists, and this is
   // the only place that knows it just changed.
   paintAlertNote();
 }
@@ -525,8 +661,9 @@ function planAllowanceBlock(current: Settings, total: BudgetStatus | null): Node
   const range = cycleRange(current);
   const elapsed = cycleElapsed(current);
   const nodes: Node[] = [
+    groupTitle(t("settingsCycleTitle")),
     element("p", {
-      className: "field-hint",
+      className: "group-note group-note-lead",
       text: t("settingsPlanCycleLine", [
         formatDayShort(range.from),
         formatCount(elapsed.elapsedDays),
@@ -539,7 +676,7 @@ function planAllowanceBlock(current: Settings, total: BudgetStatus | null): Node
   if (!total) {
     nodes.push(
       element("p", {
-        className: "field-hint",
+        className: "empty friendly-empty",
         text: t("settingsPlanNoAllowance", planEnforcementLabel("watch")),
       }),
     );
@@ -559,11 +696,19 @@ function planAllowanceBlock(current: Settings, total: BudgetStatus | null): Node
 
 function allowanceCard(status: BudgetStatus): HTMLElement {
   const state = statusWords(status);
-  return element("div", { className: "exception-settings" }, [
-    element("div", { className: "exception-head" }, [
-      element("span", { className: "field-label", text: t("settingsAllowanceLabel") }),
+  return group([
+    element("div", { className: "row row-stack" }, [
+      element("div", { className: "limit-head" }, [
+        element("span", { className: "limit-site", text: t("settingsAllowanceLabel") }),
+        element("span", {
+          className: "state-chip",
+          text: state.text,
+          dataset: state.tone ? { tone: state.tone } : {},
+        }),
+      ]),
+      meter(status),
       element("span", {
-        className: "summary-note",
+        className: "row-sub",
         text: status.resetsAt
           ? t("settingsAllowanceResets", [
               BUDGET_PERIOD_LABELS[status.budget.period],
@@ -571,28 +716,37 @@ function allowanceCard(status: BudgetStatus): HTMLElement {
             ])
           : BUDGET_PERIOD_LABELS[status.budget.period],
       }),
-    ]),
-    meter(status),
-    element("p", {}, [
-      element("span", {
-        className: "state-chip",
-        text: state.text,
-        dataset: state.tone ? { tone: state.tone } : {},
-      }),
-      // The space is the gap after the chip, not part of either sentence, so it stays
-      // out of the message rather than becoming leading whitespace a translator has to
-      // notice and preserve.
       status.tier === "off"
         ? null
-        : ` ${t("settingsAllowanceTier", [TIER_LABELS[status.tier], TIER_DESCRIPTIONS[status.tier]])}`,
+        : element("span", {
+            className: "row-sub",
+            text: t("settingsAllowanceTier", [
+              TIER_LABELS[status.tier],
+              TIER_DESCRIPTIONS[status.tier],
+            ]),
+          }),
+      // No Remove here. Removing this budget is what "Just track it" above does, and it
+      // has to be that control rather than this button, because dropping the allowance
+      // without saying so leaves plan alerts silently checking nothing.
+      element("div", { className: "row-actions" }, rowActions(status, false)),
     ]),
-    // No Remove here. Removing this budget is what "Just measure" above does, and it
-    // has to be that control rather than this button, because dropping the allowance
-    // without saying so leaves plan alerts silently checking nothing.
-    element("div", { className: "row-actions" }, rowActions(status, false)),
   ]);
 }
 
+/**
+ * Writes the plan size, and is reached by leaving the field rather than by a button.
+ *
+ * The Save button it replaces was the only one on the page: the reset day, the
+ * enforcement choice and every switch already saved themselves, so a person who
+ * changed the size and moved on had no way to know that one field alone had not
+ * stuck. `change` fires on blur and on Enter, and only when the value actually
+ * differs from what the field last held, so tabbing past it saves nothing.
+ *
+ * Emptying the field still removes the plan, which is a real deletion reached by
+ * leaving a field. It is announced rather than silent — the status line under the
+ * group says so — and it is undone by typing the number again, which is the whole of
+ * what was lost.
+ */
 async function savePlan(): Promise<void> {
   const raw = planSizeInput.value.trim();
   const cycleStartDay = Number(planCycleSelect.value);
@@ -600,13 +754,15 @@ async function savePlan(): Promise<void> {
 
   if (raw && (size === null || size <= 0)) {
     planStatus.textContent = t("settingsPlanSizeUnreadable", raw);
+    planStatus.dataset.tone = "error";
     return;
   }
+  planStatus.dataset.tone = "";
 
   // Captured before anything renders. `paintPlan` re-derives this from the stored
   // budgets, and between the settings write and the budget write there is no budget yet
-  // — so reading the global afterwards would turn a chosen "Hard stop" into "Just
-  // measure" and quietly save a plan with no allowance behind it.
+  // — so reading the global afterwards would turn a chosen "Stop at the limit" into
+  // "Just track it" and quietly save a plan with no allowance behind it.
   const enforcement = planEnforcement;
 
   planStatus.textContent = t("settingsSaving");
@@ -629,6 +785,7 @@ async function savePlan(): Promise<void> {
   } catch (error) {
     const message = errorMessage(error, t("settingsPlanSaveError"));
     planStatus.textContent = message;
+    planStatus.dataset.tone = "error";
     liveRegion.textContent = message;
   }
 }
@@ -672,14 +829,19 @@ async function choosePlanEnforcement(value: PlanEnforcement): Promise<void> {
     planStatus.textContent = t("settingsSavedSentence");
   } catch (error) {
     planStatus.textContent = errorMessage(error, t("settingsAllowanceChangeError"));
+    planStatus.dataset.tone = "error";
   }
 }
 
-planForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  void savePlan();
-});
 planSizeInput.addEventListener("input", paintPlanEcho);
+planSizeInput.addEventListener("change", () => void savePlan());
+planSizeInput.addEventListener("keydown", (event) => {
+  // Enter already fires `change` on the way out of the field in every engine this ships
+  // to, but only after the default action — which in a page with no form is nothing.
+  // Blurring makes the save happen where the key was pressed rather than whenever focus
+  // next moves, which is what someone pressing Enter is asking for.
+  if (event.key === "Enter") planSizeInput.blur();
+});
 
 /* ------------------------------------------------------------------ *
  * Site limits
@@ -690,13 +852,23 @@ let editingSite: string | null = null;
 let deferredStatuses: readonly BudgetStatus[] | null = null;
 
 let formPeriod: BudgetPeriod = "day";
-let formHard = false;
+let formShape: BudgetShape = "progressive";
 
 const PERIOD_OPTION_KEYS: Record<BudgetPeriod, string> = {
   session: "settingsPeriodSession",
   day: "settingsPeriodDay",
   week: "settingsPeriodWeek",
   month: "settingsPeriodMonth",
+};
+
+const LIMIT_SHAPE_LABEL_KEYS: Record<BudgetShape, string> = {
+  progressive: "settingsPlanShapeProgressive",
+  hard: "settingsPlanShapeHard",
+};
+
+const LIMIT_SHAPE_HINT_KEYS: Record<BudgetShape, string> = {
+  progressive: "settingsLimitShapeProgressiveHint",
+  hard: "settingsLimitShapeHardHint",
 };
 
 /**
@@ -720,6 +892,7 @@ async function loadLimits(): Promise<void> {
     renderLimits(loaded);
   } catch (error) {
     limitStatus.textContent = errorMessage(error, t("settingsLimitsReadError"));
+    limitStatus.dataset.tone = "error";
   }
 }
 
@@ -734,22 +907,30 @@ function renderLimits(loaded: readonly BudgetStatus[]): void {
 
   const rows = loaded.filter((status) => status.budget.site !== ALL_SITES);
   limitsEmpty.hidden = rows.length > 0;
-  limitsTable.hidden = rows.length === 0;
+  limitsList.hidden = rows.length === 0;
   // Singular and plural are two whole messages. Joining a count to a noun chosen by a
   // ternary is English-only arithmetic: other languages pick the form from the number
   // itself, and several have more than two forms to pick from.
-  limitsNote.textContent =
+  // Named at zero rather than left blank. Three of the six rail items carry their
+  // current value, and an item that carries one only sometimes reads as an item still
+  // loading — next to "No plan set" and "Off", which both state their empty case.
+  railLimitsValue.textContent =
     rows.length === 0
-      ? ""
+      ? t("settingsLimitsNoteNone")
       : t(
           rows.length === 1 ? "settingsLimitsNoteOne" : "settingsLimitsNoteMany",
           formatCount(rows.length),
         );
 
   replaceChildren(
-    limitsBody,
-    [...rows].sort((a, b) => b.share - a.share).map((status) => limitRow(status)),
+    limitsList,
+    [...rows].sort((a, b) => b.share - a.share).map((status) => limitCard(status)),
   );
+  // The free tier's ceiling is on this count, so the locks are re-applied whenever it
+  // moves — removing a limit while at the ceiling has to unlock the form again, and it
+  // is the only thing that does.
+  siteLimitCount = rows.length;
+  renderLocks();
   paintPlan();
 }
 
@@ -761,7 +942,7 @@ function endEditing(): void {
 }
 
 /**
- * The status column says what the user's position is, and the tier below it says what
+ * The status chip says what the user's position is, and the tier below it says what
  * that costs.
  *
  * It used to print the tier name alone — "Page shell only" — which is the mechanism,
@@ -857,77 +1038,57 @@ function rowActions(status: BudgetStatus, removable = true): HTMLElement[] {
   return actions;
 }
 
-function limitRow(status: BudgetStatus): HTMLTableRowElement {
+/**
+ * One limit, as a card.
+ *
+ * This was six table columns with a `data-label` on every cell and a media query that
+ * turned the table back into one card per limit under 640px — which is what it always
+ * was. Five of the six columns hold a different kind of thing about one site, so
+ * nothing was gained by lining them up vertically, and the header row was six words of
+ * chrome above a table that is usually one row long.
+ */
+function limitCard(status: BudgetStatus): HTMLLIElement {
   const site = status.budget.site;
   const state = statusWords(status);
 
-  /*
-   * `data-label` repeats the column heading on each cell so the narrow layout can
-   * drop the header row and still say what each figure is: under 640px the six
-   * columns become one card per limit (see `#limits-table` in `dashboard.css`).
-   * The site and the actions are left unlabelled — the hostname is the card's
-   * title and the buttons name themselves.
-   *
-   * CSS prints these through `content: attr(data-label)`, so they are read on screen
-   * and take the same messages as the `<th>`s they repeat.
-   */
-  // Built before the button, because the button's job is to replace this cell's
+  // Built before the button, because the button's job is to replace this block's
   // contents with the editor and it needs somewhere to put them.
-  const limitCell = element("td", { dataset: { label: t("settingsLimitsColLimit") } });
-  replaceChildren(limitCell, [
-    element("span", { className: "limit-meter" }, [
-      // Wrapped so the button keeps its own width: `.limit-meter` is a grid, and a
-      // grid item stretches to the 130px column.
-      element("span", {}, [
-        button("ghost-button", {
-          text: t("settingsLimitAllowanceButton", [
-            bytes(status.budget.bytes),
-            BUDGET_PERIOD_LABELS[status.budget.period],
-          ]),
-          ariaLabel: t("settingsLimitEditAria", site),
-          title: t("settingsLimitEditTitle"),
-          onClick: () => startEditing(status, limitCell),
-        }),
+  const allowanceBlock = element("div", { className: "limit-allowance" });
+  replaceChildren(allowanceBlock, [
+    button("ghost-button", {
+      text: t("settingsLimitAllowanceButton", [
+        bytes(status.budget.bytes),
+        BUDGET_PERIOD_LABELS[status.budget.period],
       ]),
-      element("span", {
-        className: "field-hint",
-        text: BUDGET_SHAPE_LABELS[status.budget.shape],
-      }),
-    ]),
+      ariaLabel: t("settingsLimitEditAria", site),
+      title: t("settingsLimitEditTitle"),
+      onClick: () => startEditing(status, allowanceBlock),
+    }),
+    element("span", {
+      className: "row-sub",
+      text: BUDGET_SHAPE_LABELS[status.budget.shape],
+    }),
   ]);
 
-  return element("tr", {}, [
-    element("td", {}, [element("span", { className: "host-name", text: site, title: site })]),
-    limitCell,
-    element("td", { className: "numeric", dataset: { label: t("settingsLimitsColUsed") } }, [
-      meter(status),
+  return element("li", { className: "limit-card" }, [
+    element("div", { className: "limit-head" }, [
+      element("span", { className: "limit-site host-name", text: site, title: site }),
+      element("span", {
+        className: "state-chip",
+        text: state.text,
+        dataset: state.tone ? { tone: state.tone } : {},
+      }),
     ]),
-    element("td", { dataset: { label: t("settingsLimitsColStatus") } }, [
-      element("span", { className: "limit-meter" }, [
-        // The chip is wrapped rather than placed straight into the grid: it is
-        // `inline-block`, and a grid item stretches to the column width, which would
-        // draw a 130px-wide pill around a two-word status.
-        element("span", {}, [
-          element("span", {
-            className: "state-chip",
-            text: state.text,
-            dataset: state.tone ? { tone: state.tone } : {},
-          }),
-        ]),
-        status.tier === "off"
-          ? null
-          : element("span", {
-              className: "field-hint",
-              text: TIER_LABELS[status.tier],
-              title: TIER_DESCRIPTIONS[status.tier],
-            }),
-      ]),
-    ]),
-    element("td", {
-      dataset: { label: t("settingsLimitsColResets") },
-      text: status.resetsAt ? formatAgo(status.resetsAt) : t("settingsResetsOnClose"),
+    allowanceBlock,
+    meter(status),
+    element("span", {
+      className: "row-sub",
+      text: t(
+        "settingsLimitResets",
+        status.resetsAt ? formatAgo(status.resetsAt) : t("settingsResetsOnClose"),
+      ),
     }),
-    element("td", {}, [element("span", { className: "row-actions" }, rowActions(status))]),
+    element("div", { className: "row-actions" }, rowActions(status)),
   ]);
 }
 
@@ -979,7 +1140,7 @@ function splitForEdit(value: number): { amount: number; label: string } {
 }
 
 /**
- * Turns the allowance cell into a field.
+ * Turns the allowance block into a field.
  *
  * Without this, raising 800 MB to 1 GB meant retyping the domain into the add form —
  * which happens to overwrite the existing budget, with nothing in the UI saying so. The
@@ -987,7 +1148,7 @@ function splitForEdit(value: number): { amount: number; label: string } {
  * a form that quietly reset a monthly hard cap to a progressive daily one would be
  * worse than no editing at all.
  */
-function startEditing(status: BudgetStatus, cell: HTMLTableCellElement): void {
+function startEditing(status: BudgetStatus, block: HTMLElement): void {
   editingSite = status.budget.site;
 
   const start = splitForEdit(status.budget.bytes);
@@ -1029,10 +1190,12 @@ function startEditing(status: BudgetStatus, cell: HTMLTableCellElement): void {
     const value = amount.valueAsNumber;
     if (factor === undefined || !Number.isFinite(value) || value <= 0) {
       limitStatus.textContent = t("settingsEditSizeInvalid");
+      limitStatus.dataset.tone = "error";
       return;
     }
     editingSite = null;
     limitStatus.textContent = t("settingsSaving");
+    limitStatus.dataset.tone = "";
     void changeLimit({
       type: "PUT_BUDGET",
       site: status.budget.site,
@@ -1056,7 +1219,7 @@ function startEditing(status: BudgetStatus, cell: HTMLTableCellElement): void {
     cancelEdit();
   });
 
-  replaceChildren(cell, [form]);
+  replaceChildren(block, [form]);
   amount.focus();
   amount.select();
 }
@@ -1066,9 +1229,11 @@ async function changeLimit(request: Parameters<typeof sendRequest>[0]): Promise<
     const response = await sendRequest(request);
     if ("statuses" in response) renderLimits(response.statuses);
     limitStatus.textContent = "";
+    limitStatus.dataset.tone = "";
     return true;
   } catch (error) {
     limitStatus.textContent = errorMessage(error, t("settingsLimitChangeError"));
+    limitStatus.dataset.tone = "error";
     return false;
   }
 }
@@ -1083,20 +1248,23 @@ query<HTMLFormElement>("#limit-form").addEventListener("submit", (event) => {
 
   if ("error" in parsed) {
     limitStatus.textContent = parsed.error;
+    limitStatus.dataset.tone = "error";
     siteInput.focus();
     return;
   }
   if (size === null || size <= 0) {
     limitStatus.textContent = t("settingsLimitSizeUnreadable", raw);
+    limitStatus.dataset.tone = "error";
     sizeInput.focus();
     return;
   }
 
   const site = parsed.site;
   const replacing = statuses.some((status) => status.budget.site === site);
-  const shape: BudgetShape = formHard ? "hard" : "progressive";
+  const shape = formShape;
 
   limitStatus.textContent = t("settingsSaving");
+  limitStatus.dataset.tone = "";
   void changeLimit({ type: "PUT_BUDGET", site, bytes: size, period: formPeriod, shape }).then(
     (saved) => {
       if (!saved) return;
@@ -1122,6 +1290,18 @@ query<HTMLFormElement>("#limit-form").addEventListener("submit", (event) => {
 /* ------------------------------------------------------------------ *
  * Data Saver
  * ------------------------------------------------------------------ */
+
+const SAVER_LEVEL_LABEL_KEYS: Record<SaverLevel, string> = {
+  light: "settingsLevelLight",
+  balanced: "settingsLevelBalanced",
+  maximum: "settingsLevelMaximum",
+};
+
+const SAVER_LEVEL_HINT_KEYS: Record<SaverLevel, string> = {
+  light: "settingsLevelLightHint",
+  balanced: "settingsLevelBalancedHint",
+  maximum: "settingsLevelMaximumHint",
+};
 
 const VISIBILITY_GROUPS: readonly {
   key: FeatureInfo["visibility"];
@@ -1199,6 +1379,12 @@ const groupCounts = new Map<FeatureInfo["visibility"], HTMLSpanElement>();
  * a feature added there cannot be forgotten here, and the `visibility` field it already
  * carries gives the ordering: what you cannot see first, what you can see last.
  *
+ * These are all inside Advanced now, under the three-way level picker that sets them in
+ * one go. They stayed switches rather than becoming a read-only list because the
+ * feature descriptions are the honest ones — "images and frames added after the page
+ * loads", not "faster pages" — and someone who has read them has earned the ability to
+ * act on one.
+ *
  * Built once rather than per render, for the reason `bindGroup` documents: a rebuild on
  * every save destroys the checkbox the user just clicked, between the click and the
  * confirmation.
@@ -1206,22 +1392,20 @@ const groupCounts = new Map<FeatureInfo["visibility"], HTMLSpanElement>();
 function buildFeatureRows(): void {
   replaceChildren(
     featureGroups,
-    VISIBILITY_GROUPS.map((group) => {
+    VISIBILITY_GROUPS.flatMap((visibility) => {
       const count = element("span", { className: "summary-note" });
-      groupCounts.set(group.key, count);
-      const cards = FEATURES.filter((feature) => feature.visibility === group.key).map(
+      groupCounts.set(visibility.key, count);
+      const rows = FEATURES.filter((feature) => feature.visibility === visibility.key).map(
         (feature) => {
-          const symbol = FEATURE_SYMBOLS[feature.id];
           const noteKey = FEATURE_NOTE_KEYS[feature.id];
           // The label and description are the feature table's own, already localised
           // there. Copying them into this page's catalogue would give a translator two
           // of each and the product two answers to what a feature is called.
-          const { card, input } = checkCard({
+          const built = switchRow({
             id: `feature-${feature.id}`,
-            symbol: symbol.text,
-            symbolIsText: symbol.isText,
-            title: feature.label,
-            hint: feature.description,
+            label: feature.label,
+            sub: feature.description,
+            glyph: FEATURE_SYMBOLS[feature.id],
             ...(noteKey ? { note: t(noteKey) } : {}),
             ...(SAVINGS_IMPACT_BY_FEATURE[feature.id] ? { impact: feature.id } : {}),
             onChange: (checked) =>
@@ -1229,20 +1413,17 @@ function buildFeatureRows(): void {
                 features: { [feature.id]: checked } as OptimizeSettings["features"],
               }),
           });
-          featureInputs.set(feature.id, input);
-          optimizeInputs.push(input);
-          return card;
+          featureInputs.set(feature.id, built.input);
+          optimizeInputs.push(built.input);
+          return built.row;
         },
       );
 
-      return element("div", { className: "exception-settings" }, [
-        element("div", { className: "exception-head" }, [
-          element("span", { className: "field-label", text: t(group.titleKey) }),
-          count,
-        ]),
-        element("p", { text: t(group.noteKey) }),
-        element("div", { className: "advanced-options" }, cards),
-      ]);
+      return [
+        groupTitle(t(visibility.titleKey), count),
+        element("p", { className: "group-note group-note-lead", text: t(visibility.noteKey) }),
+        group(rows),
+      ];
     }),
   );
 }
@@ -1263,18 +1444,17 @@ function buildPackRows(): void {
     PACKS.map((pack) => {
       // As with the features: the pack's own label and description come from the pack
       // table and are not repeated in this page's catalogue.
-      const { card, input } = checkCard({
+      const built = switchRow({
         id: `pack-${pack.id}`,
-        symbol: PACK_SYMBOLS[pack.id] ?? pack.label.slice(0, 2),
-        symbolIsText: true,
-        title: pack.label,
-        hint: pack.description,
+        label: pack.label,
+        sub: pack.description,
         note: t("settingsPackHosts", pack.hosts.join(", ")),
+        glyph: { text: PACK_SYMBOLS[pack.id] ?? pack.label.slice(0, 2), isText: true },
         onChange: (checked) => void changeOptimize({ packs: { [pack.id]: checked } }),
       });
-      packInputs.set(pack.id, input);
-      optimizeInputs.push(input);
-      return card;
+      packInputs.set(pack.id, built.input);
+      optimizeInputs.push(built.input);
+      return built.row;
     }),
   );
 }
@@ -1323,6 +1503,12 @@ async function changeOptimize(changes: Partial<OptimizeSettings>): Promise<void>
   } finally {
     optimizeToggle.disabled = false;
     for (const input of optimizeInputs) input.disabled = false;
+    // After the blanket re-enable, never before it. That loop puts every optimize input
+    // back to `disabled = false` including the fourteen behind the paid tier, so
+    // without this a free install could open Advanced, toggle the master switch, and
+    // find the whole matrix live — the lock undone by the one control that is not
+    // behind it.
+    renderLocks();
     if (focused?.isConnected) focused.focus();
   }
 }
@@ -1337,20 +1523,37 @@ async function changeOptimize(changes: Partial<OptimizeSettings>): Promise<void>
 function renderOptimize(next: OptimizeSettings): void {
   optimize = next;
   optimizeToggle.checked = next.enabled;
-  // The master switch collapses the panel, as it always has: with it off there are no
-  // rules and no content script, so every control below it is describing something that
-  // is not happening. The controls are built either way, so nothing here rebuilds them.
+  // The master switch collapses everything below it, as it always has: with it off
+  // there are no rules and no content script, so every control under it is describing
+  // something that is not happening. The controls are built either way, so nothing
+  // here rebuilds them.
   optimizeBody.hidden = !next.enabled;
   optimizeNote.dataset.active = String(next.enabled);
   optimizeNote.textContent = "";
+  saverState.textContent = t(next.enabled ? "settingsSaverStateOn" : "settingsSaverStateOff");
+
+  const level = levelOf(next.features);
+  // `paintGroup` with a value matching no option checks nothing and leaves one way into
+  // the group, which is exactly the Custom state: no level is the truth, and rounding
+  // to the nearest one would silently undo the selection it is describing.
+  paintGroup(saverLevelGroup, level ?? "");
+  saverLevelCustom.hidden = level !== null;
+  saverLevelHint.textContent = level
+    ? t(SAVER_LEVEL_HINT_KEYS[level])
+    : t("settingsLevelCustomHint");
+  railSaverValue.textContent = !next.enabled
+    ? t("settingsRailOff")
+    : level
+      ? t(SAVER_LEVEL_LABEL_KEYS[level])
+      : t("settingsLevelCustom");
 
   for (const [id, input] of featureInputs) input.checked = next.features[id];
   for (const [id, input] of packInputs) input.checked = next.packs[id] ?? false;
 
-  for (const group of VISIBILITY_GROUPS) {
-    const inGroup = FEATURES.filter((feature) => feature.visibility === group.key);
+  for (const visibility of VISIBILITY_GROUPS) {
+    const inGroup = FEATURES.filter((feature) => feature.visibility === visibility.key);
     const on = inGroup.filter((feature) => next.features[feature.id]).length;
-    const count = groupCounts.get(group.key);
+    const count = groupCounts.get(visibility.key);
     if (count) {
       count.textContent = t("settingsGroupCount", [
         formatCount(on),
@@ -1367,10 +1570,13 @@ function renderOptimize(next: OptimizeSettings): void {
       ? t("settingsExclusionsNone")
       : t("settingsExclusionsCount", formatCount(next.exclusions.length));
 
+  // Nothing at all when the list is empty. The count beside the heading already says
+  // "None", and a body repeating it in a sentence is the page saying one fact twice —
+  // which is most of what made the old one long.
   replaceChildren(
     exclusionList,
     next.exclusions.length === 0
-      ? [element("li", { className: "field-hint", text: t("settingsExclusionsEmpty") })]
+      ? []
       : next.exclusions.map((site) =>
           element("li", { className: "chip" }, [
             site,
@@ -1386,6 +1592,12 @@ function renderOptimize(next: OptimizeSettings): void {
           ]),
         ),
   );
+
+  // `paintGroup` above moves the checked state on the holdout group, and the level
+  // picker's own options are free — but the holdout's are not, and `paintGroup` does
+  // not know that. Re-applying here keeps the two in step from every path that paints
+  // this section, not only from the one that saves.
+  renderLocks();
 }
 
 optimizeToggle.addEventListener("change", () => {
@@ -1421,14 +1633,14 @@ const alertInputs = new Map<keyof AlertSettings, HTMLInputElement>();
 function buildAlertRows(): void {
   const rows: HTMLElement[] = [];
   const add = (key: keyof AlertSettings, label: string, hint: string): void => {
-    const { field, input } = switchField({
+    const built = switchRow({
       id: `alert-${key}`,
       label,
-      hint,
+      sub: hint,
       onChange: (checked) => void changeAlerts({ [key]: checked } as Partial<AlertSettings>),
     });
-    alertInputs.set(key, input);
-    rows.push(field);
+    alertInputs.set(key, built.input);
+    rows.push(built.row);
   };
   add("plan", t("settingsAlertPlanLabel"), t("settingsAlertPlanHint"));
   add("sites", t("settingsAlertSitesLabel"), t("settingsAlertSitesHint"));
@@ -1553,21 +1765,20 @@ function retentionLabel(days: number): string {
 }
 
 function buildPrivacyOptions(): void {
-  const retention = groupField(
-    "retention-group",
-    t("settingsRetentionLabel"),
-    t("settingsRetentionHint"),
-  );
+  const retention = groupRow("retention-group", {
+    label: t("settingsRetentionLabel"),
+    sub: t("settingsRetentionHint"),
+  });
 
-  const hosts = switchField({
+  const hosts = switchRow({
     id: "track-hosts-toggle",
     label: t("settingsTrackHostsLabel"),
-    hint: t("settingsTrackHostsHint"),
+    sub: t("settingsTrackHostsHint"),
     onChange: (checked) => void applySettings({ trackHosts: checked }),
   });
   trackHostsInput = hosts.input;
 
-  replaceChildren(privacyOptions, [retention.field, hosts.field]);
+  replaceChildren(privacyOptions, [retention.row, hosts.row]);
 
   bindGroup<number>({
     container: retention.group,
@@ -1625,6 +1836,7 @@ function renderDeleteActions(): void {
   // Two steps in the page rather than one `confirm()` dialog: the sentence above says
   // what goes and what stays, which a modal cannot without being read as boilerplate.
   deleteStatus.textContent = t("settingsDeleteWarning");
+  deleteStatus.dataset.tone = "error";
   confirmButton.focus();
 }
 
@@ -1635,9 +1847,11 @@ async function performDelete(): Promise<void> {
     deleteArmed = false;
     renderDeleteActions();
     deleteStatus.textContent = t("settingsDeleted");
+    deleteStatus.dataset.tone = "";
     await Promise.all([loadLimits(), loadStorageReport()]);
   } catch (error) {
     deleteStatus.textContent = errorMessage(error, t("settingsDeleteError"));
+    deleteStatus.dataset.tone = "error";
   }
 }
 
@@ -1655,6 +1869,7 @@ async function download(format: "csv" | "json"): Promise<void> {
     dataStatus.textContent = t("settingsExportWrote", file.filename);
   } catch (error) {
     dataStatus.textContent = errorMessage(error, t("settingsExportError"));
+    dataStatus.dataset.tone = "error";
   }
 }
 
@@ -1676,7 +1891,7 @@ let storageLoaded = false;
 async function loadStorageReport(): Promise<void> {
   if (!storageDetails.open) return;
   replaceChildren(storageReportBlock, [
-    element("p", { className: "field-hint", text: t("settingsStorageReading") }),
+    element("p", { className: "group-note", text: t("settingsStorageReading") }),
   ]);
   try {
     const report = await sendRequest({ type: "GET_STORAGE_REPORT" });
@@ -1686,7 +1901,7 @@ async function loadStorageReport(): Promise<void> {
     storageLoaded = false;
     replaceChildren(storageReportBlock, [
       element("p", {
-        className: "field-hint",
+        className: "group-note",
         text: errorMessage(error, t("settingsStorageError")),
       }),
     ]);
@@ -1744,7 +1959,7 @@ function renderStorageReport(report: StorageReport): void {
         element("tr", {}, [
           element("td", { text: label }),
           element("td", { className: "numeric", text: value }),
-          element("td", { className: "field-hint", text: description }),
+          element("td", { className: "row-sub", text: description }),
         ]),
       ),
     ),
@@ -1753,7 +1968,7 @@ function renderStorageReport(report: StorageReport): void {
   const nodes: Node[] = [
     element("div", { className: "table-scroll" }, [table]),
     element("p", {
-      className: "field-hint",
+      className: "group-note",
       text:
         report.bytesUsed === null
           ? t("settingsStorageNoEstimate")
@@ -1838,14 +2053,13 @@ function bindControls(): void {
   });
   unitsHint.textContent = t("settingsUnitsHint");
 
-  const weekStart = groupField("week-start-group", t("settingsWeekStartLabel"));
-  const weekMode = groupField("week-mode-group", t("settingsWeekModeLabel"));
-  const monthMode = groupField(
-    "month-mode-group",
-    t("settingsMonthModeLabel"),
-    t("settingsMonthModeHint"),
-  );
-  replaceChildren(periodOptions, [weekStart.field, weekMode.field, monthMode.field]);
+  const weekStart = groupRow("week-start-group", { label: t("settingsWeekStartLabel") });
+  const weekMode = groupRow("week-mode-group", { label: t("settingsWeekModeLabel") });
+  const monthMode = groupRow("month-mode-group", {
+    label: t("settingsMonthModeLabel"),
+    sub: t("settingsMonthModeHint"),
+  });
+  replaceChildren(periodOptions, [weekStart.row, weekMode.row, monthMode.row]);
 
   bindGroup<Settings["weekStart"]>({
     container: weekStart.group,
@@ -1901,6 +2115,35 @@ function bindControls(): void {
     },
   });
 
+  // The same question the plan asks, at the scope of one site, and asked the same way.
+  // It replaced a switch labelled "Hard cap" whose off state named nothing at all, so
+  // the choice that most people want — cut back rather than stop dead — was the one
+  // with no words on it.
+  bindGroup<BudgetShape>({
+    container: limitShapeGroup,
+    options: (["progressive", "hard"] as const).map((value) => ({
+      value,
+      label: t(LIMIT_SHAPE_LABEL_KEYS[value]),
+    })),
+    value: formShape,
+    onSelect: (value) => {
+      formShape = value;
+      paintGroup(limitShapeGroup, value);
+      limitShapeHint.textContent = t(LIMIT_SHAPE_HINT_KEYS[value]);
+    },
+  });
+  limitShapeHint.textContent = t(LIMIT_SHAPE_HINT_KEYS[formShape]);
+
+  bindGroup<SaverLevel>({
+    container: saverLevelGroup,
+    options: SAVER_LEVELS.map((level) => ({
+      value: level,
+      label: t(SAVER_LEVEL_LABEL_KEYS[level]),
+    })),
+    value: "balanced",
+    onSelect: (value) => void changeOptimize({ features: featuresForLevel(value) }),
+  });
+
   bindGroup<number>({
     container: holdoutGroup,
     options: HOLDOUT_OPTIONS.map((percent) => ({
@@ -1910,16 +2153,6 @@ function bindControls(): void {
     value: 10,
     onSelect: (value) => void changeOptimize({ holdoutPercent: value }),
   });
-
-  const hard = switchField({
-    id: "limit-hard",
-    label: t("settingsLimitHardLabel"),
-    hint: t("settingsLimitHardHint", BUDGET_SHAPE_LABELS.hard),
-    onChange: (checked) => {
-      formHard = checked;
-    },
-  });
-  replaceChildren(limitShapeField, [hard.field]);
 
   fillSelect(planCycleSelect, cycleDayOptions(), "0");
   planCycleSelect.addEventListener("change", () => {
@@ -1940,9 +2173,13 @@ function bindControls(): void {
 }
 
 function buildTierTable(): void {
+  // Named with this page's own words for the two shapes, not the shared ones. The
+  // sentence points at the two segments a person just chose between a few rows above,
+  // and pointing at them by a different name would describe a control that is not
+  // there.
   query<HTMLParagraphElement>("#limit-shape-explainer").textContent = t("settingsTierExplainer", [
-    BUDGET_SHAPE_LABELS.progressive,
-    BUDGET_SHAPE_LABELS.hard,
+    t("settingsPlanShapeProgressive"),
+    t("settingsPlanShapeHard"),
   ]);
 
   replaceChildren(
@@ -1953,10 +2190,299 @@ function buildTierTable(): void {
         element("tr", {}, [
           element("td", { text: formatPercent(threshold.at) }),
           element("td", { text: TIER_LABELS[threshold.tier] }),
-          element("td", { className: "field-hint", text: TIER_DESCRIPTIONS[threshold.tier] }),
+          element("td", { className: "row-sub", text: TIER_DESCRIPTIONS[threshold.tier] }),
         ]),
       ),
   );
+}
+
+/* ------------------------------------------------------------------ *
+ * Plus
+ *
+ * Two jobs, kept apart on purpose. `renderLocks` decides what a free install may
+ * touch and is the only thing that disables a control; `renderPlusPane` describes the
+ * subscription and is the only thing that offers one. Mixing them is how a lock ends
+ * up selling something on a pane and a pane ends up disabling something elsewhere.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The lock notice, addressed at this page's own Plus section.
+ *
+ * A wrapper rather than four copies of the fragment: `#plus` is a route into the
+ * document that is already open, and the dashboard's copy of this passes
+ * `settings.html#plus` instead.
+ */
+function lock(note: string): HTMLElement {
+  return lockNotice(note, "#plus");
+}
+
+/**
+ * Applies every ceiling this page owns.
+ *
+ * Called from each render path rather than once at startup, because two of the four
+ * depend on state that changes — the limit ceiling on how many limits exist, and all of
+ * them on a subscription that can start or lapse while the page is open. It is
+ * idempotent, so calling it more often than necessary costs nothing.
+ */
+function renderLocks(): void {
+  const unlocked = plus.plus;
+  // Every locked segment on this page leads to the same place, one section away.
+  const toPlus = (): void => {
+    location.hash = "#plus";
+  };
+  const lockedGroup = (container: HTMLDivElement, isLocked: (value: string) => boolean): void => {
+    setGroupOptionsLocked(container, {
+      isLocked,
+      reason: t("corePlusLockedOption"),
+      onActivate: toPlus,
+    });
+  };
+
+  // 1. Data Saver: the eight switches, the six image services, the holdout rate.
+  replaceChildren(
+    saverAdvancedLock,
+    unlocked ? [] : [lock(t("settingsPlusLockSaverAdvanced"))],
+  );
+  setControlsEnabled(featureGroups, unlocked);
+  setControlsEnabled(packList, unlocked);
+  lockedGroup(holdoutGroup, () => !unlocked);
+
+  // 2. Site limits: the count, and the windows.
+  //
+  // The two are separate locks on one form. Hitting the count disables the whole thing;
+  // the window restriction applies at every count, so a free install's first limit is
+  // already a daily one. Note what is *not* here: nothing disables an existing limit's
+  // own controls, so pausing, topping up, editing and removing all keep working however
+  // many there are. That is `plus/tier.ts`'s rule 1 — a ceiling on what you can add,
+  // never on what you already have.
+  const atLimitCeiling = !unlocked && siteLimitCount >= FREE_SITE_LIMITS;
+  replaceChildren(
+    limitFormLock,
+    atLimitCeiling
+      ? [lock(t("settingsPlusLockMoreLimits", formatCount(FREE_SITE_LIMITS)))]
+      : [],
+  );
+  setControlsEnabled(limitForm, !atLimitCeiling);
+  if (!atLimitCeiling) {
+    lockedGroup(
+      limitPeriodGroup,
+      (value) => !unlocked && !(FREE_BUDGET_PERIODS as readonly string[]).includes(value),
+    );
+  }
+
+  // 3. Appearance: units, and the week/month rules.
+  replaceChildren(
+    appearanceAdvancedLock,
+    unlocked ? [] : [lock(t("settingsPlusLockAppearanceAdvanced"))],
+  );
+  lockedGroup(unitsGroup, () => !unlocked);
+  setControlsEnabled(periodOptions, unlocked);
+
+  // 4. Export range.
+  //
+  // The buttons are deliberately left alone. A free install exports its seven days —
+  // see the note on the EXPORT handler in `background.ts` — and what is locked is how
+  // far back the range reaches, so the ranges are what get disabled.
+  replaceChildren(
+    exportLock,
+    unlocked ? [] : [lock(t("settingsPlusLockHistory", formatCount(FREE_REPORT_DAYS)))],
+  );
+  let selectedIsLocked = false;
+  for (const option of queryAll<HTMLOptionElement>("option", exportDaysSelect)) {
+    const locked = !unlocked && Number(option.value) > FREE_REPORT_DAYS;
+    option.disabled = locked;
+    // The label carries the reason, because a `<select>` has nowhere else to put one:
+    // its options have no tooltip a person will find and no room for a glyph beside
+    // them. A greyed "Last 90 days" with no explanation is the same defect the
+    // segmented controls had.
+    option.textContent = t(
+      locked ? "settingsExportRangeDaysLocked" : "settingsExportRangeDays",
+      option.value,
+    );
+    if (locked && option.selected) selectedIsLocked = true;
+  }
+  // A disabled option that is still selected stays selected in Chrome, and the worker
+  // would clamp it anyway — so the file would come back holding seven days under a
+  // control reading "Last 400 days". Moving the selection is what keeps the label and
+  // the file the same claim.
+  if (selectedIsLocked) exportDaysSelect.value = String(FREE_REPORT_DAYS);
+}
+
+/* ------------------------------------------------------------------ *
+ * The Plus pane
+ * ------------------------------------------------------------------ */
+
+/** Everything Plus unlocks, in the order the sections appear on the rail. */
+function plusIncludedItems(): string[] {
+  return [
+    t("settingsPlusItemSaver"),
+    t("settingsPlusItemLimits", formatCount(FREE_SITE_LIMITS)),
+    t("settingsPlusItemHistory", formatCount(FREE_REPORT_DAYS)),
+    t("settingsPlusItemHosts"),
+    t("settingsPlusItemCompare"),
+    t("settingsPlusItemUnits"),
+  ];
+}
+
+/**
+ * The state block: what this install is, said before anything is offered.
+ *
+ * `past_due` is the one worth reading twice. It keeps Plus — `gate.ts` explains why —
+ * so the heading says the subscription is active and the detail says the payment
+ * failed, which is the honest pair. Rendering it as "not subscribed" would be wrong,
+ * and rendering it as plain "subscribed" would hide the one thing they need to act on.
+ */
+function plusStateBlock(): HTMLElement[] {
+  const tone =
+    plus.reason === "past_due" ? "warn" : plus.plus ? "on" : plus.reason === "expired" ? "warn" : "off";
+  const heading = t(
+    plus.reason === "paid"
+      ? "settingsPlusStatePaid"
+      : plus.reason === "trial"
+        ? "settingsPlusStateTrial"
+        : plus.reason === "past_due"
+          ? "settingsPlusStatePastDue"
+          : plus.reason === "expired"
+            ? "settingsPlusStateExpired"
+            : "settingsPlusStateFree",
+  );
+
+  const detail =
+    plus.reason === "paid"
+      ? t(plus.interval === "year" ? "settingsPlusDetailYear" : "settingsPlusDetailMonth")
+      : plus.reason === "trial" && plus.trialEndsAt !== null
+        ? t("settingsPlusDetailTrial", formatAgo(plus.trialEndsAt))
+        : plus.reason === "past_due"
+          ? t("settingsPlusDetailPastDue")
+          : plus.reason === "expired"
+            ? t("settingsPlusDetailExpired")
+            : t("settingsPlusDetailFree");
+
+  const block = element("div", { className: "plus-card", dataset: { tone } }, [
+    element("p", { className: "plus-card-title", text: heading }),
+    element("p", { className: "plus-card-detail", text: detail }),
+  ]);
+
+  const nodes = [block];
+  // Only ever additive, and never a downgrade. A stale answer still unlocks everything
+  // it unlocked before; this line exists so a paying customer whose checks have been
+  // failing finds out from the product rather than from a feature going missing.
+  if (plus.stale && plus.checkedAt > 0) {
+    nodes.push(
+      element("p", {
+        className: "group-note",
+        text: t("settingsPlusStale", formatAgo(plus.checkedAt)),
+      }),
+    );
+  }
+  if (!plus.plus) {
+    nodes.push(
+      element("p", {
+        className: "group-note plus-price",
+        text: t("settingsPlusPriceLine", [PRICE_MONTHLY, PRICE_YEARLY]),
+      }),
+    );
+  }
+  return nodes;
+}
+
+function renderPlusPane(): void {
+  replaceChildren(plusState, plusStateBlock());
+  replaceChildren(
+    plusList,
+    plusIncludedItems().map((text) => element("li", { text })),
+  );
+
+  const actions: HTMLElement[] = [];
+  if (plus.plus) {
+    actions.push(
+      button("ghost-button", {
+        text: t("settingsPlusManage"),
+        onClick: () => void openPlus("login"),
+      }),
+    );
+  } else {
+    if (plus.trialAvailable) {
+      actions.push(
+        button("primary-button", {
+          text: t("settingsPlusStartTrial", formatCount(TRIAL_DAYS)),
+          onClick: () => void openPlus("trial"),
+        }),
+      );
+    }
+    actions.push(
+      button(plus.trialAvailable ? "ghost-button" : "primary-button", {
+        text: t("settingsPlusSubscribe"),
+        onClick: () => void openPlus("payment"),
+      }),
+    );
+    // For the second machine, and for anyone who paid before reinstalling. Without it
+    // the only route back to a subscription someone already owns is to buy it again.
+    actions.push(
+      button("ghost-button", {
+        text: t("settingsPlusRestore"),
+        onClick: () => void openPlus("login"),
+      }),
+    );
+  }
+  actions.push(
+    button("ghost-button", {
+      text: t("settingsPlusRecheck"),
+      onClick: () => void recheckPlus(),
+    }),
+  );
+  replaceChildren(plusActions, actions);
+
+  railPlusValue.textContent = t(
+    plus.reason === "trial" ? "settingsRailPlusTrial" : plus.plus ? "settingsRailPlusOn" : "settingsRailPlusOff",
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Plus: loading
+ * ------------------------------------------------------------------ */
+
+function applyPlus(next: PlusStatus): void {
+  plus = next;
+  renderPlusPane();
+  renderLocks();
+}
+
+async function loadPlus(): Promise<void> {
+  try {
+    const response = await sendRequest({ type: "GET_PLUS" });
+    applyPlus(response.plus);
+  } catch {
+    // Nothing is said and nothing is unlocked. A failed read of the *cached* answer is
+    // a worker that is not answering at all, which every other panel on this page is
+    // already reporting in its own status line — a fifth copy of it here would be noise
+    // attached to the one section that cannot act on it.
+    renderLocks();
+  }
+}
+
+/** The explicit "check again", which is the only place this page forces a round trip. */
+async function recheckPlus(): Promise<void> {
+  plusStatusLine.textContent = t("settingsPlusChecking");
+  plusStatusLine.dataset.tone = "";
+  try {
+    const response = await sendRequest({ type: "REFRESH_PLUS" });
+    applyPlus(response.plus);
+    plusStatusLine.textContent = t("settingsPlusChecked");
+  } catch (error) {
+    plusStatusLine.textContent = errorMessage(error, t("settingsPlusCheckError"));
+    plusStatusLine.dataset.tone = "error";
+  }
+}
+
+async function openPlus(page: PlusPage): Promise<void> {
+  plusStatusLine.textContent = "";
+  try {
+    await sendRequest({ type: "OPEN_PLUS_PAGE", page });
+  } catch (error) {
+    plusStatusLine.textContent = errorMessage(error, t("settingsPlusOpenError"));
+    plusStatusLine.dataset.tone = "error";
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -1965,21 +2491,37 @@ function buildTierTable(): void {
 
 onSettingsChanged((next) => paintSettings(next));
 
+window.addEventListener("hashchange", () => showPane(paneFromHash(), true));
+
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState !== "visible") return;
   void loadLimits();
   void loadOptimize();
   void loadAlerts();
+  // The payment page opens in another tab, so coming back to this one is the moment a
+  // subscription most often changes. Cheap: the worker answers from its cache and only
+  // goes to the network on its own six-hour clock.
+  void loadPlus();
   if (storageDetails.open) void loadStorageReport();
 });
 
 async function start(): Promise<void> {
-  // First, before any control is built or any panel painted. The words in the markup
-  // and the words built by script sit inside the same panels, so a page that localised
-  // the second lot first would show a heading in one language above its own hint in
-  // another for as long as the settings read takes.
+  // Before anything is painted. A screen reader picks its voice and its pronunciation
+  // rules from `<html lang>`, and every page here ships `lang="en"` in its markup — true
+  // of the only catalogue that exists, and a lie the moment a second one does. Text that
+  // is correct and read aloud in the wrong language is worse than text left untranslated.
+  applyDocumentLanguage();
+  // First, before any control is built or any pane painted. The words in the markup
+  // and the words built by script sit inside the same sections, so a page that
+  // localised the second lot first would show a heading in one language above its own
+  // hint in another for as long as the settings read takes.
   localizeMarkup();
+  showPane(paneFromHash(), false);
   bindControls();
+  // Before the panes are loaded, so no control is ever painted unlocked and then
+  // disabled a moment later. The worker answers this from storage, so it is one message
+  // round trip and no network.
+  await loadPlus();
   await loadSettings();
   await Promise.all([loadLimits(), loadOptimize(), loadAlerts()]);
   paintAlertNote();

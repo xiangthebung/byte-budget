@@ -30,7 +30,7 @@ const { version } = JSON.parse(
  * imports nothing from `src/`, and `assert-classic-scripts` below enforces it
  * rather than trusting it.
  */
-const CLASSIC_SCRIPTS = ["timing.js", "notice.js", "optimize.js"];
+const CLASSIC_SCRIPTS = ["timing.js", "notice.js", "optimize.js", "subscription.js"];
 
 /** Anything in the manifest that names a file shipped alongside it. */
 const LOCAL_FILE = /\.(js|html|css|png|svg|json)$/;
@@ -454,6 +454,7 @@ export default defineConfig(({ mode }) => {
           timing: `${projectRoot}/src/content/timing.ts`,
           notice: `${projectRoot}/src/content/notice.ts`,
           optimize: `${projectRoot}/src/content/optimize.ts`,
+          subscription: `${projectRoot}/src/content/subscription.ts`,
         },
         output: {
           entryFileNames: "[name].js",

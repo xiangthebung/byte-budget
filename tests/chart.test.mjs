@@ -22,6 +22,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 
 /* ------------------------------------------------------------------ *
  * The smallest DOM `element()` needs
@@ -74,6 +75,37 @@ class FakeElement {
 globalThis.document = {
   createElement: (tagName) => new FakeElement(tagName),
   createTextNode: (data) => new FakeText(data),
+};
+
+/* ------------------------------------------------------------------ *
+ * The catalogue
+ *
+ * `core/i18n.ts` returns the key when there is no `chrome.i18n`, so without this the
+ * assertions below would read `coreChartEverythingElse` and pass — pinning the
+ * fallback rather than the string. Serving the real `i18n/core.json` means a legend
+ * label is asserted as the words a person sees, and a key deleted or renamed out of
+ * the catalogue fails here instead of shipping as its own name in the legend.
+ * ------------------------------------------------------------------ */
+
+const catalogue = JSON.parse(
+  await readFile(new URL("../i18n/core.json", import.meta.url), "utf8"),
+);
+
+globalThis.chrome = {
+  i18n: {
+    /** `$NAME$` resolves through `placeholders` to `$1`, `$2` …, as Chrome does. */
+    getMessage(name, substitutions) {
+      const entry = catalogue[name];
+      if (!entry) return "";
+      const values = substitutions === undefined ? [] : [substitutions].flat();
+      return entry.message.replace(/\$([A-Za-z0-9_]+)\$/g, (whole, key) => {
+        const content = entry.placeholders?.[key.toLowerCase()]?.content;
+        if (content === undefined) return whole;
+        const index = Number(content.slice(1)) - 1;
+        return values[index] ?? "";
+      });
+    },
+  },
 };
 
 const { barChart, stackedBar } = await import("../src/core/chart.ts");

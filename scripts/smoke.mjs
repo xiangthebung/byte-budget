@@ -30,13 +30,8 @@
  * 3. Waits are on conditions, not on clocks. Three clocks are left, and each says in
  *    a comment what it is waiting for and why there is nothing to poll.
  *
- * Playwright is installed out of tree (`npm i --no-save playwright`). The reason
- * originally given for that — keeping it out of the extension's dependencies — does
- * not hold: `scripts/package.mjs` builds the archive by walking `dist/` only, so no
- * entry in `package.json` can reach it. What `--no-save` does buy is a floating
- * Chromium, which is the wrong thing to leave floating in the one test that pins
- * browser behaviour. The recommendation, for whoever owns `package.json`: make it a
- * pinned `devDependency` and drop the out-of-tree install.
+ * Playwright and its browser are pinned development dependencies. The release archive
+ * is built by walking `dist/` only, so neither can enter the Chrome Web Store package.
  */
 import { createServer } from 'node:http';
 import { mkdir, readFile, readdir, stat } from 'node:fs/promises';
@@ -262,6 +257,30 @@ async function readDefaultImageEstimate() {
  * A copy would drift, and the check it feeds — "Chrome's RE2 accepts this" — is only
  * meaningful about the pattern that actually ships.
  */
+/**
+ * The settings sections, read out of the source rather than counted here.
+ *
+ * This check used to assert `panes.length === 6`, and a seventh section made it fail —
+ * a test failing because the product grew, which is the shape this file warns about
+ * two checks further down ("pinning either would make this fail the next time a feature
+ * is added"). What it is actually for is that no `settings.html#…` string anywhere in
+ * the build names a section that does not exist. So the count comes from the one place
+ * that decides it, and the assertion is equality with that.
+ */
+const SETTINGS_SECTIONS = await readSettingsSections();
+
+async function readSettingsSections() {
+  const source = await readFile(path.join(root, 'src', 'core', 'types.ts'), 'utf8');
+  const match = /export const SETTINGS_SECTIONS = \[([\s\S]*?)\] as const;/.exec(source);
+  if (!match) throw new Error('smoke: could not read SETTINGS_SECTIONS from types.ts');
+  // Block comments first: the entries carry explanatory ones between them, and a
+  // section name quoted inside a comment would be counted as an entry.
+  const body = match[1].replace(/\/\*[\s\S]*?\*\//g, '');
+  const names = [...body.matchAll(/"([A-Za-z0-9_-]+)"/g)].map((entry) => entry[1]);
+  if (names.length === 0) throw new Error('smoke: SETTINGS_SECTIONS parsed to nothing');
+  return names;
+}
+
 const PACK_PATTERNS = await readPackPatterns();
 
 async function readPackPatterns() {
@@ -515,9 +534,35 @@ function describeRules(rules) {
  * install, which is what lets two publishers share one id space without deleting each
  * other's work. A gap means a rule the extension composed is not one Chrome kept.
  */
-function ruleIdsAreContiguous(rules, count) {
+/**
+ * The permanent `allow` rule that keeps a limit from refusing the subscription check.
+ *
+ * It is published once at worker start and never changes, so it is present in every
+ * reading of Chrome's session rules — including the ones taken when the extension has
+ * composed nothing at all. Every assertion in this file about what a *limit* or the
+ * *optimizer* installed therefore has to exclude it, or it reports the exemption as a
+ * stray block rule and the tier checks fail for a reason that is not a defect.
+ */
+const GUARD_RULE_COUNT = 1;
+
+function isGuardRule(rule) {
+  return (
+    rule.action?.type === 'allow' &&
+    (rule.condition?.requestDomains ?? []).includes('extensionpay.com')
+  );
+}
+
+/**
+ * Whether `rules` occupies a contiguous block of ids immediately after the guard.
+ *
+ * `rules/session.ts` renumbers the whole set from 1 on every install, with the guard
+ * source first — so the limit and optimizer rules start at `offset + 1`. The claim is
+ * unchanged from when there was no guard: the set Chrome holds is exactly the set the
+ * extension composed, with no gaps, which is what proves nothing was silently dropped.
+ */
+function ruleIdsAreContiguous(rules, count, offset = GUARD_RULE_COUNT) {
   const ids = rules.map((rule) => rule.id).sort((a, b) => a - b);
-  return ids.length === count && ids.every((id, index) => id === index + 1);
+  return ids.length === count && ids.every((id, index) => id === index + 1 + offset);
 }
 
 /**
@@ -717,8 +762,27 @@ async function main() {
     const settings = await context.newPage();
     await dashboard.goto(`chrome-extension://${extensionId}/dashboard.html`);
     await settings.goto(`chrome-extension://${extensionId}/settings.html`);
-    await settings.waitForSelector('#optimize-toggle', { timeout: 10_000 });
+    await settings.waitForSelector('#optimize-toggle', { state: 'attached', timeout: 10_000 });
     await settings.waitForSelector('.impact-label', { state: 'attached', timeout: 10_000 });
+
+    /**
+     * Opens one of the six settings sections and waits for it to be on screen.
+     *
+     * The options page is a rail and six panes now, not one column: five of the six are
+     * `hidden` at any moment, and Playwright's actionability checks would sit and wait
+     * for a control that is deliberately not displayed. Every interaction below names
+     * the section it is in, which is also the honest description of what a person does.
+     *
+     * The hash is set rather than the rail item clicked, because at a narrow viewport
+     * the rail scrolls sideways and the item may be out of view — which is a real
+     * property of the layout and not something a test should have to scroll around.
+     */
+    const openSection = async (name) => {
+      await settings.evaluate((section) => {
+        location.hash = `#${section}`;
+      }, name);
+      await settings.waitForSelector(`#pane-${name}:not([hidden])`, { timeout: 10_000 });
+    };
 
     /**
      * One message to the worker, from an extension page.
@@ -753,17 +817,175 @@ async function main() {
     const sessionRules = () =>
       dashboard.evaluate(() => chrome.declarativeNetRequest.getSessionRules());
 
+    /** Chrome's session rules minus the permanent guard. See `isGuardRule`. */
+    const heldRules = async () => (await sessionRules()).filter((rule) => !isGuardRule(rule));
+
+    /**
+     * Puts the install on the free or the paid tier, without touching the network.
+     *
+     * The subscription state is a record in `chrome.storage.local`, written by the
+     * worker and read back through `GET_PLUS`. Writing it here is not a back door into
+     * production code — there is no test-only branch in `plus/gate.ts` — it is the same
+     * record the worker itself writes, and the memo-invalidation listener in `startPlus`
+     * is what makes an external write take effect. That listener exists for its own
+     * reasons (a cleared storage area must not leave a stale copy in a worker that lives
+     * for hours); this just happens to be the second thing it buys.
+     *
+     * Polls rather than assumes. `storage.onChanged` reaches the worker asynchronously,
+     * and a check that ran a millisecond too early would read the tier it was replacing
+     * and produce a confusing FAIL somewhere else entirely.
+     */
+    const setPlus = async (paid) => {
+      await dashboard.evaluate(
+        (on) =>
+          chrome.storage.local.set({
+            'plus.status': {
+              plus: on,
+              reason: on ? 'paid' : 'never',
+              trialEndsAt: null,
+              trialAvailable: !on,
+              interval: on ? 'month' : null,
+              checkedAt: Date.now(),
+              stale: false,
+            },
+          }),
+        paid,
+      );
+      const deadline = Date.now() + 10_000;
+      for (;;) {
+        const response = await ask({ type: 'GET_PLUS' });
+        if (response?.plus?.plus === paid) return true;
+        if (Date.now() > deadline) return false;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    };
+
     const optionsPage = await dashboard.evaluate(
       () => chrome.runtime.getManifest().options_page ?? '',
     );
     check(optionsPage === 'settings.html', `the Options page is separate (${optionsPage})`);
     check(
-      (await dashboard.$('#optimize-toggle')) === null && (await dashboard.$('#limits-table')) === null,
+      (await dashboard.$('#optimize-toggle')) === null && (await dashboard.$('#limits-list')) === null,
       'the dashboard contains reporting, not settings controls',
     );
     check(
       (await settings.$('#stats')) === null && (await settings.$('#site-list')) === null,
       'the Settings page contains controls, not dashboard reporting',
+    );
+
+    /*
+     * Nothing on the dashboard is clipped to a width it does not fit.
+     *
+     * The tile captions used to be one line with an ellipsis, which was invisible
+     * until a caption became a sentence — and the two on the Data Saver panel are the
+     * product saying which of its two figures is measured and which is modelled. They
+     * shipped reading "Original sizes on file, minus what the sma…" and "The size
+     * model's guess for requests refus…", so the half that fitted was the half that
+     * said nothing.
+     *
+     * Asserted over every caption on the page rather than those two, and by comparing
+     * scroll width against client width rather than by looking for a "…": a clipped
+     * element is one whose content is wider than the box it is in, whatever put it
+     * there. `textContent` would not do — CSS truncation does not change it.
+     *
+     * What it does not prove: putting `white-space: nowrap` back on `.stat-hint` does
+     * not fail this run today, because the tiles were widened in the same change and
+     * the fixture's captions now fit one line either way. It is a net under the whole
+     * class of defect, not a pin on the one instance of it.
+     */
+    const clipped = await dashboard.$$eval('.stat-hint, .stat-note, .panel-note', (nodes) =>
+      nodes
+        .filter((node) => node.scrollWidth > node.clientWidth + 1)
+        .map((node) => `${node.className}: ${node.textContent?.slice(0, 40)}`),
+    );
+    check(
+      clipped.length === 0,
+      `no caption on the dashboard is cut off${clipped.length ? ` — ${clipped.join('; ')}` : ''}`,
+    );
+
+    /*
+     * The Dashboard and Settings frames are the same frame.
+     *
+     * They are two pages of one product and the only thing a person sees on both is
+     * the header and the nav under it — so anything that differs between them reads as
+     * the page jumping when they switch. It drifted three ways at once and each was
+     * invisible from inside one page: Settings capped `.page` 60px narrower, so both
+     * surfaces centred 30px apart; the nav sat inside the header here and under it
+     * there; and the header was a line shorter here, so everything below it started
+     * 18px higher.
+     *
+     * Measured at one viewport with fonts settled, and asserted as equality rather
+     * than as four remembered numbers, so it keeps holding when the header changes.
+     */
+    for (const surface of [dashboard, settings]) {
+      await surface.setViewportSize({ width: 1280, height: 900 });
+      await settle(surface);
+    }
+    const frameOf = (surface) =>
+      surface.evaluate(() => {
+        const box = (selector) => {
+          const rect = document.querySelector(selector)?.getBoundingClientRect();
+          return rect
+            ? [rect.x, rect.y, rect.width, rect.height].map((value) => Math.round(value))
+            : null;
+        };
+        const page = box('.page');
+        return {
+          // Where the frame sits and how wide it is. Not its height: the two pages hold
+          // different amounts of content, which is the one thing they are allowed to
+          // disagree about.
+          pageAcross: page && [page[0], page[2]],
+          head: box('.page-head'),
+          nav: box('.section-nav'),
+          mark: box('.brand-mark'),
+        };
+      });
+    const [dashFrame, setFrame] = await Promise.all([frameOf(dashboard), frameOf(settings)]);
+    const differs = Object.keys(dashFrame).filter(
+      (part) => JSON.stringify(dashFrame[part]) !== JSON.stringify(setFrame[part]),
+    );
+    check(
+      dashFrame.pageAcross !== null && differs.length === 0,
+      `Dashboard and Settings share one frame` +
+        (differs.length
+          ? ` — ${differs
+              .map((part) => `${part} ${JSON.stringify(dashFrame[part])} vs ${JSON.stringify(setFrame[part])}`)
+              .join('; ')}`
+          : ` (frame ${JSON.stringify(dashFrame.pageAcross)}, nav ${JSON.stringify(dashFrame.nav)})`),
+    );
+
+    /*
+     * Every deep link into Settings names a section that exists.
+     *
+     * The popup's "Set a plan" and "Manage limits" buttons and two links on the
+     * dashboard jump straight to a part of this page. Settings decides what those
+     * fragments are, the other three surfaces spell them out, and nothing connects the
+     * two — so a renamed section leaves four buttons that open Settings at the top and
+     * look, to anyone pressing one, like a page that ignored them. That is precisely
+     * what happened when the panels became panes: all four still pointed at
+     * `#…-panel`.
+     *
+     * Read out of `dist/` rather than driven through the UI, because two of the four
+     * are in the popup and open a tab, and the failure is in the string either way.
+     */
+    const panes = await settings.$$eval('.pane', (nodes) =>
+      nodes.map((node) => node.dataset.pane),
+    );
+    const linked = new Set();
+    for (const name of await readdir(dist)) {
+      if (!/\.(js|html)$/.test(name)) continue;
+      const body = await readFile(path.join(dist, name), 'utf8');
+      for (const match of body.matchAll(/settings\.html#([A-Za-z0-9_-]+)/g)) {
+        linked.add(match[1]);
+      }
+    }
+    const dangling = [...linked].filter((fragment) => !panes.includes(fragment));
+    const missingPanes = SETTINGS_SECTIONS.filter((name) => !panes.includes(name));
+    check(
+      missingPanes.length === 0 && linked.size > 0 && dangling.length === 0,
+      `all ${linked.size} deep links into Settings name one of its ${panes.length} sections` +
+        (dangling.length ? ` — dangling: ${dangling.join(', ')}` : '') +
+        (missingPanes.length ? ` — declared but not built: ${missingPanes.join(', ')}` : ''),
     );
     const impacts = await settings.$$eval('.impact-meter', (nodes) =>
       nodes.map((node) => ({
@@ -784,20 +1006,285 @@ async function main() {
     );
 
     // Exercise the extracted controller through visible controls, not direct messages.
+    await openSection('saver');
+    const saverSwitch = '#pane-saver .switch-control';
     if (await settings.isChecked('#optimize-toggle')) {
-      await settings.click('.setting-hero .switch-control');
+      await settings.click(saverSwitch);
       await settings.waitForFunction(
         () => document.querySelector('#optimize-body')?.hasAttribute('hidden') === true,
       );
     }
-    await settings.click('.setting-hero .switch-control');
+    await settings.click(saverSwitch);
     await settings.waitForFunction(
       () => document.querySelector('#optimize-body')?.hasAttribute('hidden') === false,
     );
     check(await settings.isChecked('#optimize-toggle'), 'the Settings Data Saver switch works');
-    await settings.click('.setting-hero .switch-control');
+
+    /*
+     * The three preset levels replace the eight checkboxes as the ordinary way to use
+     * Data Saver, so what has to hold is that the picker and the switches agree: choose
+     * a level, and the individual switches under Advanced must be exactly the set that
+     * level names. Read back off the checkboxes, not off the settings object, because
+     * the defect this guards against is a picker that saves one thing and shows
+     * another.
+     */
+    const featuresOn = () =>
+      settings.$$eval('[id^="feature-"]', (nodes) =>
+        nodes.filter((node) => node.checked).map((node) => node.id.replace("feature-", "")).sort(),
+      );
+    await settings.click('#saver-level-group [data-option="light"]');
     await settings.waitForFunction(
-      () => document.querySelector('#optimize-body')?.hasAttribute('hidden') === true,
+      () =>
+        document
+          .querySelector('#saver-level-group [data-option="light"]')
+          ?.getAttribute('aria-checked') === 'true',
+    );
+    const lightSet = await featuresOn();
+    await settings.click('#saver-level-group [data-option="maximum"]');
+    await settings.waitForFunction(
+      () => document.querySelectorAll('[id^="feature-"]:checked').length === 8,
+    );
+    const maximumSet = await featuresOn();
+    check(
+      lightSet.length > 0 &&
+        maximumSet.length > lightSet.length &&
+        lightSet.every((id) => maximumSet.includes(id)),
+      `the savings level sets the individual switches (light ${lightSet.length}, maximum ${maximumSet.length})`,
+    );
+    /* ---------------------------------------------------------------- *
+     * The paid tier
+     *
+     * Here, and in this order, because everything above this point is free and
+     * everything below it needs Advanced to be usable. The install has never been
+     * subscribed at this stage — nothing has written the record — so this is the one
+     * moment in the run where the free tier's ceilings are the live state and can be
+     * asserted rather than simulated.
+     * ---------------------------------------------------------------- */
+
+    // The allow rule that keeps a limit from refusing the subscription check. Read out
+    // of Chrome rather than out of the extension, for the reason `sessionRules` gives:
+    // an invalid condition makes `updateSessionRules` reject the whole set atomically,
+    // so finding this rule installed also proves it is one Chrome accepts. If it were
+    // not, every limit and optimizer rule in the run would be missing too.
+    const guardRule = (await sessionRules()).find(
+      (rule) =>
+        rule.action?.type === 'allow' &&
+        (rule.condition?.requestDomains ?? []).includes('extensionpay.com'),
+    );
+    check(Boolean(guardRule), 'the subscription check is exempt from the limit rules');
+
+    await settings.click('#saver-advanced > summary');
+    const advancedLockedFree = await settings.$$eval('#feature-groups input', (nodes) =>
+      nodes.length > 0 && nodes.every((node) => node.disabled),
+    );
+    const advancedNoticeFree = await settings.$('#saver-advanced-lock .plus-lock');
+    check(
+      advancedLockedFree && Boolean(advancedNoticeFree),
+      'a free install finds Advanced locked, with a notice saying which control replaces it',
+    );
+
+    // The state, not merely a class. Arrow keys move *and* activate in a radio group,
+    // so a lock that only dimmed would be bypassable by pressing Right — `bindGroup`
+    // steps over locked options for exactly that reason.
+    const holdoutLockedFree = await settings.$$eval('#holdout-group [data-option]', (nodes) =>
+      nodes.length > 0 &&
+      nodes.every((node) => node.dataset.locked === 'true' && node.getAttribute('aria-disabled') === 'true'),
+    );
+    check(holdoutLockedFree, 'the holdout rate is locked on the free tier');
+
+    /*
+     * The three things that make a locked option readable rather than merely inert.
+     *
+     * This is the regression net for a defect that shipped: the first version set
+     * `disabled` and dimmed to 45%, which on a light panel made "30 days" all but
+     * indistinguishable from "7 days" beside it — so the segment looked ordinary, did
+     * nothing when pressed, and never said why. A check on the locked *state* alone
+     * would have passed against every bit of that.
+     */
+    const monthOption = await dashboard.$eval('#period-tabs [data-option="month"]', (node) => ({
+      locked: node.dataset.locked === 'true',
+      title: node.title,
+      ariaLabel: node.getAttribute('aria-label'),
+      glyphs: node.querySelectorAll('.option-lock').length,
+    }));
+    const weekFreeOnDashboard = await dashboard.$eval(
+      '#period-tabs [data-option="week"]',
+      (node) => node.dataset.locked !== 'true' && node.querySelectorAll('.option-lock').length === 0,
+    );
+    check(
+      monthOption.locked && weekFreeOnDashboard,
+      'a free install may report over a week but not a month',
+    );
+    check(
+      monthOption.glyphs === 1 &&
+        Boolean(monthOption.title) &&
+        (monthOption.ariaLabel ?? '').startsWith('30 days'),
+      `and the locked one says so — padlock, tooltip and accessible name (${JSON.stringify(
+        monthOption,
+      )})`,
+    );
+
+    /*
+     * The worker's own limit ceiling.
+     *
+     * Asserted through messages rather than the form, because the form is one of three
+     * surfaces that create budgets — the popup's presets and the dashboard's drill-down
+     * are the others — and `assertBudgetAllowed` is the only thing all three go through.
+     * A UI-only check would pass while two of the three routes were wide open.
+     *
+     * The three exemptions are checked alongside the refusal, because each is a promise
+     * the product makes and each fails silently: an edit that stops working, or a stored
+     * window that cannot be corrected, both look like the product breaking rather than
+     * like a ceiling.
+     */
+    const ceilingSites = ['one.example', 'two.example', 'three.example'];
+    for (const site of ceilingSites) {
+      await ask({ type: 'PUT_BUDGET', site, bytes: 500_000_000, period: 'day', shape: 'progressive' });
+    }
+    const fourth = await ask({
+      type: 'PUT_BUDGET',
+      site: 'four.example',
+      bytes: 500_000_000,
+      period: 'day',
+      shape: 'progressive',
+    });
+    check(
+      fourth.ok === false && /Plus/i.test(fourth.error ?? ''),
+      `a fourth site limit is refused, and the refusal says why (${fourth.error ?? 'it was accepted'})`,
+    );
+    const edited = await ask({
+      type: 'PUT_BUDGET',
+      site: ceilingSites[0],
+      bytes: 900_000_000,
+      period: 'day',
+      shape: 'progressive',
+    });
+    check(edited.ok === true, 'but an existing limit can still be edited at the ceiling');
+    const widened = await ask({
+      type: 'PUT_BUDGET',
+      site: ceilingSites[0],
+      bytes: 900_000_000,
+      period: 'week',
+      shape: 'progressive',
+    });
+    check(
+      widened.ok === false,
+      `and a weekly window is refused on the free tier (${widened.error ?? 'it was accepted'})`,
+    );
+    // The plan's own limit is outside the count, so it must still be creatable at the
+    // ceiling — it is what every alert is measured against.
+    const planWide = await ask({
+      type: 'PUT_BUDGET',
+      site: '#all',
+      bytes: 2_000_000_000,
+      period: 'month',
+      shape: 'progressive',
+    });
+    check(planWide.ok === true, 'and the plan-wide limit is exempt from the count and the window');
+
+    await settings.reload();
+    await settings.waitForSelector('#pane-limits', { state: 'attached', timeout: 10_000 });
+    await openSection('limits');
+    const addLocked = await settings.$eval('#limit-add', (node) => node.disabled);
+    const ceilingNotice = await settings.$('#limit-form-lock .plus-lock');
+    check(
+      addLocked && Boolean(ceilingNotice),
+      'and the add-limit form is locked, with its Set limit button visibly disabled',
+    );
+
+    for (const site of [...ceilingSites, '#all']) await ask({ type: 'REMOVE_BUDGET', site });
+
+    /*
+     * And it is not a dead control. Pressing it has to lead somewhere, which is the
+     * other half of "clickable but does nothing".
+     *
+     * `force: true` because Playwright's actionability check reads `aria-disabled` as
+     * "not enabled" and will not dispatch. A browser has no such rule — `aria-disabled`
+     * is advisory to assistive technology and the click event fires normally — so
+     * forcing here reproduces what a real press does rather than working around a
+     * defect. The attribute stays because it is the truthful claim about a radio option
+     * that cannot be selected; what it must not do is stop the option explaining itself.
+     */
+    await dashboard.click('#period-tabs [data-option="month"]', { force: true });
+    await checkWait(check, 'pressing a locked option opens the Plus section', () =>
+      dashboard.waitForFunction(
+        () => location.pathname.endsWith('settings.html') && location.hash === '#plus',
+        null,
+        { timeout: 10_000 },
+      ),
+    );
+    // Put the dashboard back; everything after this point expects to be on it.
+    await dashboard.goto(`chrome-extension://${extensionId}/dashboard.html`);
+    await dashboard.waitForSelector('#period-tabs [data-option]', { timeout: 10_000 });
+
+    await openSection('plus');
+    const plusDisclosure = await settings.$eval('#pane-plus', (node) => node.textContent ?? '');
+    check(
+      plusDisclosure.includes('account email') && plusDisclosure.includes('discards the rest'),
+      'the Plus page accurately discloses provider account data handling',
+    );
+    check(
+      plusDisclosure.includes("developer, not Google") &&
+        plusDisclosure.includes('refund request') &&
+        plusDisclosure.includes('renew until cancelled'),
+      'the Plus page states the seller, renewal, cancellation and refund terms',
+    );
+
+    check(await setPlus(true), 'the paid tier unlocks for the rest of this run');
+    await settings.reload();
+    // `attached`, not the default `visible`: a reload keeps the fragment, and the
+    // fragment is whatever the last `openSection` set — so this waited on a pane that
+    // was deliberately hidden as soon as a check above it left the page on a different
+    // section. `openSection` below is what makes it visible.
+    await settings.waitForSelector('#pane-saver', { state: 'attached', timeout: 10_000 });
+    await openSection('saver');
+    await settings.click('#saver-advanced > summary');
+    await checkWait(check, 'unlocking Plus enables the individual Data Saver switches', () =>
+      settings.waitForFunction(
+        () =>
+          [...document.querySelectorAll('#feature-groups input')].every((node) => !node.disabled),
+        null,
+        { timeout: 10_000 },
+      ),
+    );
+
+    // And switching one back off has to be reported as Custom rather than silently
+    // rounded to the level it is nearest. The individual switches are inside Advanced,
+    // which is the whole point of the level picker — so opening it is part of the
+    // interaction rather than setup for it.
+    await settings.click('label[for="feature-systemFonts"]');
+    await checkWait(check, 'unpicking one switch reads as Custom', () =>
+      settings.waitForFunction(
+        () => document.querySelector('#saver-level-custom')?.hasAttribute('hidden') === false,
+        null,
+        { timeout: 10_000 },
+      ),
+    );
+
+    /*
+     * Wait for the previous save to land before touching the switch again.
+     *
+     * `changeOptimize` disables every optimize input while a write is in flight, master
+     * switch included, and clicking a disabled input does nothing — so this line
+     * followed the systemFonts click straight into an occasional 30-second timeout. It
+     * reproduced roughly one run in three and never in isolation, which is what a race
+     * against a real await looks like. The control being disabled is correct behaviour;
+     * what was wrong was a test that did not wait for it.
+     */
+    await settings.waitForFunction(
+      () => document.querySelector('#optimize-toggle')?.disabled === false,
+      null,
+      { timeout: 10_000 },
+    );
+    await settings.click(saverSwitch);
+    // `checkWait`, not a bare wait: under this script's rule 2 a throw here would delete
+    // every check after it from the evidence, so a regression has to print a FAIL.
+    await checkWait(check, 'the Data Saver master switch turns it back off', () =>
+      settings.waitForFunction(
+        () => document.querySelector('#optimize-body')?.hasAttribute('hidden') === true,
+        null,
+        { timeout: 10_000 },
+      ),
     );
 
     // `data-option`, not the old `data-theme-value`. Every segmented control on every
@@ -806,6 +1293,7 @@ async function main() {
     // real radiogroup semantics, arrow keys and a roving tabindex. Scoped to
     // `#theme-group` because there are eleven such groups on this page now, and an
     // unscoped `[data-option="dark"]` is only unambiguous by luck.
+    await openSection('appearance');
     await settings.click('#theme-group [data-option="dark"]');
     // Same correction as the popup check above: the `waitForFunction` is the assertion,
     // and a theme picker that does not repaint the document has to print a FAIL rather
@@ -1175,6 +1663,90 @@ async function main() {
       })})`,
     );
 
+    /*
+     * What the dashboard says when it has nothing to say.
+     *
+     * This is the only moment in the run where the state a new install opens on exists:
+     * every store is empty, no plan is set, and Data Saver has never been on. It is
+     * checked here rather than in a test of its own because it cannot be constructed
+     * anywhere else, and because every one of these four is a one-line predicate whose
+     * failure is silent — the page still renders, it just renders the confident version
+     * of itself over nothing.
+     *
+     * Before SET_ENFORCEMENT below, deliberately: a refusal credits `blocked`, which is
+     * one of the figures that takes the savings panel out of its untouched state.
+     */
+    await dashboard.reload();
+    // Through `checkWait`, not bare: the panel not reaching its empty state *is* one of
+    // the regressions this block is here to catch, and a thrown wait would report it by
+    // deleting every check after it from the evidence rather than by naming it.
+    await checkWait(check, 'the Data Saver panel reaches its empty state', () =>
+      dashboard.waitForSelector('#savings-idle:not([hidden])', { timeout: 10_000 }),
+    );
+    const fresh = await dashboard.evaluate(() => ({
+      // The pill claims a measured share of a total with no requests in it. It reads
+      // "100% measured" because `measuredShare` returns 1 for an empty total, which is
+      // right for the figure and wrong as a caption on "0 B".
+      pill: document.querySelectorAll('#stats .stat-pill').length,
+      // `GET_SERIES` answers a 30-day request with 30 rows whether or not anything is
+      // in them, so a length test never fired and the panel drew an axis over no bars.
+      chartBars: document.querySelectorAll('#trend-slot .chart-bar-track').length,
+      chartNote: (document.querySelector('#trend-slot .stack-note')?.textContent ?? '').trim(),
+      statsHidden: document.querySelector('#savings-stats')?.hidden === true,
+      compareHidden: document.querySelector('#savings-compare')?.hidden === true,
+      // The storage table's own contradiction: seven counts of zero over a non-zero
+      // size. Both figures are right and the note is the only thing that says so.
+      storageNote: (document.querySelector('#storage-body .field-hint')?.textContent ?? '').trim(),
+    }));
+    check(
+      fresh.pill === 0,
+      `no accuracy pill is shown over an empty total (${fresh.pill} pill(s))`,
+    );
+    check(
+      fresh.chartBars === 0 && fresh.chartNote !== '',
+      `the daily chart says it is empty rather than drawing nothing (${fresh.chartBars} bars, ${JSON.stringify(fresh.chartNote)})`,
+    );
+    check(
+      fresh.statsHidden && fresh.compareHidden,
+      `the Data Saver panel holds one sentence, not its methodology (${JSON.stringify({
+        stats: fresh.statsHidden,
+        compare: fresh.compareHidden,
+      })})`,
+    );
+    check(
+      fresh.storageNote.includes('empty database'),
+      `the storage note explains a disk figure over zero rows (${JSON.stringify(fresh.storageNote.slice(0, 60))})`,
+    );
+
+    // Photographed here for the same reason it is checked here: this is the only point
+    // in the run where the page a new install opens on exists, and the `--shots` block
+    // at the end runs against a profile with usage, a limit and a plan in it.
+    if (process.argv.includes('--shots')) {
+      await mkdir(path.join(root, 'outputs'), { recursive: true });
+      // The site drill-down survives the reload, and an earlier check in this run left
+      // one open. A capture that documents the first thing anyone sees must not carry a
+      // panel nobody has opened yet.
+      const detailOpen = await dashboard.$('#detail-panel:not([hidden]) #detail-close');
+      if (detailOpen) await detailOpen.click();
+      await settle(dashboard);
+      await dashboard.screenshot({
+        path: path.join(root, 'outputs', 'dashboard-first-run.png'),
+        fullPage: true,
+      });
+
+      const welcome = await context.newPage();
+      await welcome.setViewportSize({ width: 1280, height: 1100 });
+      await welcome.goto(`chrome-extension://${extensionId}/welcome.html`);
+      await welcome.waitForSelector('#pin-panel', { timeout: 10_000 });
+      await settle(welcome);
+      await welcome.screenshot({
+        path: path.join(root, 'outputs', 'welcome.png'),
+        fullPage: true,
+      });
+      await welcome.close();
+      console.log('  wrote outputs/dashboard-first-run.png and welcome.png');
+    }
+
     const applied = await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'lean' });
     check(
       applied.ok === true && applied.rules >= 1,
@@ -1187,7 +1759,7 @@ async function main() {
 
     // And Chrome's own answer, which is a different claim. The optimizer is off at this
     // point, so the whole session set is these rules and nothing else.
-    const leanHeld = await sessionRules();
+    const leanHeld = await heldRules();
     console.log('  rules Chrome holds at lean:', describeRules(leanHeld));
     check(
       ruleIdsAreContiguous(leanHeld, applied.rules ?? 0),
@@ -1289,7 +1861,7 @@ async function main() {
     // And it must be reversible: a rule that cannot be lifted is a broken browser.
     const lifted = await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'off' });
     check(lifted.rules === 0, `lifting the limit removes every rule (${lifted.rules})`);
-    const afterLift = await sessionRules();
+    const afterLift = await heldRules();
     check(
       afterLift.length === 0,
       `and Chrome holds none afterwards, not merely none composed (${describeRules(afterLift)})`,
@@ -1346,7 +1918,7 @@ async function main() {
       trimmed.ok === true && trimmed.rules >= 1,
       `trim installs ${trimmed.rules ?? 0} rule(s) (${JSON.stringify(trimmed.enforcement)})`,
     );
-    const trimHeld = await sessionRules();
+    const trimHeld = await heldRules();
     console.log('  rules Chrome holds at trim:', describeRules(trimHeld));
     check(
       ruleIdsAreContiguous(trimHeld, trimmed.rules ?? 0),
@@ -1381,7 +1953,7 @@ async function main() {
       strict.ok === true && strict.rules >= 1,
       `strict installs ${strict.rules ?? 0} rule(s) (${JSON.stringify(strict.enforcement)})`,
     );
-    const strictHeld = await sessionRules();
+    const strictHeld = await heldRules();
     console.log('  rules Chrome holds at strict:', describeRules(strictHeld));
     check(
       ruleIdsAreContiguous(strictHeld, strict.rules ?? 0),
@@ -1427,7 +1999,7 @@ async function main() {
     const unstrict = await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'off' });
     check(unstrict.rules === 0, `lifting strict removes every rule (${unstrict.rules})`);
     check(
-      (await sessionRules()).length === 0,
+      (await heldRules()).length === 0,
       'and Chrome is left holding none of them',
     );
 
@@ -1528,22 +2100,26 @@ async function main() {
      *
      * Checked rather than eyeballed, because the failure is invisible on a desktop
      * and severe on a phone. A grid item's automatic minimum size is its min-content
-     * size, and the six-column limits table gave `#limits-panel` a min-content width
-     * of 760px — so at 390px the whole document was 772px wide, the page scrolled
-     * sideways, and Pause and Remove sat off screen. This is the only viewport where
-     * that shows up, and a limit has to exist for the table to have anything in it,
-     * which is why the check lives here rather than with the other Settings checks.
+     * size, and the six-column limits table Settings used to carry gave its panel a
+     * min-content width of 760px — so at 390px the whole document was 772px wide, the
+     * page scrolled sideways, and Pause and Remove sat off screen. The table is a list
+     * of cards now, which is the layout it collapsed into at this width anyway; what
+     * is measured here is that it has not found a new way to overflow. A limit has to
+     * exist for the list to have anything in it, which is why the check lives here
+     * rather than with the other Settings checks.
      * ---------------------------------------------------------------- */
 
     await settings.setViewportSize({ width: 390, height: 900 });
     await settings.reload();
-    await settings.waitForSelector('#limits-table tbody tr', { timeout: 10_000 });
+    await openSection('limits');
+    await settings.waitForSelector('.limit-card', { timeout: 10_000 });
     // Fonts, then a forced layout flush — the actual precondition for measuring a
-    // stacked table, rather than a third of a second and a hope.
+    // stacked card, rather than a third of a second and a hope.
     await settle(settings);
     const narrow = await settings.evaluate(() => {
       const doc = document.documentElement;
-      const label = (cell) => getComputedStyle(cell, '::before').content;
+      const card = document.querySelector('.limit-card');
+      const text = (selector) => card.querySelector(selector)?.textContent?.trim() ?? '';
       return {
         scrollW: doc.scrollWidth,
         clientW: doc.clientWidth,
@@ -1553,8 +2129,14 @@ async function main() {
           (node) => node.getBoundingClientRect().right <= doc.clientWidth + 1,
         ),
         actions: document.querySelectorAll('.row-actions .ghost-button').length,
-        // The header row is gone at this width, so each figure has to name itself.
-        labels: [...document.querySelectorAll('#limits-table tbody td[data-label]')].map(label),
+        // There is no header row to lose any more, so what has to hold is that the
+        // card names all four of its figures itself.
+        lines: [
+          text('.limit-site'),
+          text('.limit-allowance .ghost-button'),
+          text('.limit-meter span'),
+          text('.limit-card > .row-sub'),
+        ],
       };
     });
     console.log('  narrow settings:', JSON.stringify(narrow));
@@ -1567,8 +2149,8 @@ async function main() {
       `all ${narrow.actions} limit actions stay on screen at 390px`,
     );
     check(
-      narrow.labels.length >= 4 && narrow.labels.every((value) => /\w/.test(value)),
-      `the stacked limit card labels its figures (${JSON.stringify(narrow.labels)})`,
+      narrow.lines.length === 4 && narrow.lines.every((value) => /\w/.test(value)),
+      `the limit card says what each of its figures is (${JSON.stringify(narrow.lines)})`,
     );
 
     if (process.argv.includes('--shots')) {
@@ -1609,7 +2191,8 @@ async function main() {
 
       await settings.reload();
       await settings.setViewportSize({ width: 1280, height: 1100 });
-      await settings.waitForSelector('#limits-table tbody tr', { timeout: 10_000 });
+      await openSection('limits');
+      await settings.waitForSelector('.limit-card', { timeout: 10_000 });
       await settings.evaluate(() => window.scrollTo(0, 0));
       await settle(settings);
       await settings.screenshot({
@@ -1807,7 +2390,7 @@ async function main() {
      * This is the only reading that can, and it is why the check exists separately from
      * the two loads either side of it.
      */
-    const totalHeld = await sessionRules();
+    const totalHeld = await heldRules();
     console.log('  rules while the total budget enforces:', describeRules(totalHeld));
     check(
       ruleIdsAreContiguous(totalHeld, 1),
@@ -1849,7 +2432,11 @@ async function main() {
       totalOf(totalRemoved.statuses) === undefined,
       `removing it leaves no status behind (${JSON.stringify(totalRemoved.statuses)})`,
     );
-    const afterTotal = await until(() => sessionRules(), (list) => list.length === 0, {
+    // `heldRules`, not `sessionRules`: the permanent subscription exemption is always
+    // installed, so a poll waiting for Chrome to hold literally nothing would wait out
+    // its timeout and then report the exemption as the unscoped block that outlived its
+    // budget — which is the one thing this check exists to catch.
+    const afterTotal = await until(() => heldRules(), (list) => list.length === 0, {
       timeout: 15_000,
     });
     check(
@@ -1955,7 +2542,7 @@ async function main() {
       enabled.ok === true && enabled.rules >= 6,
       `the optimizer installs its rules (${enabled.rules ?? 0})`,
     );
-    const optimizeHeld = await sessionRules();
+    const optimizeHeld = await heldRules();
     console.log('  rules Chrome holds for the optimizer:', describeRules(optimizeHeld));
     check(
       ruleIdsAreContiguous(optimizeHeld, enabled.rules ?? 0),
@@ -1977,14 +2564,16 @@ async function main() {
      * and that page has none — so the limit is inert as an experiment and real as a rule.
      */
     const withBoth = await ask({ type: 'SET_ENFORCEMENT', site: '127.0.0.1', tier: 'trim' });
-    const mixed = await sessionRules();
+    const mixed = await heldRules();
     // Limits are composed first and the whole set is renumbered from 1, so the lowest
     // ids are the limit rules. That ordering is `SOURCE_ORDER`'s only job and it is what
     // makes the two halves separable here.
     const limitCount = withBoth.rules ?? 0;
-    const limitPriority = mixed.filter((rule) => rule.id <= limitCount).map((rule) => rule.priority);
+    const limitPriority = mixed
+      .filter((rule) => rule.id <= limitCount + GUARD_RULE_COUNT)
+      .map((rule) => rule.priority);
     const optimizePriority = mixed
-      .filter((rule) => rule.id > limitCount)
+      .filter((rule) => rule.id > limitCount + GUARD_RULE_COUNT)
       .map((rule) => rule.priority);
     console.log(
       '  priorities Chrome holds:',
@@ -2206,17 +2795,22 @@ async function main() {
     );
 
     /*
-     * The Advanced impact cards at a phone width, which is the one place their
-     * three-column grid has to give way. The meters are the reason: they are the
-     * only part of the UI that communicates a quantity visually, so a card narrow
-     * enough to drop a segment or wrap the High/Medium/Low label would be saying
-     * something different from what it says on a desktop.
+     * The Advanced feature rows at a phone width. The meters are the reason: they are
+     * the only part of the UI that communicates a quantity visually, so a row narrow
+     * enough to drop a segment or push the High/Medium/Low label off the side would be
+     * saying something different from what it says on a desktop.
+     *
+     * The three-column card grid this used to measure is gone — the features are rows
+     * in a group now, like every other control on the page — so the column count is no
+     * longer a thing to assert. What replaced it is the switch: a row whose control has
+     * been pushed off the screen is a feature that cannot be switched off.
      */
     await settings.setViewportSize({ width: 390, height: 900 });
     await settings.reload();
+    await openSection('saver');
     await settings.waitForSelector('#optimize-toggle:checked', { timeout: 10_000 });
     await settings.evaluate(() => {
-      const node = document.querySelector('.advanced-settings');
+      const node = document.querySelector('#saver-advanced');
       if (node) node.open = true;
     });
     // Fonts, then a layout flush. Opening a `<details>` is synchronous, so what the
@@ -2225,24 +2819,23 @@ async function main() {
     await settle(settings);
     const narrowAdvanced = await settings.evaluate(() => {
       const doc = document.documentElement;
-      const grid = document.querySelector('.advanced-options');
+      const onScreen = (node) => node.getBoundingClientRect().right <= doc.clientWidth + 1;
       return {
         scrollW: doc.scrollWidth,
         clientW: doc.clientWidth,
-        columns: getComputedStyle(grid).gridTemplateColumns.split(/\s+/).length,
-        // Only the options that actually carry a meter. Every feature used to have
-        // one; now the grid also holds the per-pack toggles and the features whose
-        // saving has never been measured, and dereferencing a missing `.impact-meter`
-        // throws inside `evaluate` — which aborts the whole run rather than failing
-        // one named check.
-        meters: [...document.querySelectorAll('.advanced-option')]
+        switchesOnScreen: [...document.querySelectorAll('#feature-groups .switch-track')].every(
+          onScreen,
+        ),
+        switches: document.querySelectorAll('#feature-groups .switch-track').length,
+        // Only the rows that actually carry a meter: three of the eight features have a
+        // measured impact figure, and dereferencing a missing `.impact-meter` throws
+        // inside `evaluate` — which aborts the whole run rather than failing one check.
+        meters: [...document.querySelectorAll('#feature-groups .row')]
           .filter((option) => option.querySelector('.impact-meter'))
           .map((option) => ({
             label: option.querySelector('.impact-label')?.textContent ?? '',
             filled: option.querySelectorAll('[data-filled="true"]').length,
-            onScreen:
-              option.querySelector('.impact-meter').getBoundingClientRect().right <=
-              doc.clientWidth + 1,
+            onScreen: onScreen(option.querySelector('.impact-meter')),
           })),
       };
     });
@@ -2252,8 +2845,8 @@ async function main() {
       `Advanced does not scroll sideways at 390px (${narrowAdvanced.scrollW} of ${narrowAdvanced.clientW})`,
     );
     check(
-      narrowAdvanced.columns === 1,
-      `the impact cards stack to one column at 390px (${narrowAdvanced.columns})`,
+      narrowAdvanced.switches === 8 && narrowAdvanced.switchesOnScreen,
+      `all ${narrowAdvanced.switches} feature switches stay on screen at 390px`,
     );
     // Asserted as a property rather than as a fixed list, for the same reason as the
     // impact check earlier in this run: the features are rendered by iterating FEATURES
@@ -2289,11 +2882,13 @@ async function main() {
       await mkdir(path.join(root, 'outputs'), { recursive: true });
       await settings.reload();
       await settings.setViewportSize({ width: 1280, height: 1100 });
+      await openSection('saver');
       await settings.waitForSelector('#optimize-toggle:checked', { timeout: 10_000 });
-      await settings.click('.advanced-settings > summary');
-      // The meters moved out of the Advanced disclosure when the features became a
-      // grouped list of all eight; Advanced now holds the packs and the holdout rate.
-      await settings.waitForSelector('#feature-groups .impact-label', { timeout: 5000 });
+      await settings.click('#saver-advanced > summary');
+      // The eight per-feature switches are inside Advanced now, under the three-way
+      // level picker that sets them in one go — so this shot is of the state a person
+      // has to ask for, not the one the page opens on.
+      await settings.waitForSelector('#feature-groups .impact-label', { state: 'visible', timeout: 5000 });
       await settings.evaluate(() => window.scrollTo(0, 0));
       await settle(settings);
       await settings.screenshot({
@@ -2305,13 +2900,76 @@ async function main() {
 
     const off = await ask({ type: 'SAVE_OPTIMIZE', changes: { enabled: false } });
     check(off.rules === 0, `switching the optimizer off removes every rule (${off.rules})`);
-    const afterOff = await sessionRules();
+    const afterOff = await heldRules();
     check(
       afterOff.length === 0,
       `and Chrome is holding none, so nothing is left rewriting requests (${describeRules(
         afterOff,
       )})`,
     );
+
+    /*
+     * The exemption is permanent, and this is the reading that proves it.
+     *
+     * `publishRules` reinstalls the whole set on every change, and by this point in the
+     * run limits and optimizer rules have each been installed and torn down several
+     * times. A guard that was being dropped by one of those publishes would leave the
+     * subscription check refusable by the next limit anyone set — silently, because the
+     * gate fails open and would simply keep serving a staler and staler answer.
+     */
+    const guardAtEnd = (await sessionRules()).filter(isGuardRule);
+    check(
+      guardAtEnd.length === GUARD_RULE_COUNT,
+      `the subscription exemption survived every install and teardown (${describeRules(
+        guardAtEnd,
+      )})`,
+    );
+
+    if (process.argv.includes('--shots')) {
+      /*
+       * The free tier, photographed last and deliberately.
+       *
+       * Every other capture in this run is taken with Plus unlocked, because the run
+       * unlocks it early so the paid controls can be driven. That makes the locked
+       * state exactly what `NEXT_AI_HANDOFF.md` rule 20 warns about: the state every
+       * new install is in, and the one no screenshot has ever shown. These two are it.
+       *
+       * The tier is put back at the end, so nothing after this point inherits a
+       * half-locked page.
+       */
+      await mkdir(path.join(root, 'outputs'), { recursive: true });
+      await setPlus(false);
+      await settings.setViewportSize({ width: 1280, height: 1100 });
+      await settings.reload();
+      // `attached`, not the default `visible`: every pane but the current one is
+      // `hidden`, and `#plus` is not the one this page opens on.
+      await settings.waitForSelector('#pane-plus', { state: 'attached', timeout: 10_000 });
+
+      await openSection('plus');
+      await settle(settings);
+      await settings.screenshot({
+        path: path.join(root, 'outputs', 'settings-plus.png'),
+        fullPage: true,
+      });
+
+      await openSection('saver');
+      // The master switch has to be on for Advanced to be reachable at all; the run
+      // left it off after the optimizer teardown above.
+      if (!(await settings.isChecked('#optimize-toggle'))) {
+        await settings.click('#pane-saver .switch-control');
+        await settings.waitForFunction(
+          () => document.querySelector('#optimize-body')?.hasAttribute('hidden') === false,
+        );
+      }
+      await settings.click('#saver-advanced > summary');
+      await settle(settings);
+      await settings.screenshot({
+        path: path.join(root, 'outputs', 'settings-saver-locked.png'),
+        fullPage: true,
+      });
+      console.log('  wrote outputs/settings-plus.png and settings-saver-locked.png');
+      await setPlus(true);
+    }
 
     const errors = await worker.evaluate(() => 'ok');
     check(errors === 'ok', 'the service worker is still alive and evaluable');
@@ -2330,7 +2988,8 @@ async function main() {
 
       await settings.reload();
       await settings.setViewportSize({ width: 1280, height: 1100 });
-      await settings.waitForSelector('#limits-panel', { timeout: 10_000 });
+      // The section the page opens on, which is the one a first-time reader lands in.
+      await openSection('plan');
       await settings.evaluate(() => window.scrollTo(0, 0));
       await settle(settings);
       await settings.screenshot({ path: path.join(shots, 'settings.png'), fullPage: true });
@@ -2344,6 +3003,119 @@ async function main() {
       await settle(popup);
       await popup.screenshot({ path: path.join(shots, 'popup.png'), fullPage: true });
       console.log('  wrote outputs/dashboard.png, settings.png and popup.png');
+    }
+
+    if (process.argv.includes('--store-assets')) {
+      const assets = path.join(root, 'store-assets');
+      await mkdir(assets, { recursive: true });
+
+      const capture = async (target, name, width = 1280, height = 800) => {
+        await target.setViewportSize({ width, height });
+        await target.evaluate(() => {
+          window.scrollTo(0, 0);
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+        await settle(target);
+        const bytes = await target.screenshot({ path: path.join(assets, name) });
+        const actualWidth = bytes.readUInt32BE(16);
+        const actualHeight = bytes.readUInt32BE(20);
+        if (actualWidth !== width || actualHeight !== height) {
+          throw new Error(
+            `${name} is ${actualWidth}x${actualHeight}, expected ${width}x${height}`,
+          );
+        }
+      };
+
+      // The browser suite necessarily records traffic against its local fixture. Store
+      // screenshots use representative sample labels so the listing reads as a product,
+      // not as a test transcript. Only rendered text is changed; the interface, layout,
+      // charts and figures are the extension's real output.
+      const replaceFixtureHosts = (target) =>
+        target.evaluate(() => {
+          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          let node;
+          while ((node = walker.nextNode())) {
+            node.textContent = (node.textContent ?? '')
+              .replaceAll('127.0.0.1', 'youtube.com')
+              .replaceAll('localhost', 'wikipedia.org');
+          }
+        });
+
+      await setPlus(true);
+      // Navigate without the site-detail hash. Closing an existing detail view calls
+      // history.back(), whose later scroll restoration can race a screenshot.
+      await dashboard.goto(`chrome-extension://${extensionId}/dashboard.html`);
+      await dashboard.waitForSelector('#stats .stat', { timeout: 10_000 });
+      await replaceFixtureHosts(dashboard);
+      await capture(dashboard, '01-dashboard.png');
+
+      await settings.reload();
+      await settings.waitForSelector('#pane-saver', { state: 'attached', timeout: 10_000 });
+      await openSection('saver');
+      if (!(await settings.isChecked('#optimize-toggle'))) {
+        await settings.click('#pane-saver .switch-control');
+        await settings.waitForFunction(
+          () => document.querySelector('#optimize-body')?.hasAttribute('hidden') === false,
+        );
+      }
+      await capture(settings, '02-data-saver.png');
+
+      await ask({
+        type: 'PUT_BUDGET',
+        site: 'youtube.com',
+        bytes: 5_000_000_000,
+        period: 'month',
+        shape: 'progressive',
+      });
+      await settings.reload();
+      await settings.waitForSelector('#pane-limits', { state: 'attached', timeout: 10_000 });
+      await openSection('limits');
+      await settings.waitForFunction(() => document.body.textContent?.includes('youtube.com'));
+      await capture(settings, '03-site-limits.png');
+
+      await setPlus(false);
+      await settings.reload();
+      await settings.waitForSelector('#pane-plus', { state: 'attached', timeout: 10_000 });
+      await openSection('plus');
+      await capture(settings, '04-plus.png');
+
+      const welcome = await context.newPage();
+      await welcome.goto(`chrome-extension://${extensionId}/welcome.html`);
+      await welcome.waitForSelector('#pin-panel', { timeout: 10_000 });
+      await capture(welcome, '05-welcome.png');
+      await welcome.close();
+
+      const promo = await context.newPage();
+      const icon = (await readFile(path.join(root, 'public', 'icon.png'))).toString('base64');
+      await promo.setContent(`<!doctype html>
+        <html><head><meta charset="utf-8"><style>
+          * { box-sizing: border-box; }
+          html, body { margin: 0; width: 440px; height: 280px; overflow: hidden; }
+          body {
+            display: grid;
+            grid-template-columns: 118px 1fr;
+            align-items: center;
+            gap: 28px;
+            padding: 42px;
+            color: #f7fffd;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+            background:
+              radial-gradient(circle at 15% 15%, rgba(98,214,196,.28), transparent 38%),
+              linear-gradient(135deg, #073d3a 0%, #0b625c 56%, #0c7770 100%);
+          }
+          img { width: 118px; height: 118px; filter: drop-shadow(0 12px 24px rgba(0,0,0,.22)); }
+          .eyebrow { margin: 0 0 8px; color: #90e9dc; font-size: 13px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; }
+          h1 { margin: 0; font-size: 37px; line-height: 1; letter-spacing: -.035em; }
+          p { margin: 14px 0 0; max-width: 205px; color: #d7f3ee; font-size: 17px; line-height: 1.35; }
+        </style></head><body>
+          <img src="data:image/png;base64,${icon}" alt="">
+          <div><div class="eyebrow">Chrome data, clear</div><h1>Byte Budget</h1><p>Know where your data goes.</p></div>
+        </body></html>`);
+      await capture(promo, 'promo-440x280.png', 440, 280);
+      await promo.close();
+
+      await setPlus(true);
+      console.log('  wrote 6 verified Chrome Web Store assets to store-assets/');
     }
   } finally {
     if (logs.length > 0) {

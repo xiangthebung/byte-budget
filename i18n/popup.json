@@ -1,224 +1,33 @@
 {
-  "popupOpenDashboard": {
-    "message": "Open the full dashboard",
-    "description": "Accessible name and tooltip of the chart icon in the popup's top bar. Opens dashboard.html in a tab."
+  "popupBudgetWindowDay": {
+    "message": "today's limit",
+    "description": "Names a daily budget's window inside popupLimitLine and popupLimitAlso, where it reads after a percentage: '132% of today's limit'."
   },
-  "popupOpenSettings": {
-    "message": "Open settings",
-    "description": "Accessible name and tooltip of the gear icon in the popup's top bar. Opens settings.html in a tab."
+  "popupBudgetWindowMonth": {
+    "message": "this month's limit",
+    "description": "Names a monthly budget's window inside popupLimitLine and popupLimitAlso, where it reads after a percentage."
   },
-  "popupPlanMeterLabel": {
-    "message": "Plan used",
-    "description": "Accessible name of the plan progress bar in the popup. The bar's spoken value is popupPlanMeterValueText."
+  "popupBudgetWindowSession": {
+    "message": "this session's limit",
+    "description": "Names a session budget's window inside popupLimitLine and popupLimitAlso, where it reads after a percentage: '132% of this session's limit'."
   },
-  "popupPlanCtaCopy": {
-    "message": "No plan set, so this total has no denominator.",
-    "description": "Shown in the popup in place of the plan meter when the user has never recorded a monthly allowance. 'Denominator' is meant literally: there is a number but nothing to divide it by."
-  },
-  "popupPlanCtaButton": {
-    "message": "Set your plan",
-    "description": "Button beside popupPlanCtaCopy. Opens the plan panel in settings."
-  },
-  "popupPlanAlertsTitle": {
-    "message": "Nothing is watching this plan",
-    "description": "Heading of the popup notice shown when a plan size is recorded but no limit over everything exists, so no warning can ever fire."
-  },
-  "popupPlanAlertsButton": {
-    "message": "Turn on",
-    "description": "Button that creates the limit described in popupPlanAlertsHint."
-  },
-  "popupPlanAlertsHint": {
-    "message": "Alerts come from a limit over everything, not from the plan figure on its own. Turning them on creates one at $PLAN$ a month and tells you at 75%, 90% and 100%. It also enforces: video is refused from 60% of the plan and images and fonts from 85%. A page's own HTML always loads.",
-    "description": "Body of the popup notice headed popupPlanAlertsTitle. States the consequence of pressing the button, including the enforcement the user did not ask for, before they press it.",
-    "placeholders": {
-      "plan": { "content": "$1", "example": "15 GB" }
-    }
-  },
-  "popupProjectionHeading": {
-    "message": "Projection",
-    "description": "Heading of the popup block that models where the plan cycle will end up. The only modelled number on this surface."
-  },
-  "popupProjectionShow": {
-    "message": "Show how this is worked out",
-    "description": "Button under the projection that reveals the full basis sentence. Toggles to popupProjectionShowLess."
-  },
-  "popupProjectionShowLess": {
-    "message": "Show less",
-    "description": "The popupProjectionShow button's label while the full basis sentence is showing."
-  },
-  "popupProjectionFigure": {
-    "message": "Projected $AMOUNT$ by $DATE$",
-    "description": "First part of the popup projection line. 'Projected' is load-bearing: this figure is modelled, not measured.",
-    "placeholders": {
-      "amount": { "content": "$1", "example": "18.4 GB" },
-      "date": { "content": "$2", "example": "31 Aug" }
-    }
-  },
-  "popupProjectionOver": {
-    "message": "$AMOUNT$ over your plan",
-    "description": "Follows popupProjectionFigure when the projection lands above the plan size.",
-    "placeholders": {
-      "amount": { "content": "$1", "example": "3.4 GB" }
-    }
-  },
-  "popupProjectionSpare": {
-    "message": "$AMOUNT$ spare",
-    "description": "Follows popupProjectionFigure when the projection lands below the plan size.",
-    "placeholders": {
-      "amount": { "content": "$1", "example": "2.1 GB" }
-    }
-  },
-  "popupProjectionRunsOut": {
-    "message": "runs out $WHEN$",
-    "description": "Last part of the popup projection line, for a date still in the future. Lower case because it follows a middle dot on the same line.",
-    "placeholders": {
-      "when": { "content": "$1", "example": "in 4 days" }
-    }
-  },
-  "popupProjectionRanOut": {
-    "message": "ran out $WHEN$",
-    "description": "Past-tense form of popupProjectionRunsOut, used when the exhaustion date has already passed.",
-    "placeholders": {
-      "when": { "content": "$1", "example": "2 days ago" }
-    }
-  },
-  "popupPeriodLabel": {
-    "message": "Period",
-    "description": "Accessible name of the popup's session/today/week/month radio group."
-  },
-  "popupHeadlineOf": {
-    "message": "of $TOTAL$",
-    "description": "Second half of the popup headline when a plan is set: the used figure is set in large type in a sibling element and this follows it, so the whole reads '4.2 of 15 GB'.",
-    "placeholders": {
-      "total": { "content": "$1", "example": "15 GB" }
-    }
-  },
-  "popupPlanMeterValueText": {
-    "message": "$USED$ of $TOTAL$, $SHARE$ of the plan, day $DAY$ of $DAYS$",
-    "description": "Spoken value of the plan progress bar. Carries the whole sentence rather than the bare percentage, because '132' read on its own is not the fact.",
-    "placeholders": {
-      "used": { "content": "$1", "example": "4.2 GB" },
-      "total": { "content": "$2", "example": "15 GB" },
-      "share": { "content": "$3", "example": "28%" },
-      "day": { "content": "$4", "example": "9" },
-      "days": { "content": "$5", "example": "31" }
-    }
-  },
-  "popupPlanMeterTitle": {
-    "message": "Spending the plan evenly would put you at $PACE$ by now — that is the mark on the bar.",
-    "description": "Tooltip on the plan progress bar, explaining the pace marker drawn across it.",
-    "placeholders": {
-      "pace": { "content": "$1", "example": "29%" }
-    }
-  },
-  "popupPlanLine": {
-    "message": "Day $DAY$ of $DAYS$ · resets $WHEN$",
-    "description": "Line under the plan meter. Assembled as one sentence so the two halves can be reordered; the middle dot is the separator used throughout this surface.",
-    "placeholders": {
-      "day": { "content": "$1", "example": "9" },
-      "days": { "content": "$2", "example": "31" },
-      "when": { "content": "$3", "example": "in 22 days" }
-    }
-  },
-  "popupPaceTitle": {
-    "message": "$CURRENT$ this period against $PREVIOUS$ in the window of the same length immediately before it. Both measured the same way.",
-    "description": "Tooltip on the popup's pace line, naming the two figures the comparison is made from.",
-    "placeholders": {
-      "current": { "content": "$1", "example": "1.2 GB" },
-      "previous": { "content": "$2", "example": "900 MB" }
-    }
-  },
-  "popupPaceSame": {
-    "message": "About the same as $WINDOW$",
-    "description": "Popup pace line when this period is within 5% of the one before. WINDOW is one of the popupPreviousWindow* strings.",
-    "placeholders": {
-      "window": { "content": "$1", "example": "yesterday" }
-    }
-  },
-  "popupPaceMore": {
-    "message": "$AMOUNT$ more than $WINDOW$",
-    "description": "Popup pace line when this period is heavier than the one before. WINDOW is one of the popupPreviousWindow* strings.",
-    "placeholders": {
-      "amount": { "content": "$1", "example": "34%" },
-      "window": { "content": "$2", "example": "yesterday" }
-    }
-  },
-  "popupPaceLess": {
-    "message": "$AMOUNT$ less than $WINDOW$",
-    "description": "Popup pace line when this period is lighter than the one before. Kept separate from popupPaceMore rather than taking 'more'/'less' as a placeholder, because a comparative cannot be dropped into a sentence unchanged in every language.",
-    "placeholders": {
-      "amount": { "content": "$1", "example": "34%" },
-      "window": { "content": "$2", "example": "yesterday" }
-    }
-  },
-  "popupPreviousWindowSession": {
-    "message": "the session before",
-    "description": "Names the comparison window in the popup pace line, when the period is the browsing session. Reads after 'more than' or 'About the same as'."
-  },
-  "popupPreviousWindowToday": {
-    "message": "yesterday",
-    "description": "Names the comparison window in the popup pace line, when the period is today. Reads after 'more than' or 'About the same as'."
-  },
-  "popupPreviousWindowWeek": {
-    "message": "the period before",
-    "description": "Names the comparison window in the popup pace line, when the period is the week. Deliberately not 'the previous 7 days': a calendar week can be part-length, so naming a number of days would be wrong."
-  },
-  "popupPreviousWindowMonth": {
-    "message": "the period before",
-    "description": "Names the comparison window in the popup pace line, when the period is the month. Deliberately not a number of days, for the same reason as popupPreviousWindowWeek."
-  },
-  "popupMeasuredTitle": {
-    "message": "Chrome does not tell an extension how big a response was. Content-Length and the page's own resource timing cover most of it; whatever they cannot, a learned per-host estimate fills in. This says how much of that happened.",
-    "description": "Tooltip shared by all four popupMeasured* labels. Explains why a byte count can be part measured and part estimated at all."
-  },
-  "popupMeasuredNone": {
-    "message": "Nothing measured yet",
-    "description": "Meta line label when no bytes have been recorded for the period."
-  },
-  "popupMeasuredAll": {
-    "message": "Measured, not estimated",
-    "description": "Meta line label when at least 97% of the period's bytes came from a real size rather than the estimator."
-  },
-  "popupMeasuredNearlyAll": {
-    "message": "Nearly all measured",
-    "description": "Meta line label when 80–97% of the period's bytes came from a real size."
-  },
-  "popupMeasuredEstimatedShare": {
-    "message": "$SHARE$ of this is estimated",
-    "description": "Meta line label when under 80% of the period's bytes were measured. The only band of the four that is a caveat, and the only one given the estimate colour.",
-    "placeholders": {
-      "share": { "content": "$1", "example": "31%" }
-    }
+  "popupBudgetWindowWeek": {
+    "message": "this week's limit",
+    "description": "Names a weekly budget's window inside popupLimitLine and popupLimitAlso, where it reads after a percentage."
   },
   "popupCacheSaved": {
     "message": "Cache saved ~$AMOUNT$",
     "description": "Meta line entry for responses served from the browser cache. The tilde is deliberate and must be kept: the figure is the estimator's, not a measurement.",
     "placeholders": {
-      "amount": { "content": "$1", "example": "240 MB" }
+      "amount": {
+        "content": "$1",
+        "example": "240 MB"
+      }
     }
   },
   "popupCacheSavedTitle": {
     "message": "These responses came from the browser cache and cost no network bytes. What they would have cost is the estimator's figure, which is why it is tilded.",
     "description": "Tooltip on popupCacheSaved."
-  },
-  "popupReadAgo": {
-    "message": "Read $WHEN$",
-    "description": "Meta line entry shown once the figures on screen are more than ten seconds old, so a stale payload is described rather than presented as live.",
-    "placeholders": {
-      "when": { "content": "$1", "example": "2 minutes ago" }
-    }
-  },
-  "popupStaleTitle": {
-    "message": "The background worker has not answered since then, which is ordinary after an idle gap. These are the last figures it sent, not live ones.",
-    "description": "Tooltip on popupReadAgo."
-  },
-  "popupOverlayLabel": {
-    "message": "prevented, partly estimated",
-    "description": "Names the second band inside each bar of the popup chart. Says both things about the figure: those bytes were never transferred, and the number is part measured and part modelled."
-  },
-  "popupChartTitle": {
-    "message": "Over time",
-    "description": "Heading of the popup panel holding the bar chart and the resource-type breakdown."
   },
   "popupChartEmpty": {
     "message": "No history for this period yet.",
@@ -228,198 +37,211 @@
     "message": "peak $AMOUNT$",
     "description": "Note beside the popup chart heading, giving the tallest bar's value. Lower case; it is a note, not a sentence.",
     "placeholders": {
-      "amount": { "content": "$1", "example": "310 MB" }
+      "amount": {
+        "content": "$1",
+        "example": "310 MB"
+      }
     }
   },
-  "popupTypesCaption": {
-    "message": "What the bytes were",
-    "description": "Accessible caption of the popup's resource-type breakdown bar (images, video, scripts and so on)."
+  "popupChartTitle": {
+    "message": "Over time",
+    "description": "Heading of the popup panel holding the bar chart and the resource-type breakdown."
   },
-  "popupSitesTitle": {
-    "message": "Sites",
-    "description": "Heading of the popup's site list panel."
+  "popupEmptyNoPlan": {
+    "message": "Nothing recorded for this period yet. Load a page and the numbers appear here.",
+    "description": "The popup's single empty state, on a profile with no plan set."
   },
-  "popupSiteTagCurrent": {
-    "message": "This tab",
-    "description": "Tag on the site list row for the site open in the current tab."
+  "popupEmptyWithPlan": {
+    "message": "Nothing recorded for this period yet. The figure above covers the whole plan cycle.",
+    "description": "The popup's single empty state when a plan is set, where the headline is still showing a non-zero cycle total."
   },
-  "popupSiteReservedTitle": {
-    "message": "Requests that did not belong to a tab: browser services, service workers and other extensions.",
-    "description": "Tooltip on the site list row that collects requests with no page behind them."
+  "popupErrorCreateAllLimit": {
+    "message": "Could not create the limit over everything.",
+    "description": "Shown when the 'Turn on' button under popupPlanAlertsTitle fails to create the limit."
   },
-  "popupSiteOpenTitle": {
-    "message": "$SITE$ — open in the dashboard",
-    "description": "Tooltip on an ordinary site list row. Clicking the row opens that site's detail view in the dashboard.",
+  "popupErrorDismiss": {
+    "message": "Dismiss",
+    "description": "Button that clears the popup's error line."
+  },
+  "popupErrorGrant": {
+    "message": "Could not raise the allowance.",
+    "description": "Shown when the grant button fails."
+  },
+  "popupErrorOptimize": {
+    "message": "Could not change Data Saver.",
+    "description": "Shown when switching Data Saver on or off for every site fails."
+  },
+  "popupErrorPause": {
+    "message": "Could not pause the limit.",
+    "description": "Shown when pausing a limit fails."
+  },
+  "popupErrorReadUsage": {
+    "message": "Could not read usage.",
+    "description": "Shown when the background worker does not answer a request for the current figures."
+  },
+  "popupErrorRemove": {
+    "message": "Could not remove the limit.",
+    "description": "Shown when deleting a limit fails."
+  },
+  "popupErrorResume": {
+    "message": "Could not resume the limit.",
+    "description": "Shown when resuming a paused limit fails."
+  },
+  "popupErrorSetLimit": {
+    "message": "Could not set the limit.",
+    "description": "Shown when one of the preset buttons fails to create a limit."
+  },
+  "popupErrorSiteOptimize": {
+    "message": "Could not change Data Saver for this site.",
+    "description": "Shown when the per-site Data Saver tick fails to save."
+  },
+  "popupErrorTryAgain": {
+    "message": "Try again",
+    "description": "Replaces popupErrorDismiss when polling has stopped, because pressing it restarts polling rather than only clearing the message."
+  },
+  "popupFooterNote": {
+    "message": "One Chrome profile, on this device. Other browsers, other profiles, apps and anything else sharing the connection are not counted.",
+    "description": "Standing note at the foot of the popup, bounding what every figure above it covers."
+  },
+  "popupGrantWindowDay": {
+    "message": "today",
+    "description": "Names a daily budget's window on the grant button and in its tooltip, where it reads after a byte figure: '+50 MB today'."
+  },
+  "popupGrantWindowMonth": {
+    "message": "this month",
+    "description": "Names a monthly budget's window on the grant button and in its tooltip, where it reads after a byte figure."
+  },
+  "popupGrantWindowSession": {
+    "message": "this session",
+    "description": "Names a session budget's window on the grant button and in its tooltip, where it reads after a byte figure: '+50 MB this session'."
+  },
+  "popupGrantWindowWeek": {
+    "message": "this week",
+    "description": "Names a weekly budget's window on the grant button and in its tooltip, where it reads after a byte figure."
+  },
+  "popupHeadlineOf": {
+    "message": "of $TOTAL$",
+    "description": "Second half of the popup headline when a plan is set: the used figure is set in large type in a sibling element and this follows it, so the whole reads '4.2 of 15 GB'.",
     "placeholders": {
-      "site": { "content": "$1", "example": "example.com" }
+      "total": {
+        "content": "$1",
+        "example": "15 GB"
+      }
     }
   },
-  "popupSiteShare": {
-    "message": "$SHARE$ of total",
-    "description": "The right-hand figure on a site list row: this site's share of the period's bytes.",
+  "popupLimitAlso": {
+    "message": "Also $SHARE$ of $WINDOW$ on $SITE$.",
+    "description": "Names the second limit covering this tab, when a site limit and the limit over everything are both in force and only one of them is biting. WINDOW is one of the popupBudgetWindow* strings.",
     "placeholders": {
-      "share": { "content": "$1", "example": "18%" }
-    }
-  },
-  "popupSiteShareEstimated": {
-    "message": "$SHARE$ of total · part estimated",
-    "description": "popupSiteShare with the caveat appended, used when under 75% of this site's bytes were measured. Written as one whole string rather than a suffix, so the caveat can go wherever it belongs.",
-    "placeholders": {
-      "share": { "content": "$1", "example": "18%" }
-    }
-  },
-  "popupSitesCountOne": {
-    "message": "$COUNT$ site",
-    "description": "Note beside the Sites heading when exactly one site was recorded.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "1" }
-    }
-  },
-  "popupSitesCountOther": {
-    "message": "$COUNT$ sites",
-    "description": "Note beside the Sites heading for any count other than one. Chrome's message format has no plural rules, so the two forms are separate messages and the code picks between them on count === 1.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "24" }
-    }
-  },
-  "popupSitesShowAll": {
-    "message": "Show all $COUNT$ sites",
-    "description": "Button under the popup site list while it is showing the top six of more.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "24" }
-    }
-  },
-  "popupSitesSeeAll": {
-    "message": "See all $COUNT$ in the dashboard",
-    "description": "Button under the popup site list once it is already expanded and there are still more sites than it will show.",
-    "placeholders": {
-      "count": { "content": "$1", "example": "112" }
-    }
-  },
-  "popupLimitHeading": {
-    "message": "Data limit",
-    "description": "Heading of the popup's limit card."
-  },
-  "popupLimitScopeAll": {
-    "message": "$LABEL$ — every site, not just this tab",
-    "description": "Scope line of the limit card when the limit covers all browsing. LABEL is the shared name for the all-sites key.",
-    "placeholders": {
-      "label": { "content": "$1", "example": "Everything" }
-    }
-  },
-  "popupLimitPaused": {
-    "message": "Paused",
-    "description": "Limit card status when the limit is snoozed and no resume time is recorded."
-  },
-  "popupLimitPausedUntil": {
-    "message": "Paused · resumes $WHEN$",
-    "description": "Limit card status while the limit is snoozed. One sentence rather than a label plus a time, so the clause can be reordered.",
-    "placeholders": {
-      "when": { "content": "$1", "example": "in 43 minutes" }
-    }
-  },
-  "popupLimitOver": {
-    "message": "Over limit",
-    "description": "Limit card status at or above 100% of the allowance. Describes the user's position, not the mechanism."
-  },
-  "popupLimitNearlyFull": {
-    "message": "Nearly full",
-    "description": "Limit card status between 85% and 100% of the allowance."
-  },
-  "popupLimitWithin": {
-    "message": "Within limit",
-    "description": "Limit card status below 85% of the allowance."
-  },
-  "popupLimitLine": {
-    "message": "$USED$ of $ALLOWANCE$ · $SHARE$ of $WINDOW$ · resets $WHEN$",
-    "description": "The limit card's figures, as one sentence. WINDOW is one of the popupBudgetWindow* strings, so the whole reads '1.1 MB of 800 kB · 132% of today's limit · resets in 3 hours'.",
-    "placeholders": {
-      "used": { "content": "$1", "example": "1.1 MB" },
-      "allowance": { "content": "$2", "example": "800 kB" },
-      "share": { "content": "$3", "example": "132%" },
-      "window": { "content": "$4", "example": "today's limit" },
-      "when": { "content": "$5", "example": "in 3 hours" }
-    }
-  },
-  "popupLimitLineUntilClose": {
-    "message": "$USED$ of $ALLOWANCE$ · $SHARE$ of $WINDOW$ · resets when the browser closes",
-    "description": "popupLimitLine for a session limit, which has no reset timestamp. A separate whole sentence rather than a fragment substituted into the other, so the final clause can be placed anywhere.",
-    "placeholders": {
-      "used": { "content": "$1", "example": "1.1 MB" },
-      "allowance": { "content": "$2", "example": "800 kB" },
-      "share": { "content": "$3", "example": "132%" },
-      "window": { "content": "$4", "example": "this session's limit" }
-    }
-  },
-  "popupBudgetWindowSession": {
-    "message": "this session's limit",
-    "description": "Names a session budget's window inside popupLimitLine and popupLimitAlso, where it reads after a percentage: '132% of this session's limit'."
-  },
-  "popupBudgetWindowDay": {
-    "message": "today's limit",
-    "description": "Names a daily budget's window inside popupLimitLine and popupLimitAlso, where it reads after a percentage: '132% of today's limit'."
-  },
-  "popupBudgetWindowWeek": {
-    "message": "this week's limit",
-    "description": "Names a weekly budget's window inside popupLimitLine and popupLimitAlso, where it reads after a percentage."
-  },
-  "popupBudgetWindowMonth": {
-    "message": "this month's limit",
-    "description": "Names a monthly budget's window inside popupLimitLine and popupLimitAlso, where it reads after a percentage."
-  },
-  "popupLimitPausedConsequence": {
-    "message": "Nothing is refused while paused. On resume: $DESCRIPTION$",
-    "description": "Limit card consequence line while the limit is snoozed. DESCRIPTION is the shared sentence for the enforcement tier that will apply again on resume.",
-    "placeholders": {
-      "description": { "content": "$1", "example": "Video and large images are refused." }
-    }
-  },
-  "popupLimitPrevented": {
-    "message": "~$AMOUNT$ refused rather than spent",
-    "description": "Bytes a limit stopped from being fetched. The tilde is deliberate and must be kept: a refused request was never sent, so its size is the estimator's figure.",
-    "placeholders": {
-      "amount": { "content": "$1", "example": "42 MB" }
-    }
-  },
-  "popupLimitPreventedTitle": {
-    "message": "$PERIOD$. A refused request is never dispatched, so it has no measured size — this is the size model's figure for what it would have weighed. Beacon-blocking contributes here too when Data Saver is on.",
-    "description": "Tooltip on popupLimitPrevented. PERIOD is the window the figure covers, composed elsewhere, and leads the sentence.",
-    "placeholders": {
-      "period": { "content": "$1", "example": "Today" }
+      "share": {
+        "content": "$1",
+        "example": "4%"
+      },
+      "window": {
+        "content": "$2",
+        "example": "today's limit"
+      },
+      "site": {
+        "content": "$3",
+        "example": "example.com"
+      }
     }
   },
   "popupLimitGrant": {
     "message": "+$AMOUNT$ $WINDOW$",
     "description": "Button that raises the allowance for the current window only. WINDOW is one of the popupGrantWindow* strings, so the whole reads '+50 MB today'.",
     "placeholders": {
-      "amount": { "content": "$1", "example": "50 MB" },
-      "window": { "content": "$2", "example": "today" }
+      "amount": {
+        "content": "$1",
+        "example": "50 MB"
+      },
+      "window": {
+        "content": "$2",
+        "example": "today"
+      }
     }
   },
   "popupLimitGrantTitle": {
     "message": "Raises the allowance for $WINDOW$ from $FROM$ to $TO$. The extra belongs to this window only and is gone when it resets.",
     "description": "Tooltip on the popupLimitGrant button.",
     "placeholders": {
-      "window": { "content": "$1", "example": "today" },
-      "from": { "content": "$2", "example": "200 MB" },
-      "to": { "content": "$3", "example": "250 MB" }
+      "window": {
+        "content": "$1",
+        "example": "today"
+      },
+      "from": {
+        "content": "$2",
+        "example": "200 MB"
+      },
+      "to": {
+        "content": "$3",
+        "example": "250 MB"
+      }
     }
   },
-  "popupGrantWindowSession": {
-    "message": "this session",
-    "description": "Names a session budget's window on the grant button and in its tooltip, where it reads after a byte figure: '+50 MB this session'."
+  "popupLimitHeading": {
+    "message": "Data limit",
+    "description": "Heading of the popup's limit card."
   },
-  "popupGrantWindowDay": {
-    "message": "today",
-    "description": "Names a daily budget's window on the grant button and in its tooltip, where it reads after a byte figure: '+50 MB today'."
+  "popupLimitLine": {
+    "message": "$USED$ of $ALLOWANCE$ · $SHARE$ of $WINDOW$ · resets $WHEN$",
+    "description": "The limit card's figures, as one sentence. WINDOW is one of the popupBudgetWindow* strings, so the whole reads '1.1 MB of 800 kB · 132% of today's limit · resets in 3 hours'.",
+    "placeholders": {
+      "used": {
+        "content": "$1",
+        "example": "1.1 MB"
+      },
+      "allowance": {
+        "content": "$2",
+        "example": "800 kB"
+      },
+      "share": {
+        "content": "$3",
+        "example": "132%"
+      },
+      "window": {
+        "content": "$4",
+        "example": "today's limit"
+      },
+      "when": {
+        "content": "$5",
+        "example": "in 3 hours"
+      }
+    }
   },
-  "popupGrantWindowWeek": {
-    "message": "this week",
-    "description": "Names a weekly budget's window on the grant button and in its tooltip, where it reads after a byte figure."
+  "popupLimitLineUntilClose": {
+    "message": "$USED$ of $ALLOWANCE$ · $SHARE$ of $WINDOW$ · resets when the browser closes",
+    "description": "popupLimitLine for a session limit, which has no reset timestamp. A separate whole sentence rather than a fragment substituted into the other, so the final clause can be placed anywhere.",
+    "placeholders": {
+      "used": {
+        "content": "$1",
+        "example": "1.1 MB"
+      },
+      "allowance": {
+        "content": "$2",
+        "example": "800 kB"
+      },
+      "share": {
+        "content": "$3",
+        "example": "132%"
+      },
+      "window": {
+        "content": "$4",
+        "example": "this session's limit"
+      }
+    }
   },
-  "popupGrantWindowMonth": {
-    "message": "this month",
-    "description": "Names a monthly budget's window on the grant button and in its tooltip, where it reads after a byte figure."
+  "popupLimitMore": {
+    "message": "Manage limits in settings",
+    "description": "Link at the foot of the limit card. The popup's one route into the limits panel in settings."
+  },
+  "popupLimitNearlyFull": {
+    "message": "Nearly full",
+    "description": "Limit card status between 85% and 100% of the allowance."
+  },
+  "popupLimitOver": {
+    "message": "Over limit",
+    "description": "Limit card status at or above 100% of the allowance. Describes the user's position, not the mechanism."
   },
   "popupLimitPause": {
     "message": "Pause 1 hour",
@@ -429,13 +251,69 @@
     "message": "Stops refusing anything for an hour. The counter keeps running.",
     "description": "Tooltip on the popupLimitPause button. The second sentence matters: pausing does not pause measurement."
   },
-  "popupLimitResume": {
-    "message": "Resume",
-    "description": "Button that ends a pause and puts the limit back in force. Replaces popupLimitPause while the limit is paused."
+  "popupLimitPaused": {
+    "message": "Paused",
+    "description": "Limit card status when the limit is snoozed and no resume time is recorded."
   },
-  "popupLimitResumeTitle": {
-    "message": "Puts the limit back in force now.",
-    "description": "Tooltip on the popupLimitResume button."
+  "popupLimitPausedConsequence": {
+    "message": "Nothing is refused while paused. On resume: $DESCRIPTION$",
+    "description": "Limit card consequence line while the limit is snoozed. DESCRIPTION is the shared sentence for the enforcement tier that will apply again on resume.",
+    "placeholders": {
+      "description": {
+        "content": "$1",
+        "example": "Video and large images are refused."
+      }
+    }
+  },
+  "popupLimitPausedUntil": {
+    "message": "Paused · resumes $WHEN$",
+    "description": "Limit card status while the limit is snoozed. One sentence rather than a label plus a time, so the clause can be reordered.",
+    "placeholders": {
+      "when": {
+        "content": "$1",
+        "example": "in 43 minutes"
+      }
+    }
+  },
+  "popupLimitPresetLabel": {
+    "message": "$SIZE$ a day",
+    "description": "One of the three preset buttons that create a daily limit on the current site. SIZE is a fixed byte figure, not a formatted setting.",
+    "placeholders": {
+      "size": {
+        "content": "$1",
+        "example": "500 MB"
+      }
+    }
+  },
+  "popupLimitPresetTitle": {
+    "message": "Limits the site in this tab to $SIZE$ a day. Video goes at 60% of that, images and fonts at 85%, everything but the page's own HTML at 100%.",
+    "description": "Tooltip on a preset button, stating what the limit will actually do.",
+    "placeholders": {
+      "size": {
+        "content": "$1",
+        "example": "500 MB"
+      }
+    }
+  },
+  "popupLimitPrevented": {
+    "message": "~$AMOUNT$ refused rather than spent",
+    "description": "Bytes a limit stopped from being fetched. The tilde is deliberate and must be kept: a refused request was never sent, so its size is the estimator's figure.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "42 MB"
+      }
+    }
+  },
+  "popupLimitPreventedTitle": {
+    "message": "$PERIOD$. A refused request is never dispatched, so it has no measured size — this is the size model's figure for what it would have weighed. Beacon-blocking contributes here too when Data Saver is on.",
+    "description": "Tooltip on popupLimitPrevented. PERIOD is the window the figure covers, composed elsewhere, and leads the sentence.",
+    "placeholders": {
+      "period": {
+        "content": "$1",
+        "example": "Today"
+      }
+    }
   },
   "popupLimitRemove": {
     "message": "Remove",
@@ -449,130 +327,95 @@
     "message": "Press Remove again to delete the limit on $SITE$.",
     "description": "Announced to a screen reader when the Remove button is armed. 'Remove' here names the button and should match popupLimitRemove.",
     "placeholders": {
-      "site": { "content": "$1", "example": "example.com" }
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
     }
   },
   "popupLimitRemoveTitle": {
     "message": "Deletes the limit on $SITE$. The counter and the tier go with it.",
     "description": "Tooltip on the popupLimitRemove button.",
     "placeholders": {
-      "site": { "content": "$1", "example": "example.com" }
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
     }
   },
-  "popupLimitAlso": {
-    "message": "Also $SHARE$ of $WINDOW$ on $SITE$.",
-    "description": "Names the second limit covering this tab, when a site limit and the limit over everything are both in force and only one of them is biting. WINDOW is one of the popupBudgetWindow* strings.",
+  "popupLimitResume": {
+    "message": "Resume",
+    "description": "Button that ends a pause and puts the limit back in force. Replaces popupLimitPause while the limit is paused."
+  },
+  "popupLimitResumeTitle": {
+    "message": "Puts the limit back in force now.",
+    "description": "Tooltip on the popupLimitResume button."
+  },
+  "popupLimitScopeAll": {
+    "message": "$LABEL$ — every site, not just this tab",
+    "description": "Scope line of the limit card when the limit covers all browsing. LABEL is the shared name for the all-sites key.",
     "placeholders": {
-      "share": { "content": "$1", "example": "4%" },
-      "window": { "content": "$2", "example": "today's limit" },
-      "site": { "content": "$3", "example": "example.com" }
+      "label": {
+        "content": "$1",
+        "example": "Everything"
+      }
     }
+  },
+  "popupLimitWithin": {
+    "message": "Within limit",
+    "description": "Limit card status below 85% of the allowance."
+  },
+  "popupMeasuredAll": {
+    "message": "Measured, not estimated",
+    "description": "Meta line label when at least 97% of the period's bytes came from a real size rather than the estimator."
+  },
+  "popupMeasuredEstimatedShare": {
+    "message": "$SHARE$ of this is estimated",
+    "description": "Meta line label when under 80% of the period's bytes were measured. The only band of the four that is a caveat, and the only one given the estimate colour.",
+    "placeholders": {
+      "share": {
+        "content": "$1",
+        "example": "31%"
+      }
+    }
+  },
+  "popupMeasuredNearlyAll": {
+    "message": "Nearly all measured",
+    "description": "Meta line label when 80–97% of the period's bytes came from a real size."
+  },
+  "popupMeasuredNone": {
+    "message": "Nothing measured yet",
+    "description": "Meta line label when no bytes have been recorded for the period."
+  },
+  "popupMeasuredTitle": {
+    "message": "Chrome does not tell an extension how big a response was. Content-Length and the page's own resource timing cover most of it; whatever they cannot, a learned per-host estimate fills in. This says how much of that happened.",
+    "description": "Tooltip shared by all four popupMeasured* labels. Explains why a byte count can be part measured and part estimated at all."
+  },
+  "popupNoLimitHere": {
+    "message": "This tab is not showing a website, so there is nothing here to limit. Open a site and its own limit appears here. A limit over everything would still apply.",
+    "description": "Limit card body on a page with no limitable site — a new tab, a PDF, a chrome:// page. This is the loudest thing in the popup for anyone whose first action after installing is to click the toolbar button on the new-tab page, so it leads with the reason and what to do rather than with what the product cannot do. The last sentence is a disclosure and stays: a limit over everything is enforced regardless of what this tab is showing."
   },
   "popupNoLimitOnSite": {
     "message": "No limit on $SITE$. A daily limit sheds video at 60%, images and fonts at 85%, and everything but the page's own HTML at 100%.",
     "description": "Limit card body when the current tab's site has no limit. States what a limit would do before the user sets one from the preset buttons underneath.",
     "placeholders": {
-      "site": { "content": "$1", "example": "example.com" }
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
     }
   },
-  "popupNoLimitHere": {
-    "message": "Limits apply to the site in the tab you are on, and this page is not one Byte Budget can limit. A limit over everything would still apply here.",
-    "description": "Limit card body on a page with no limitable site — a new tab, a PDF, a chrome:// page."
+  "popupOpenDashboard": {
+    "message": "Open the full dashboard",
+    "description": "Accessible name and tooltip of the chart icon in the popup's top bar. Opens dashboard.html in a tab."
   },
-  "popupLimitPresetLabel": {
-    "message": "$SIZE$ a day",
-    "description": "One of the three preset buttons that create a daily limit on the current site. SIZE is a fixed byte figure, not a formatted setting.",
-    "placeholders": {
-      "size": { "content": "$1", "example": "500 MB" }
-    }
-  },
-  "popupLimitPresetTitle": {
-    "message": "Limits the site in this tab to $SIZE$ a day. Video goes at 60% of that, images and fonts at 85%, everything but the page's own HTML at 100%.",
-    "description": "Tooltip on a preset button, stating what the limit will actually do.",
-    "placeholders": {
-      "size": { "content": "$1", "example": "500 MB" }
-    }
-  },
-  "popupLimitMore": {
-    "message": "Manage limits in settings",
-    "description": "Link at the foot of the limit card. The popup's one route into the limits panel in settings."
-  },
-  "popupOptimizeOffTitle": {
-    "message": "Data Saver is off",
-    "description": "Heading of the popup row offering Data Saver, shown when the feature is off everywhere. 'Data Saver' is the product's name for its set of page optimizers."
-  },
-  "popupOptimizeOffHint": {
-    "message": "It asks image services for a smaller version of the same picture, refuses analytics beacons, and stops feeds ordering images larger than they are shown. Switch it off again from here, for this site or for everything.",
-    "description": "Body of the popup row offering Data Saver. Names what it does and how to undo it, in the words of the mechanism."
-  },
-  "popupOptimizeTurnOn": {
-    "message": "Turn on",
-    "description": "Button that switches Data Saver on for every site."
-  },
-  "popupOptimizeTurnOnTitle": {
-    "message": "Eight optimizers, each one switchable in settings. Five are on by default.",
-    "description": "Tooltip on the popupOptimizeTurnOn button."
-  },
-  "popupOptimizeOnForSite": {
-    "message": "Data Saver on for $SITE$",
-    "description": "Heading of the popup Data Saver row when the feature is on and this site is not excluded.",
-    "placeholders": {
-      "site": { "content": "$1", "example": "example.com" }
-    }
-  },
-  "popupOptimizeOffForSite": {
-    "message": "Data Saver off for $SITE$",
-    "description": "Heading of the popup Data Saver row when the feature is on but this site is on the never-optimize list.",
-    "placeholders": {
-      "site": { "content": "$1", "example": "example.com" }
-    }
+  "popupOpenSettings": {
+    "message": "Open settings",
+    "description": "Accessible name and tooltip of the gear icon in the popup's top bar. Opens settings.html in a tab."
   },
   "popupOptimizeActiveHint": {
     "message": "Images are requested at a smaller size where the service offers one, and analytics beacons are refused.",
     "description": "Body of the popup Data Saver row while it is active on this site."
-  },
-  "popupOptimizeExcludedHint": {
-    "message": "This site is on the never-optimize list. Nothing here is rewritten or refused.",
-    "description": "Body of the popup Data Saver row while this site is excluded."
-  },
-  "popupOptimizeOffEverywhere": {
-    "message": "Off everywhere",
-    "description": "Button that switches Data Saver off for every site. Deliberately not 'Turn off': the tick beside it turns it off for this site only, and the two are different actions."
-  },
-  "popupOptimizeOffEverywhereTitle": {
-    "message": "Switches Data Saver off for every site. The tick beside it covers this site only.",
-    "description": "Tooltip on the popupOptimizeOffEverywhere button."
-  },
-  "popupOptimizeMeasuredDelta": {
-    "message": "$AMOUNT$ ± $SPREAD$ lighter per page load",
-    "description": "Per-site saving measured by comparing optimized page loads against deliberately unoptimized ones. No tilde: this is a difference between two sets of real measurements, not a model's output.",
-    "placeholders": {
-      "amount": { "content": "$1", "example": "340 kB" },
-      "spread": { "content": "$2", "example": "90 kB" }
-    }
-  },
-  "popupOptimizeMeasuredDeltaTitle": {
-    "message": "Measured: $OPTIMIZED$ optimized page loads against $CONTROL$ deliberately unoptimized ones on this site over $DAYS$ days. The ± is the 95% interval — page weights are heavy-tailed, so the range is the result.",
-    "description": "Tooltip on popupOptimizeMeasuredDelta, giving the sample the figure rests on.",
-    "placeholders": {
-      "optimized": { "content": "$1", "example": "184" },
-      "control": { "content": "$2", "example": "21" },
-      "days": { "content": "$3", "example": "30" }
-    }
-  },
-  "popupOptimizeMeasuredHere": {
-    "message": "$AMOUNT$ measured off images here",
-    "description": "Fallback for popupOptimizeMeasuredDelta when this site has no controlled comparison yet. Also arithmetic rather than a model, so it also carries no tilde.",
-    "placeholders": {
-      "amount": { "content": "$1", "example": "1.4 MB" }
-    }
-  },
-  "popupOptimizeMeasuredHereTitle": {
-    "message": "$PERIOD$. Arithmetic, not a model: the original variant's size was already on file, so this is what it weighed minus what the smaller one cost.",
-    "description": "Tooltip on popupOptimizeMeasuredHere. PERIOD is the window the figure covers, composed elsewhere, and leads the sentence.",
-    "placeholders": {
-      "period": { "content": "$1", "example": "Today" }
-    }
   },
   "popupOptimizeDismissLabel": {
     "message": "Hide this suggestion",
@@ -586,60 +429,440 @@
     "message": "Suggestion hidden. Data Saver is still in settings.",
     "description": "Announced to a screen reader after the Data Saver offer is dismissed, since the row it was reading has just gone."
   },
-  "popupEmptyNoPlan": {
-    "message": "Nothing recorded for this period yet. Load a page and the numbers appear here.",
-    "description": "The popup's single empty state, on a profile with no plan set."
+  "popupOptimizeExcludedHint": {
+    "message": "This site is on the never-optimize list. Nothing here is rewritten or refused.",
+    "description": "Body of the popup Data Saver row while this site is excluded."
   },
-  "popupEmptyWithPlan": {
-    "message": "Nothing recorded for this period yet. The figure above covers the whole plan cycle.",
-    "description": "The popup's single empty state when a plan is set, where the headline is still showing a non-zero cycle total."
+  "popupOptimizeMeasuredDelta": {
+    "message": "$AMOUNT$ ± $SPREAD$ lighter per page load",
+    "description": "Per-site saving measured by comparing optimized page loads against deliberately unoptimized ones. No tilde: this is a difference between two sets of real measurements, not a model's output.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "340 kB"
+      },
+      "spread": {
+        "content": "$2",
+        "example": "90 kB"
+      }
+    }
   },
-  "popupFooterNote": {
-    "message": "One Chrome profile, on this device. Other browsers, other profiles, apps and anything else sharing the connection are not counted.",
-    "description": "Standing note at the foot of the popup, bounding what every figure above it covers."
+  "popupOptimizeMeasuredDeltaTitle": {
+    "message": "Measured: $OPTIMIZED$ optimized page loads against $CONTROL$ deliberately unoptimized ones on this site over $DAYS$ days. The ± is the 95% interval — page weights are heavy-tailed, so the range is the result.",
+    "description": "Tooltip on popupOptimizeMeasuredDelta, giving the sample the figure rests on.",
+    "placeholders": {
+      "optimized": {
+        "content": "$1",
+        "example": "184"
+      },
+      "control": {
+        "content": "$2",
+        "example": "21"
+      },
+      "days": {
+        "content": "$3",
+        "example": "30"
+      }
+    }
   },
-  "popupErrorDismiss": {
-    "message": "Dismiss",
-    "description": "Button that clears the popup's error line."
+  "popupOptimizeMeasuredHere": {
+    "message": "$AMOUNT$ measured off images here",
+    "description": "Fallback for popupOptimizeMeasuredDelta when this site has no controlled comparison yet. Also arithmetic rather than a model, so it also carries no tilde.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "1.4 MB"
+      }
+    }
   },
-  "popupErrorTryAgain": {
-    "message": "Try again",
-    "description": "Replaces popupErrorDismiss when polling has stopped, because pressing it restarts polling rather than only clearing the message."
+  "popupOptimizeMeasuredHereTitle": {
+    "message": "$PERIOD$. Arithmetic, not a model: the original variant's size was already on file, so this is what it weighed minus what the smaller one cost.",
+    "description": "Tooltip on popupOptimizeMeasuredHere. PERIOD is the window the figure covers, composed elsewhere, and leads the sentence.",
+    "placeholders": {
+      "period": {
+        "content": "$1",
+        "example": "Today"
+      }
+    }
   },
-  "popupErrorReadUsage": {
-    "message": "Could not read usage.",
-    "description": "Shown when the background worker does not answer a request for the current figures."
+  "popupOptimizeOffEverywhere": {
+    "message": "Off everywhere",
+    "description": "Button that switches Data Saver off for every site. Deliberately not 'Turn off': the tick beside it turns it off for this site only, and the two are different actions."
   },
-  "popupErrorCreateAllLimit": {
-    "message": "Could not create the limit over everything.",
-    "description": "Shown when the 'Turn on' button under popupPlanAlertsTitle fails to create the limit."
+  "popupOptimizeOffEverywhereTitle": {
+    "message": "Switches Data Saver off for every site. The tick beside it covers this site only.",
+    "description": "Tooltip on the popupOptimizeOffEverywhere button."
   },
-  "popupErrorGrant": {
-    "message": "Could not raise the allowance.",
-    "description": "Shown when the grant button fails."
+  "popupOptimizeOffForSite": {
+    "message": "Data Saver off for $SITE$",
+    "description": "Heading of the popup Data Saver row when the feature is on but this site is on the never-optimize list.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
   },
-  "popupErrorPause": {
-    "message": "Could not pause the limit.",
-    "description": "Shown when pausing a limit fails."
+  "popupOptimizeOffHint": {
+    "message": "It asks image services for a smaller version of the same picture, refuses analytics beacons, and stops feeds ordering images larger than they are shown. This row is also where you switch it back off.",
+    "description": "Body of the popup row offering Data Saver, shown while it is off and the button beside it reads \"Turn on\". Names what it does and where the way back out is. The final sentence used to read \"Switch it off again from here, for this site or for everything\" — an instruction for undoing a state the reader is not in, next to a button offering to enter it."
   },
-  "popupErrorResume": {
-    "message": "Could not resume the limit.",
-    "description": "Shown when resuming a paused limit fails."
+  "popupOptimizeOffTitle": {
+    "message": "Data Saver is off",
+    "description": "Heading of the popup row offering Data Saver, shown when the feature is off everywhere. 'Data Saver' is the product's name for its set of page optimizers."
   },
-  "popupErrorRemove": {
-    "message": "Could not remove the limit.",
-    "description": "Shown when deleting a limit fails."
+  "popupOptimizeOnForSite": {
+    "message": "Data Saver on for $SITE$",
+    "description": "Heading of the popup Data Saver row when the feature is on and this site is not excluded.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
   },
-  "popupErrorSetLimit": {
-    "message": "Could not set the limit.",
-    "description": "Shown when one of the preset buttons fails to create a limit."
+  "popupOptimizeTurnOn": {
+    "message": "Turn on",
+    "description": "Button that switches Data Saver on for every site."
   },
-  "popupErrorSiteOptimize": {
-    "message": "Could not change Data Saver for this site.",
-    "description": "Shown when the per-site Data Saver tick fails to save."
+  "popupOptimizeTurnOnTitle": {
+    "message": "Eight optimizers, each one switchable in settings. Five are on by default.",
+    "description": "Tooltip on the popupOptimizeTurnOn button."
   },
-  "popupErrorOptimize": {
-    "message": "Could not change Data Saver.",
-    "description": "Shown when switching Data Saver on or off for every site fails."
+  "popupOverlayLabel": {
+    "message": "prevented, partly estimated",
+    "description": "Names the second band inside each bar of the popup chart. Says both things about the figure: those bytes were never transferred, and the number is part measured and part modelled."
+  },
+  "popupPaceLess": {
+    "message": "$AMOUNT$ less than $WINDOW$",
+    "description": "Popup pace line when this period is lighter than the one before. Kept separate from popupPaceMore rather than taking 'more'/'less' as a placeholder, because a comparative cannot be dropped into a sentence unchanged in every language.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "34%"
+      },
+      "window": {
+        "content": "$2",
+        "example": "yesterday"
+      }
+    }
+  },
+  "popupPaceMore": {
+    "message": "$AMOUNT$ more than $WINDOW$",
+    "description": "Popup pace line when this period is heavier than the one before. WINDOW is one of the popupPreviousWindow* strings.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "34%"
+      },
+      "window": {
+        "content": "$2",
+        "example": "yesterday"
+      }
+    }
+  },
+  "popupPaceSame": {
+    "message": "About the same as $WINDOW$",
+    "description": "Popup pace line when this period is within 5% of the one before. WINDOW is one of the popupPreviousWindow* strings.",
+    "placeholders": {
+      "window": {
+        "content": "$1",
+        "example": "yesterday"
+      }
+    }
+  },
+  "popupPaceTitle": {
+    "message": "$CURRENT$ this period against $PREVIOUS$ in the window of the same length immediately before it. Both measured the same way.",
+    "description": "Tooltip on the popup's pace line, naming the two figures the comparison is made from.",
+    "placeholders": {
+      "current": {
+        "content": "$1",
+        "example": "1.2 GB"
+      },
+      "previous": {
+        "content": "$2",
+        "example": "900 MB"
+      }
+    }
+  },
+  "popupPeriodLabel": {
+    "message": "Period",
+    "description": "Accessible name of the popup's session/today/week/month radio group."
+  },
+  "popupPlanAlertsButton": {
+    "message": "Turn on",
+    "description": "Button that creates the limit described in popupPlanAlertsHint."
+  },
+  "popupPlanAlertsHint": {
+    "message": "Alerts come from a limit over everything, not from the plan figure on its own. Turning them on creates one at $PLAN$ a month and tells you at 75%, 90% and 100%. It also enforces: video is refused from 60% of the plan and images and fonts from 85%. A page's own HTML always loads.",
+    "description": "Body of the popup notice headed popupPlanAlertsTitle. States the consequence of pressing the button, including the enforcement the user did not ask for, before they press it.",
+    "placeholders": {
+      "plan": {
+        "content": "$1",
+        "example": "15 GB"
+      }
+    }
+  },
+  "popupPlanAlertsTitle": {
+    "message": "Nothing is watching this plan",
+    "description": "Heading of the popup notice shown when a plan size is recorded but no limit over everything exists, so no warning can ever fire."
+  },
+  "popupPlanCtaButton": {
+    "message": "Set your plan",
+    "description": "Button beside popupPlanCtaCopy. Opens the plan panel in settings."
+  },
+  "popupPlanCtaCopy": {
+    "message": "No plan set, so this total has no denominator.",
+    "description": "Shown in the popup in place of the plan meter when the user has never recorded a monthly allowance. 'Denominator' is meant literally: there is a number but nothing to divide it by."
+  },
+  "popupPlanLine": {
+    "message": "Day $DAY$ of $DAYS$ · resets $WHEN$",
+    "description": "Line under the plan meter. Assembled as one sentence so the two halves can be reordered; the middle dot is the separator used throughout this surface.",
+    "placeholders": {
+      "day": {
+        "content": "$1",
+        "example": "9"
+      },
+      "days": {
+        "content": "$2",
+        "example": "31"
+      },
+      "when": {
+        "content": "$3",
+        "example": "in 22 days"
+      }
+    }
+  },
+  "popupPlanMeterLabel": {
+    "message": "Plan used",
+    "description": "Accessible name of the plan progress bar in the popup. The bar's spoken value is popupPlanMeterValueText."
+  },
+  "popupPlanMeterTitle": {
+    "message": "Spending the plan evenly would put you at $PACE$ by now — that is the mark on the bar.",
+    "description": "Tooltip on the plan progress bar, explaining the pace marker drawn across it.",
+    "placeholders": {
+      "pace": {
+        "content": "$1",
+        "example": "29%"
+      }
+    }
+  },
+  "popupPlanMeterValueText": {
+    "message": "$USED$ of $TOTAL$, $SHARE$ of the plan, day $DAY$ of $DAYS$",
+    "description": "Spoken value of the plan progress bar. Carries the whole sentence rather than the bare percentage, because '132' read on its own is not the fact.",
+    "placeholders": {
+      "used": {
+        "content": "$1",
+        "example": "4.2 GB"
+      },
+      "total": {
+        "content": "$2",
+        "example": "15 GB"
+      },
+      "share": {
+        "content": "$3",
+        "example": "28%"
+      },
+      "day": {
+        "content": "$4",
+        "example": "9"
+      },
+      "days": {
+        "content": "$5",
+        "example": "31"
+      }
+    }
+  },
+  "popupPlusLimitCeiling": {
+    "message": "You are using all $COUNT$ free site limits. Remove one to set another, or open Settings to see Plus.",
+    "description": "Replaces the limit presets in the popup when a free install has reached its ceiling. Offers the free way out first, because removing a limit is a real answer and not a lesser one.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
+  },
+  "popupPreviousWindowMonth": {
+    "message": "the period before",
+    "description": "Names the comparison window in the popup pace line, when the period is the month. Deliberately not a number of days, for the same reason as popupPreviousWindowWeek."
+  },
+  "popupPreviousWindowSession": {
+    "message": "the session before",
+    "description": "Names the comparison window in the popup pace line, when the period is the browsing session. Reads after 'more than' or 'About the same as'."
+  },
+  "popupPreviousWindowToday": {
+    "message": "yesterday",
+    "description": "Names the comparison window in the popup pace line, when the period is today. Reads after 'more than' or 'About the same as'."
+  },
+  "popupPreviousWindowWeek": {
+    "message": "the period before",
+    "description": "Names the comparison window in the popup pace line, when the period is the week. Deliberately not 'the previous 7 days': a calendar week can be part-length, so naming a number of days would be wrong."
+  },
+  "popupProjectionFigure": {
+    "message": "Projected $AMOUNT$ by $DATE$",
+    "description": "First part of the popup projection line. 'Projected' is load-bearing: this figure is modelled, not measured.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "18.4 GB"
+      },
+      "date": {
+        "content": "$2",
+        "example": "31 Aug"
+      }
+    }
+  },
+  "popupProjectionHeading": {
+    "message": "Projection",
+    "description": "Heading of the popup block that models where the plan cycle will end up. The only modelled number on this surface."
+  },
+  "popupProjectionOver": {
+    "message": "$AMOUNT$ over your plan",
+    "description": "Follows popupProjectionFigure when the projection lands above the plan size.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "3.4 GB"
+      }
+    }
+  },
+  "popupProjectionRanOut": {
+    "message": "ran out $WHEN$",
+    "description": "Past-tense form of popupProjectionRunsOut, used when the exhaustion date has already passed.",
+    "placeholders": {
+      "when": {
+        "content": "$1",
+        "example": "2 days ago"
+      }
+    }
+  },
+  "popupProjectionRunsOut": {
+    "message": "runs out $WHEN$",
+    "description": "Last part of the popup projection line, for a date still in the future. Lower case because it follows a middle dot on the same line.",
+    "placeholders": {
+      "when": {
+        "content": "$1",
+        "example": "in 4 days"
+      }
+    }
+  },
+  "popupProjectionShow": {
+    "message": "Show how this is worked out",
+    "description": "Button under the projection that reveals the full basis sentence. Toggles to popupProjectionShowLess."
+  },
+  "popupProjectionShowLess": {
+    "message": "Show less",
+    "description": "The popupProjectionShow button's label while the full basis sentence is showing."
+  },
+  "popupProjectionSpare": {
+    "message": "$AMOUNT$ spare",
+    "description": "Follows popupProjectionFigure when the projection lands below the plan size.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "2.1 GB"
+      }
+    }
+  },
+  "popupReadAgo": {
+    "message": "Read $WHEN$",
+    "description": "Meta line entry shown once the figures on screen are more than ten seconds old, so a stale payload is described rather than presented as live.",
+    "placeholders": {
+      "when": {
+        "content": "$1",
+        "example": "2 minutes ago"
+      }
+    }
+  },
+  "popupSiteOpenTitle": {
+    "message": "$SITE$ — open in the dashboard",
+    "description": "Tooltip on an ordinary site list row. Clicking the row opens that site's detail view in the dashboard.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "example.com"
+      }
+    }
+  },
+  "popupSiteReservedTitle": {
+    "message": "Requests that did not belong to a tab: browser services, service workers and other extensions.",
+    "description": "Tooltip on the site list row that collects requests with no page behind them."
+  },
+  "popupSiteShare": {
+    "message": "$SHARE$ of total",
+    "description": "The right-hand figure on a site list row: this site's share of the period's bytes.",
+    "placeholders": {
+      "share": {
+        "content": "$1",
+        "example": "18%"
+      }
+    }
+  },
+  "popupSiteShareEstimated": {
+    "message": "$SHARE$ of total · part estimated",
+    "description": "popupSiteShare with the caveat appended, used when under 75% of this site's bytes were measured. Written as one whole string rather than a suffix, so the caveat can go wherever it belongs.",
+    "placeholders": {
+      "share": {
+        "content": "$1",
+        "example": "18%"
+      }
+    }
+  },
+  "popupSiteTagCurrent": {
+    "message": "This tab",
+    "description": "Tag on the site list row for the site open in the current tab."
+  },
+  "popupSitesCountOne": {
+    "message": "$COUNT$ site",
+    "description": "Note beside the Sites heading when exactly one site was recorded.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "popupSitesCountOther": {
+    "message": "$COUNT$ sites",
+    "description": "Note beside the Sites heading for any count other than one. Chrome's message format has no plural rules, so the two forms are separate messages and the code picks between them on count === 1.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "24"
+      }
+    }
+  },
+  "popupSitesSeeAll": {
+    "message": "See all $COUNT$ in the dashboard",
+    "description": "Button under the popup site list once it is already expanded and there are still more sites than it will show.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "112"
+      }
+    }
+  },
+  "popupSitesShowAll": {
+    "message": "Show all $COUNT$ sites",
+    "description": "Button under the popup site list while it is showing the top six of more.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "24"
+      }
+    }
+  },
+  "popupSitesTitle": {
+    "message": "Sites",
+    "description": "Heading of the popup's site list panel."
+  },
+  "popupStaleTitle": {
+    "message": "The background worker has not answered since then, which is ordinary after an idle gap. These are the last figures it sent, not live ones.",
+    "description": "Tooltip on popupReadAgo."
+  },
+  "popupTypesCaption": {
+    "message": "What the bytes were",
+    "description": "Accessible caption of the popup's resource-type breakdown bar (images, video, scripts and so on)."
   }
 }

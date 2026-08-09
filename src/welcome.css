@@ -85,8 +85,20 @@
   margin-top: 4px;
 }
 
+/*
+ * The two prose panels at the foot of the page. `.section-intro` carries no margin of
+ * its own — it is written for the hero, where the grid does the spacing — so both the
+ * gap under the heading and the gap between paragraphs have to be stated here. The
+ * second is the one that is easy to miss: the pin panel's instruction and the sentence
+ * saying it is optional were butted into a single block of six lines.
+ */
+#pin-panel .section-intro,
 #scope-panel .section-intro {
   margin-top: 6px;
+}
+
+#pin-panel .section-intro + .section-intro {
+  margin-top: 10px;
 }
 
 /*
