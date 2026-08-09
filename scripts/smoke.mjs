@@ -633,6 +633,48 @@ async function checkRootLoad(chromium, check) {
       page.waitForSelector('#period-tabs button', { timeout: 10_000 }),
     );
 
+    /**
+     * The popup is loaded from `dist/` under this manifest, so its navigation buttons
+     * must open the same directory. A direct `getURL("settings.html")` still lets the
+     * popup render and only fails when a person follows one of its two main routes —
+     * exactly the kind of root-load regression the check above cannot see.
+     */
+    async function checkPopupRoute(button, expectedPath, selector, label) {
+      await checkWait(check, label, async () => {
+        const popup = await context.newPage();
+        try {
+          await popup.goto(`chrome-extension://${extensionId}/dist/popup.html`);
+          await popup.waitForSelector(button, { timeout: 10_000 });
+          const opened = context.waitForEvent('page', { timeout: 10_000 });
+          await popup.click(button);
+          const target = await opened;
+          try {
+            await target.waitForSelector(selector, { state: 'attached', timeout: 10_000 });
+            if (new URL(target.url()).pathname !== expectedPath) {
+              throw new Error(`opened ${target.url()}`);
+            }
+          } finally {
+            await target.close().catch(() => undefined);
+          }
+        } finally {
+          await popup.close().catch(() => undefined);
+        }
+      });
+    }
+
+    await checkPopupRoute(
+      '#settings-button',
+      '/dist/settings.html',
+      '#pane-plan',
+      'the root popup opens Settings',
+    );
+    await checkPopupRoute(
+      '#dashboard-button',
+      '/dist/dashboard.html',
+      '#stats',
+      'the root popup opens Dashboard',
+    );
+
     // The path both content scripts are injected by, resolved the way the worker
     // resolves it. Wrong and the banner never shows.
     const resolved = await page.evaluate(() => {

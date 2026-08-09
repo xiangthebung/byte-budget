@@ -61,6 +61,7 @@ import {
   hourKey,
 } from "./core/period";
 import { applyTheme, getSettings, onSettingsChanged } from "./core/settings";
+import { runtimeFile } from "./core/runtime";
 import type { BudgetPeriod } from "./limit/budgets";
 import { TIER_DESCRIPTIONS, TIERS } from "./limit/tiers";
 import type { OptimizeSettings } from "./optimize/features";
@@ -845,7 +846,10 @@ function openPage(
   site?: string,
   section?: SettingsSection,
 ): void {
-  const url = new URL(chrome.runtime.getURL(page));
+  // The generated project-root manifest points every page into `dist/`. Resolve the
+  // same way as content scripts and the welcome page, or the popup will open a
+  // chrome-error page when the project folder is loaded unpacked.
+  const url = new URL(chrome.runtime.getURL(runtimeFile(page)));
   if (site) url.hash = `site=${encodeURIComponent(site)}`;
   else if (section) url.hash = section;
   void chrome.tabs.create({ url: url.toString() });

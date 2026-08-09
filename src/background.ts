@@ -441,7 +441,7 @@ if (chrome.notifications) {
     // platforms, and an alert that stays on screen after it has been acted on reads as
     // a second one.
     void chrome.notifications.clear(id);
-    void chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+    void chrome.tabs.create({ url: chrome.runtime.getURL(runtimeFile("dashboard.html")) });
   });
 }
 
@@ -754,7 +754,7 @@ async function handle(
     }
 
     case "OPEN_DASHBOARD": {
-      await chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") });
+      await chrome.tabs.create({ url: chrome.runtime.getURL(runtimeFile("dashboard.html")) });
       return {};
     }
 
