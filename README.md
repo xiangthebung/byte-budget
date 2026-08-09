@@ -17,6 +17,8 @@ npm run smoke      # build, then measure a known page in a real Chromium
 
 Then load `dist/` in `chrome://extensions` → Developer mode → Load unpacked.
 
+See the [Privacy Policy](https://github.com/xiangthebung/network-data-tracker/blob/master/PRIVACY_POLICY.md).
+
 ## Where the numbers come from
 
 Chrome does not tell an extension how big a response was. `webRequest` reports

@@ -90,8 +90,12 @@ extension. The ExtensionPay response is data, not code.
 
 Certify that data is used only for the disclosed user-facing features, is not sold or
 used for advertising or credit decisions, and is not read by humans except for the
-policy's support/legal exceptions. Put the direct hosted URL of `PRIVACY_POLICY.md` in
-the Privacy policy field. No product homepage URL is declared in the manifest.
+policy's support/legal exceptions. Put this direct GitHub URL in the Privacy policy
+field:
+
+https://github.com/xiangthebung/network-data-tracker/blob/master/PRIVACY_POLICY.md
+
+No product homepage URL is declared in the manifest.
 
 ## Reviewer test instructions
 
