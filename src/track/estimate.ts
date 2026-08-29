@@ -3,7 +3,7 @@
  *
  * Two situations need this. A response can arrive with no `Content-Length` (any
  * chunked or streamed body) and no usable resource timing (any opaque
- * cross-origin response) — see PLAN.md §1.1. And a request that a rule blocked
+ * cross-origin response) — see ARCHITECTURE.md "Measurement". And a request that a rule blocked
  * never had a size at all, but the bytes it would have cost are exactly the
  * number phase 3 has to report.
  *

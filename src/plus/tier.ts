@@ -15,7 +15,7 @@
  *    subscription lapse, keeps all of it — running, enforcing, exactly as configured.
  *    What they lose is the ability to add a ninth or edit the selection. The alternative
  *    is a product that silently deletes a limit somebody was relying on because a card
- *    expired, which is the same failure class as `NEXT_AI_HANDOFF.md`'s rule 8: a
+ *    expired, which is the same failure class as `ARCHITECTURE.md`'s invariant 9: a
  *    setting must survive a switch it has nothing to do with.
  *
  * 2. **Nothing here may gate a disclosure.** The measured share, the measured-versus-

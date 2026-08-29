@@ -115,7 +115,7 @@ export const FEATURES: readonly FeatureInfo[] = [
     // The description is deliberately not "stops a page prefetching". This runs in the
     // page, and a hint written into the first HTML is dispatched by Chrome's preload
     // scanner before any script sees the element — measured in `scripts/smoke.mjs`, the
-    // same limit PLAN.md §5.2 records for the image features. Hints a page adds later
+    // same limit ARCHITECTURE.md "The preload scanner" records for the image features. Hints a page adds later
     // are caught, which on an app-rendered site is most of them. The sentence that says
     // so is the second one in `coreFeatureDropHintsDescription`; a translation that
     // drops it makes the feature claim something it cannot do.

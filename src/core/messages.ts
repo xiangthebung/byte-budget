@@ -171,7 +171,7 @@ export interface StorageReport {
  *
  * Sent only when it carries a usable size. `transferSize` is 0 for an opaque
  * cross-origin response *and* for a cache hit, so a zero tells us nothing and
- * posting it would just be noise on the message bus (PLAN.md §1.1).
+ * posting it would just be noise on the message bus (ARCHITECTURE.md "Measurement").
  */
 export interface TimingReport {
   url: string;

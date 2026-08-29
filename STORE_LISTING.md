@@ -93,7 +93,7 @@ used for advertising or credit decisions, and is not read by humans except for t
 policy's support/legal exceptions. Put this direct GitHub URL in the Privacy policy
 field:
 
-https://github.com/xiangthebung/network-data-tracker/blob/master/PRIVACY_POLICY.md
+https://github.com/xiangthebung/byte-budget/blob/master/PRIVACY_POLICY.md
 
 No product homepage URL is declared in the manifest.
 

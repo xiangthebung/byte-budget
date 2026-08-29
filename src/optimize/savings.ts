@@ -335,7 +335,7 @@ export interface VisitDelta {
    *
    * Always smaller than `|savedPerVisit|` in a delta that exists at all — a row whose
    * interval covers zero is not returned. Shown so the reader gets "±" rather than a
-   * bare number, which is what PLAN.md:386 asks the report to do.
+   * bare number, which is what ARCHITECTURE.md "Optimizing, and what a saving means" asks the report to do.
    */
   savedPerVisitSpread: number;
   /** Total across the optimized loads in the window. */

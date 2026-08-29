@@ -73,7 +73,7 @@ export function startPlus(): void {
    * from can change underneath it — a profile sync, a storage clear, or anything else
    * that empties `chrome.storage.local`. Without this the worker would keep answering
    * from a copy of a record that no longer exists, which is exactly the failure this
-   * project has already had three times over (`NEXT_AI_HANDOFF.md` rule 16: anything
+   * project has already had three times over (`ARCHITECTURE.md` invariant 3: anything
    * cleared on disk has to be cleared in memory too, and the size model in particular
    * wrote deleted data straight back).
    *

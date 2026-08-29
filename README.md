@@ -5,19 +5,19 @@ you — this session, today, this week, this month — shows how much of that fi
 actually measured rather than inferred, holds a site or the whole browser to a byte
 budget, and says so before the budget runs out rather than after.
 
-All three phases are done: track, limit, optimize. `PLAN.md` is the design document,
-the record of what the browser tests changed about it, and the record of what this
-project's own audit changed.
+All three phases are done: track, limit, optimize. `ARCHITECTURE.md` explains what
+the browser will and will not tell an extension, and why each part is built the way it
+is; `STATE.md` says what was last verified and what is still open.
 
 ```sh
 npm install
-npm run verify     # typecheck, unit tests, build
+npm run verify     # typecheck, lint, unit tests, build
 npm run smoke      # build, then measure a known page in a real Chromium
 ```
 
 Then load `dist/` in `chrome://extensions` → Developer mode → Load unpacked.
 
-See the [Privacy Policy](https://github.com/xiangthebung/network-data-tracker/blob/master/PRIVACY_POLICY.md).
+See the [Privacy Policy](https://github.com/xiangthebung/byte-budget/blob/master/PRIVACY_POLICY.md).
 
 ## Where the numbers come from
 
@@ -376,7 +376,7 @@ improve a figure the extension displays about itself is not a decision to make o
 someone's behalf.
 
 That row got harder to earn during this project's audit, and the claim it supports got
-stronger for it. Three things changed; `PLAN.md` §7.2 has the full record.
+stronger for it. Three things changed.
 
 - **The control arm no longer contains loads that were never controls.** A page load
   used to carry a bare "was it optimized" boolean, and every falsy value counted as a
@@ -590,8 +590,8 @@ floored at the two sized fixtures, ceilinged at 1.35× everything served — bec
 headers, favicon attempts and the streamed body sit inside it, and a pinned total
 would be a test that fails on a Chrome update rather than on a regression. The
 phase-1 verification recorded 770,830 bytes served against 771,820 counted, and the
-990-byte gap is the halved header estimate across five requests; that pair is a
-recorded observation in `PLAN.md`, not something the script asserts on every run.
+990-byte gap is the halved header estimate across five requests; that pair is one run's
+observation, not something the script asserts every time.
 
 **That a refusal costs zero,** with the server as the witness rather than the
 extension:

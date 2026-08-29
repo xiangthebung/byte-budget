@@ -9,7 +9,7 @@
  *
  * `dist/` is the one you load in Chrome. `dist-throttle/` is the channel that
  * declares the `debugger` permission so it can cap a tab's throughput for real
- * (see PLAN.md §1.4); it exists to be packaged separately, because `debugger`
+ * (see ARCHITECTURE.md "Why there are two build channels"); it exists to be packaged separately, because `debugger`
  * cannot be an optional permission and should not be forced on everyone.
  */
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';

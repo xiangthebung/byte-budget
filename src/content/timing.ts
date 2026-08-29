@@ -4,7 +4,7 @@
  * The service worker knows about every request but often not how big it was: a
  * chunked or streamed response has no `Content-Length` to read. The page does
  * know, through `PerformanceResourceTiming.transferSize`, so this ships those
- * figures back and the worker settles the requests it had parked (PLAN.md §1.2).
+ * figures back and the worker settles the requests it had parked (ARCHITECTURE.md "Reconciliation").
  *
  * What gets sent is deliberately narrower than what gets measured. The first
  * version posted every resource from every frame on every page load, for numbers the

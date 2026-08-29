@@ -3,7 +3,7 @@
  * budget.
  *
  * MV3 cannot pace a request — `declarativeNetRequest` blocks, redirects and
- * rewrites headers, and has no rate control (PLAN.md §1.4). What it *can* do is
+ * rewrites headers, and has no rate control (ARCHITECTURE.md "Why there are two build channels"). What it *can* do is
  * refuse a request before it is dispatched, which costs exactly zero bytes rather
  * than "bytes we noticed afterwards". So the lever here is *which kinds* of
  * request are allowed, in the order that trades the fewest bytes for the least

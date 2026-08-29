@@ -3,7 +3,7 @@
  *
  * Everything downstream of the request ledger reads these shapes, so the rule
  * that keeps the numbers honest lives here: a total always carries how much of
- * it was *measured* alongside how much of it is. See PLAN.md §1.1 — Chrome does
+ * it was *measured* alongside how much of it is. See ARCHITECTURE.md "Measurement" — Chrome does
  * not hand extensions a byte count, so some of every total is inferred, and a
  * total that hides that fact is a total nobody should trust.
  */

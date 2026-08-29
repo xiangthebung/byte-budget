@@ -4,7 +4,7 @@
  * This is the only source that sees *every* request — including ones no page can
  * observe, from service workers, from other extensions, and from the browser
  * itself. Resource timings from the page only ever enrich what is recorded here
- * (PLAN.md §1.2), never replace it.
+ * (ARCHITECTURE.md "Reconciliation"), never replace it.
  *
  * Byte arithmetic, stated plainly so the numbers can be argued with:
  *

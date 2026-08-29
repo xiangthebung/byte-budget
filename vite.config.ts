@@ -259,7 +259,7 @@ function manifestMessageReferences(value: unknown, found: Set<string> = new Set(
  * `--mode throttle` selects the channel that declares the `debugger` permission.
  *
  * Chrome does not allow `debugger` as an optional permission, and it is the only
- * API that can actually cap a tab's throughput (PLAN.md §1.4). Forcing that
+ * API that can actually cap a tab's throughput (ARCHITECTURE.md "Why there are two build channels"). Forcing that
  * install warning on everyone to serve the few people who want a kbps cap is the
  * wrong trade, so it ships as a second channel instead.
  *

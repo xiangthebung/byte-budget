@@ -2059,7 +2059,7 @@ async function main() {
      *
      * The first load still gets its image: every request on the page is dispatched
      * while parsing, before any of them has finished being counted. That is the
-     * overshoot described in PLAN.md §4.2, and it is why the assertion below is about
+     * overshoot described in ARCHITECTURE.md "Enforcement", and it is why the assertion below is about
      * the *second* load.
      * ---------------------------------------------------------------- */
 
@@ -2750,7 +2750,7 @@ async function main() {
      * passing on the winning side of that race; when it lost, it looked like a
      * regression in code that had not been touched.
      *
-     * It is the same limit PLAN.md §5.2 records for the image features, and the same one
+     * It is the same limit ARCHITECTURE.md "The preload scanner" records for the image features, and the same one
      * the click-to-load copy already discloses. The customer-facing wording was the
      * thing actually wrong here and has been corrected; what the feature can genuinely
      * promise is the DOM assertion below, and hints a page adds after the initial parse.
@@ -2973,7 +2973,7 @@ async function main() {
        *
        * Every other capture in this run is taken with Plus unlocked, because the run
        * unlocks it early so the paid controls can be driven. That makes the locked
-       * state exactly what `NEXT_AI_HANDOFF.md` rule 20 warns about: the state every
+       * state exactly what `ARCHITECTURE.md` invariant 17 warns about: the state every
        * new install is in, and the one no screenshot has ever shown. These two are it.
        *
        * The tier is put back at the end, so nothing after this point inherits a
