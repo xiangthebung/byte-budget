@@ -15,6 +15,19 @@ body {
   width: 420px;
 }
 
+/*
+ * The scrollbar's width is reserved whether or not it is drawn.
+ *
+ * The popup is a fixed 420px and Chrome caps it at 600px tall, so a period with a
+ * limit card or a long site list overflows and one without it does not. With the
+ * gutter taken from the content only when the bar appears, every switch that
+ * crossed that boundary slid the whole surface sideways by the width of a
+ * scrollbar. Reserved always, the content box is the same width in both states.
+ */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   min-height: 300px;
   overflow-x: hidden;
@@ -117,6 +130,15 @@ body {
  * "TODAY · 38% MORE THAN YESTERDAY" reads as a shout, not as a verdict.
  */
 .pace-line {
+  /*
+   * One line's worth of height whether or not there is a verdict to put in it.
+   *
+   * `session` has no previous window to compare against and a cold profile has no
+   * history, so this line comes and goes as the period changes. When it was removed
+   * from the flow the headline, the period group and every block below it stepped up
+   * and down by a row on each switch, which is the shift people were clicking into.
+   */
+  min-height: 1lh;
   font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
@@ -696,9 +718,12 @@ body {
   min-width: 0;
 }
 
+/* Same reservation as the page: the list scrolls past its cap on a busy period and
+   not on a quiet one, and without the gutter the rows themselves moved sideways. */
 .site-list {
   max-height: 320px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 /* ------------------------------------------------------------------ *

@@ -423,12 +423,16 @@ function renderHeadline(payload: OverviewPayload): void {
 function renderPace(payload: OverviewPayload): void {
   const previous = totalBytes(payload.previousTotals);
   if (previous <= 0) {
-    paceLine.hidden = true;
+    // Emptied rather than hidden. Removing the line from the flow moved the headline,
+    // the period group and everything under it up by a row on every switch to
+    // `session`, so the row is held open by `.pace-line`'s min-height instead.
+    setData(paceLine, "data-tone", null);
+    paceLine.textContent = "";
+    paceLine.removeAttribute("title");
     return;
   }
   const delta = totalBytes(payload.totals) / previous - 1;
   const against = PREVIOUS_WINDOW_LABELS[payload.period];
-  paceLine.hidden = false;
   paceLine.title = t("popupPaceTitle", [bytes(totalBytes(payload.totals)), bytes(previous)]);
   // Under a twentieth either way is noise dressed up as a finding, and a popup that
   // reports "3% more than yesterday" every day teaches people to ignore the line.
