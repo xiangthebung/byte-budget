@@ -9,6 +9,64 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The documentation is now checked by the test suite.** `tests/docs.test.mjs` reads
+  facts out of the source and asserts the documents contain them: every file path they
+  name exists and is unambiguous, every `npm run` they suggest is real, every manifest
+  permission is justified in both the privacy policy and the store listing, and the
+  prices, trial length, alert thresholds, retention options, analytics-domain count and
+  image-rewrite hosts all match the constants they are copied from. Adding a tracked
+  Markdown file the test does not cover fails the suite. This closes the one class of
+  defect nothing else in the project could see — a document that is wrong is invisible
+  to a typecheck, a linter and a browser test alike — and it was written because three
+  documents had drifted into stating that the project had no internationalization, no
+  CI and no version control, all of which were false.
+- **Two tests pinning that the session total is handed out as a copy.** Written as a
+  pair on purpose: a shallow copy passes the first and fails the second.
+
+### Fixed
+
+- **A tab that closed while the service worker was asleep never finished its visit.**
+  `ensureTabsReady` reconciled the record away without calling `finishVisit`, so the row
+  kept no `endedAt`, `visitObserver` never fired, and the load was invisible to the
+  optimizer's on-versus-off comparison. Invisible rather than wrong — but the loads that
+  end while nothing is watching are not distributed evenly across the two arms, so a
+  comparison that silently drops them is not obviously unbiased either.
+- **`sessionUsage()` handed out the ledger's live totals.** All seven callers happened
+  to copy before mutating, so nothing was wrong yet; one `addTotals` against the returned
+  map would have added straight into the session count, and the result would have looked
+  like traffic rather than like a bug. It returns a copy now, `byType` included.
+- **The privacy policy did not mention the throttle build's `debugger` permission.** The
+  README documents a second build channel that takes a permission the published one does
+  not, and the policy's permission section did not acknowledge it existed. A policy that
+  is silent about a capability is the same defect as one that is wrong about it.
+- **The privacy policy named two image services in prose rather than by host.** "The
+  Shopify CDN and Cloudinary" now reads `cdn.shopify.com` and `res.cloudinary.com`,
+  which is what the sentence "no other host is ever rewritten" needs in order to be
+  checkable — and is now checked.
+- **Stale GitHub links.** `README.md` and `STORE_LISTING.md` pointed at
+  `network-data-tracker`, which the repository has not been called since it was renamed
+  to `byte-budget`. The second is the URL that goes in the Chrome Web Store's privacy
+  policy field, so a dead link there is a submission blocker.
+
+### Changed
+
+- **Four documents became two.** AUDIT.md, PLAN.md and NEXT_AI_HANDOFF.md — 217 KB
+  between them — were replaced by `ARCHITECTURE.md` (design, the navigation map, the
+  invariants and the traps) and `STATE.md` (baselines, what is open, the release
+  checklist). Split by how fast a fact goes stale rather than by topic, so every fact
+  has one home. The three deleted files each claimed to be the source of truth and
+  contradicted each other on load-bearing behaviour: the parked-request TTL was
+  documented as both 8 s and 15 s, budgets as living in both `chrome.storage.sync` and
+  `local`, and one deferred defect as both open and fixed. Every source comment that
+  cited them now cites a named section of `ARCHITECTURE.md`; `git log` has the originals.
+- **The popup no longer shifts when the period changes.** The pace verdict is emptied
+  rather than removed from the flow, and the scrollbar gutter is reserved on both the
+  page and the site list — so switching to `session`, which has no previous window to
+  compare against, no longer steps every block below the headline up by a row and
+  sideways by a scrollbar.
+
+### Added
+
 - **A paid tier, and a seventh settings section for it.** Byte Budget Plus is CA$0.99 a
   month or CA$7.99 a year (CAD), with a 14-day trial, handled by
   [ExtensionPay](https://extensionpay.com). The line between free and paid is drawn on
@@ -295,7 +353,8 @@ switched off in it.
 
 ### Pre-release history
 
-The audit that shaped this release is in `AUDIT.md`; each of the four
+The audit that shaped this release was folded into `ARCHITECTURE.md` and `STATE.md`
+in August 2026 and its own file deleted; `git log` has the original. Each of the four
 remediation waves is one commit, and the commit messages carry the reasoning at
 more length than this file can.
 

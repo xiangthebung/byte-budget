@@ -1,6 +1,6 @@
 # Privacy policy — Byte Budget
 
-Last updated: 8 August 2026
+Last updated: 29 August 2026
 
 ## The short version
 
@@ -223,8 +223,8 @@ Web Store User Data Policy, including its Limited Use requirements.
   extension. To refuse requests once a site — or the browser as a whole, if you set a
   total limit — is over a limit you set. To redirect image requests to smaller
   versions of the same file on a fixed list of image services: `pbs.twimg.com`,
-  `upload.wikimedia.org`, Photon (`i0-2.wp.com`), the Shopify CDN and Cloudinary. No
-  other host is ever rewritten. And, while optimizing is on, to refuse beacons sent to
+  `upload.wikimedia.org`, Photon (`i0-2.wp.com`), the Shopify CDN (`cdn.shopify.com`)
+  and Cloudinary (`res.cloudinary.com`). No other host is ever rewritten. And, while optimizing is on, to refuse beacons sent to
   a fixed list of nineteen analytics domains — beacons to any other destination,
   including the site's own, are left alone, because that is also how a page saves your
   work as you close the tab. These rules are evaluated by Chrome itself — the
@@ -249,6 +249,17 @@ Web Store User Data Policy, including its Limited Use requirements.
   alert switches off stops the extension asking Chrome for one at all.
 - **`favicon`**: to show site icons from the browser's existing cache, without
   fetching anything.
+
+The published extension asks for those permissions and no others. There is a second
+build of Byte Budget that is not published — you can only get it by building the
+project yourself — which adds Chrome's **`debugger`** permission, because that is the
+only API that can genuinely cap a tab's speed rather than refuse whole requests. It is
+a separate build precisely so that permission is not asked of everyone: Chrome does not
+allow `debugger` to be requested at runtime, and while a cap is active Chrome shows a
+banner saying an extension is debugging the browser, which cannot be switched off. That
+build uses the permission to set a speed limit on a tab and for nothing else. It reads
+no page content and sends nothing anywhere; everything else in this policy applies to
+it unchanged.
 
 ## Children
 
