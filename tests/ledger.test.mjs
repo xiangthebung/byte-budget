@@ -15,14 +15,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { installFakeIndexedDb } from "./hooks.mjs";
+import { installFakeChromeStorage, installFakeIndexedDb } from "./hooks.mjs";
 
 // Before anything opens the database: `src/core/db.ts` caches its connection for the
 // life of the module, so a fake installed later would be installed too late.
 const database = installFakeIndexedDb();
+installFakeChromeStorage();
 
 const { getAll, put, STORES } = await import("../src/core/db.ts");
-const { pruneOldRows } = await import("../src/track/ledger.ts");
+const { ledger, pruneOldRows } = await import("../src/track/ledger.ts");
 const { addDays, dayKey, retentionCutoff, startOfDay } = await import("../src/core/period.ts");
 const { RETENTION_OPTIONS } = await import("../src/core/types.ts");
 
@@ -244,4 +245,76 @@ test("pruning twice deletes no more than pruning once", async () => {
   assert.deepEqual(await bucketsIn(STORES.hourly), afterFirst.hourly);
   assert.deepEqual(await idsIn(), afterFirst.visits);
   assert.deepEqual(afterFirst.visits, ["kept"]);
+});
+
+/* ------------------------------------------------------------------ *
+ * The session total is handed out as a copy
+ * ------------------------------------------------------------------ */
+
+/**
+ * `sessionUsage()` used to return the ledger's own `sites` map.
+ *
+ * Every one of its callers happened to copy before mutating, so nothing was wrong —
+ * which is exactly what makes it worth a test rather than a comment. The next caller
+ * to write `addTotals(session.sites[site], delta)` would have added straight into the
+ * live session total, and the result would have looked like traffic rather than like a
+ * bug: no exception, no failed write, just a number that climbs faster than the
+ * browser is actually transferring.
+ *
+ * Asserted as "a second read is unaffected by mutating the first" rather than by
+ * checking object identity, because identity is the implementation and independence is
+ * the promise. `byType` is asserted separately because a shallow copy passes the first
+ * assertion and fails this one.
+ */
+function commit(site, down, type = "image") {
+  return {
+    site,
+    host: site,
+    type,
+    at: Date.now(),
+    down,
+    up: 0,
+    estimatedDown: 0,
+    fromCache: false,
+    cacheAvoided: 0,
+    saved: 0,
+    savedMeasured: 0,
+    blocked: false,
+    rewritten: 0,
+    visitId: "v1",
+  };
+}
+
+test("the session total is handed out as a copy, so a caller cannot mutate the ledger", async () => {
+  database.clear();
+  await ledger.resetSession();
+  ledger.record(commit("example.com", 1000));
+
+  const first = await ledger.sessionUsage();
+  assert.equal(first.sites["example.com"].down, 1000);
+
+  first.sites["example.com"].down += 500_000;
+
+  const second = await ledger.sessionUsage();
+  assert.equal(
+    second.sites["example.com"].down,
+    1000,
+    "mutating the returned totals changed the ledger's own session count",
+  );
+});
+
+test("the copy reaches byType, which a shallow spread would leave shared", async () => {
+  database.clear();
+  await ledger.resetSession();
+  ledger.record(commit("example.com", 1000, "image"));
+
+  const first = await ledger.sessionUsage();
+  assert.equal(first.sites["example.com"].byType.image, 1000);
+
+  first.sites["example.com"].byType.image += 500_000;
+  first.sites["example.com"].byType.script = 42;
+
+  const second = await ledger.sessionUsage();
+  assert.equal(second.sites["example.com"].byType.image, 1000);
+  assert.equal(second.sites["example.com"].byType.script, undefined);
 });

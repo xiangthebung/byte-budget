@@ -4,7 +4,7 @@
  *
  * This is the piece that makes the numbers mean anything: a request carries a
  * `tabId`, and the site it should be charged to is whatever that tab has
- * committed at the top level (PLAN.md §1.3).
+ * committed at the top level (ARCHITECTURE.md "Attribution").
  *
  * The map is mirrored into `chrome.storage.session` because the service worker is
  * torn down after thirty idle seconds and the next request that wakes it must
@@ -199,9 +199,35 @@ export function ensureTabsReady(): Promise<void> {
         if (existing?.site === site) continue;
         tabs.set(tab.id, makeRecord(tab.id, site, origin));
       }
+      /*
+       * A tab that closed while the worker was asleep still has a visit to finish.
+       *
+       * This loop used to delete the record, which dropped the load on the floor: the
+       * row kept no `endedAt`, so `visitObserver` never fired for it and `visitDelta`
+       * — which filters on `endedAt` — could not see it. Those loads were invisible to
+       * the on-versus-off comparison rather than wrong in it, but the missing ones are
+       * exactly the loads that ended while nothing was watching, and there is no reason
+       * to think they are distributed evenly across the two arms.
+       *
+       * `finishVisit` is awaited in a second pass rather than inside the delete loop
+       * because it writes to IndexedDB, and the map has to be consistent before any
+       * await hands control back to a listener that might read it.
+       */
+      const vanished: TabRecord[] = [];
       for (const tabId of [...tabs.keys()]) {
-        if (!live.has(tabId)) tabs.delete(tabId);
+        if (live.has(tabId)) continue;
+        const record = tabs.get(tabId);
+        if (record) vanished.push(record);
+        tabs.delete(tabId);
       }
+      // The true close time is unknown — the worker was not running for it — so this
+      // stamps `now`, which can overstate the load's duration by the length of the
+      // sleep. That is acceptable because nothing reads the duration: `endedAt` is a
+      // presence check in both places it is consumed (`optimize/holdout.ts` and
+      // `optimize/savings.ts`), and the bytes, which are what the comparison uses, are
+      // exact. If a duration ever becomes a reported figure, this needs a real
+      // last-seen stamp on `TabRecord` rather than a guess here.
+      for (const record of vanished) await finishVisit(record, Date.now());
     } catch {
       // No `tabs` access yet, or the browser is shutting down. Attribution falls
       // back to `#background`, which is visible in the UI rather than silent.

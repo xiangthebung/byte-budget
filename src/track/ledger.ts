@@ -296,9 +296,26 @@ class Ledger {
     return this.sessionLoading;
   }
 
+  /**
+   * The session total, as a copy.
+   *
+   * Handing out `session.sites` itself was correct only for as long as all seven
+   * callers happened to copy before mutating — `addTotals(delta, …)` against the
+   * returned map would have added straight into the live ledger, and the corruption
+   * would have looked like traffic rather than like a bug. Copying here costs one
+   * shallow clone per site per call and removes the failure mode instead of relying
+   * on every future caller noticing it. Pinned by two tests in `tests/ledger.test.mjs`,
+   * because a shallow spread passes the first and fails the second.
+   */
   async sessionUsage(): Promise<SessionUsage> {
     const session = await this.loadSession();
-    return { startedAt: session.startedAt, sites: session.sites };
+    const sites: Record<string, Delta> = {};
+    for (const [site, totals] of Object.entries(session.sites)) {
+      // `byType` is a nested map, so a shallow spread would hand back a copy that
+      // still shares it — the same defect one level down.
+      sites[site] = { ...totals, byType: { ...totals.byType } };
+    }
+    return { startedAt: session.startedAt, sites };
   }
 
   /**
