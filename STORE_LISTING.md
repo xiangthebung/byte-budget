@@ -71,6 +71,22 @@ are displayed inside the extension before checkout.
 - `notifications`: show the 75%, 90% and 100% allowance alerts selected by the user.
 - `favicon`: display site icons from Chrome's favicon cache without fetching them.
 
+## Published policy URLs
+
+Paste these into the Developer Dashboard. They are live now — check them before
+you submit rather than after, because a reviewer following a dead privacy link is
+a rejection, and this collection has already shipped one extension whose in-product
+legal links pointed at a host that did not exist.
+
+```
+Privacy policy   https://personal-website.xiangli3625.workers.dev/legal/byte-budget/privacy
+Terms of sale    https://personal-website.xiangli3625.workers.dev/legal/byte-budget/terms
+```
+
+The copy in this repository is the original. The portfolio site keeps a vendored
+copy and its test suite diffs the two, so edit the file here and re-copy — never
+the published page on its own.
+
 ## Privacy practices selections
 
 Disclose these categories while the current implementation is shipped:
