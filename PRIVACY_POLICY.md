@@ -1,6 +1,6 @@
 # Privacy policy — Byte Budget
 
-Last updated: 29 August 2026
+Effective: 29 August 2026
 
 ## The short version
 

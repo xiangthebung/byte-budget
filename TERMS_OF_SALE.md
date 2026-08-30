@@ -1,6 +1,6 @@
 # Byte Budget Plus — subscription and refund terms
 
-Last updated: 9 August 2026
+Effective: 9 August 2026
 
 Byte Budget Plus is sold by Byte Budget's developer, reachable at
 xiangli3625@gmail.com. Google is not the seller and does not process the transaction.
