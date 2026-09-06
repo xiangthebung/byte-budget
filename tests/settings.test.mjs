@@ -61,6 +61,22 @@ test("every field a person can set comes back the way they set it", async () => 
   assert.deepEqual(await getSettings(), ALL_CHANGED, "and again after a fresh read");
 });
 
+test("the badge ships on, showing the plan, and every mode round-trips", async () => {
+  // A badge that ships off is an instrument nobody was given. The default is the share
+  // of the plan left; the two older modes and off remain choices.
+  await reset();
+  assert.equal(DEFAULT_SETTINGS.badge, "plan");
+  assert.equal((await getSettings()).badge, "plan");
+  for (const badge of ["plan", "today", "session", "off"]) {
+    await saveSettings({ badge });
+    assert.equal((await getSettings()).badge, badge);
+  }
+  // A value from a build with a different set of modes falls back to the default
+  // rather than to "off": an unknown preference must not switch the instrument off.
+  storage.sync.seed("settings", { ...DEFAULT_SETTINGS, badge: "week" });
+  assert.equal((await getSettings()).badge, "plan");
+});
+
 test("a retention choice survives the round trip", async () => {
   // The blocker, stated on its own because it is the one with a document attached:
   // PRIVACY_POLICY.md promises retention follows this setting. While `normalize` rebuilt

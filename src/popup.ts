@@ -40,20 +40,27 @@ import {
   setGroupOptionsLocked,
   type Child,
 } from "./core/dom";
-import { formatAgo, formatBytes, formatCount, formatPercent, splitBytes } from "./core/format";
+import {
+  formatAgo,
+  formatBytes,
+  formatBytesPerSecond,
+  formatCount,
+  formatPercent,
+  splitBytes,
+} from "./core/format";
 import { applyDocumentLanguage, t } from "./core/i18n";
 import {
   errorMessage,
   sendRequest,
   sortTypeBytes,
   type BudgetStatus,
+  type HoldView,
   type OverviewPayload,
   type SavingsReport,
   type SeriesPoint,
   type SiteUsage,
 } from "./core/messages";
 import {
-  cycleElapsed,
   cycleResetsAt,
   dayKeyFromMs,
   formatDayShort,
@@ -161,6 +168,8 @@ const planMeter = query<HTMLSpanElement>("#plan-meter");
 const planMeterFill = query<HTMLSpanElement>("#plan-meter-fill");
 const planMeterPace = query<HTMLSpanElement>("#plan-meter-pace");
 const planLine = query<HTMLParagraphElement>("#plan-line");
+const planTrack = query<HTMLParagraphElement>("#plan-track");
+const planSince = query<HTMLParagraphElement>("#plan-since");
 const planCta = query<HTMLParagraphElement>("#plan-cta");
 const planAlerts = query<HTMLElement>("#plan-alerts");
 const planAlertsHint = query<HTMLSpanElement>("#plan-alerts-hint");
@@ -187,7 +196,17 @@ const limitActions = query<HTMLDivElement>("#limit-actions");
 const limitGrant = query<HTMLButtonElement>("#limit-grant");
 const limitPause = query<HTMLButtonElement>("#limit-pause");
 const limitRemove = query<HTMLButtonElement>("#limit-remove");
+const limitPresetsLead = query<HTMLParagraphElement>("#limit-presets-lead");
 const limitPresets = query<HTMLDivElement>("#limit-presets");
+const livePanel = query<HTMLElement>("#live-panel");
+const liveNote = query<HTMLSpanElement>("#live-note");
+const liveList = query<HTMLOListElement>("#live-list");
+const liveEmpty = query<HTMLParagraphElement>("#live-empty");
+const liveHold = query<HTMLParagraphElement>("#live-hold");
+const liveActions = query<HTMLDivElement>("#live-actions");
+const holdTrim = query<HTMLButtonElement>("#hold-trim");
+const holdStrict = query<HTMLButtonElement>("#hold-strict");
+const holdResume = query<HTMLButtonElement>("#hold-resume");
 const optimizeRow = query<HTMLElement>("#optimize-row");
 const optimizeCheck = query<HTMLInputElement>("#optimize-site");
 const optimizeCopy = query<HTMLLabelElement>("#optimize-copy");
@@ -219,8 +238,6 @@ let statuses: BudgetStatus[] = [];
 let optimize: OptimizeSettings | null = null;
 let savings: SavingsReport | null = null;
 let savingsLoaded = false;
-/** Measured bytes since the plan cycle began, or `null` while unknown or with no plan. */
-let cycleUsed: number | null = null;
 let optimizeDismissed = false;
 /** Free until the worker says otherwise. Read on the slow clock with the preferences. */
 let plus: PlusStatus = unknownStatus();
@@ -237,6 +254,8 @@ let errorSource: "poll" | "action" | null = null;
 let lastChartSignature = "";
 let lastTypesSignature = "";
 let lastMetaSignature = "";
+let lastLiveSignature = "";
+let lastProjectionSignature = "";
 let lastSiteOrder = "";
 
 function bytes(value: number): string {
@@ -295,8 +314,12 @@ const PREVIOUS_WINDOW_LABELS: Record<Period, string> = {
   session: t("popupPreviousWindowSession"),
   today: t("popupPreviousWindowToday"),
   week: t("popupPreviousWindowWeek"),
+  cycle: t("popupPreviousWindowCycle"),
   month: t("popupPreviousWindowMonth"),
 };
+
+/** Hosts the "Right now" panel lists before the rest fold into the note. */
+const LIVE_ROWS = 4;
 
 /**
  * Presets rather than a number field.
@@ -359,13 +382,30 @@ function withoutFutureHours(points: readonly SeriesPoint[]): readonly SeriesPoin
  * Headline, plan and projection
  * ------------------------------------------------------------------ */
 
+/**
+ * The bytes the plan headline is measured from.
+ *
+ * The governor's live counter when a plan-wide monthly limit is tracking the cycle,
+ * because that is the number the limit card under it prints — one surface, one
+ * figure. Otherwise the cycle's daily rows, which arrive on the same payload and the
+ * same two-second clock. The headline used to come from a separate read every twenty
+ * seconds and read "798 kB of 4.2 MB" above a card saying "3.9 MB · 92%".
+ */
+function cycleUsedBytes(payload: OverviewPayload): number {
+  const tracking = statuses.find(
+    (status) => status.budget.site === ALL_SITES && status.budget.period === "month",
+  );
+  return tracking ? tracking.used : (payload.cycle?.used ?? 0);
+}
+
 function renderHeadline(payload: OverviewPayload): void {
   const plan = payload.settings.planBytes;
+  const cycle = payload.cycle;
 
   // `planBytes` of null means no plan set, which is not a plan of zero: rendering it
   // as "0 B", 0% or 100% would put someone who has simply never answered the question
   // into an over-budget state.
-  if (plan === null || cycleUsed === null) {
+  if (plan === null || cycle === null) {
     const split = splitBytes(totalBytes(payload.totals), units);
     totalValue.textContent = split.value;
     totalUnit.textContent = split.unit;
@@ -374,7 +414,8 @@ function renderHeadline(payload: OverviewPayload): void {
     return;
   }
 
-  const used = splitBytes(cycleUsed, units);
+  const usedBytes = cycleUsedBytes(payload);
+  const used = splitBytes(usedBytes, units);
   const cap = splitBytes(plan, units);
   // "4.2 of 15 GB" when both land on the same unit, "820 MB of 15 GB" when they do
   // not — a bare "820 of 15 GB" would be off by three orders of magnitude.
@@ -383,9 +424,8 @@ function renderHeadline(payload: OverviewPayload): void {
   planCta.hidden = true;
   planBlock.hidden = false;
 
-  const { elapsedDays, totalDays } = cycleElapsed(payload.settings);
-  const resetsAt = cycleResetsAt(payload.settings);
-  const share = cycleUsed / plan;
+  const { elapsedDays, totalDays } = cycle;
+  const share = usedBytes / plan;
   const pace = Math.min(1, elapsedDays / totalDays);
 
   planMeterFill.style.width = `${Math.min(100, Math.max(1, share * 100)).toFixed(1)}%`;
@@ -397,7 +437,7 @@ function renderHeadline(payload: OverviewPayload): void {
   planMeter.setAttribute(
     "aria-valuetext",
     t("popupPlanMeterValueText", [
-      bytes(cycleUsed),
+      bytes(usedBytes),
       bytes(plan),
       formatPercent(share),
       String(elapsedDays),
@@ -405,11 +445,45 @@ function renderHeadline(payload: OverviewPayload): void {
     ]),
   );
   planMeter.title = t("popupPlanMeterTitle", formatPercent(pace));
+  // The mark is named in the line, not only in a tooltip: a tick on a bar with nothing
+  // saying what it is was the one thing on this surface a reader had to guess at.
   planLine.textContent = t("popupPlanLine", [
     String(elapsedDays),
     String(totalDays),
-    formatAgo(resetsAt),
+    formatAgo(cycle.resetsAt),
+    formatPercent(pace),
   ]);
+
+  // Where today stands. Division, not a forecast: what was left at the start of today,
+  // spread evenly over the days left including today, minus what today has cost.
+  const daysLeft = Math.max(1, totalDays - elapsedDays + 1);
+  const remaining = plan - usedBytes;
+  const atStartOfToday = Math.max(0, plan - (usedBytes - cycle.todayUsed));
+  const leftToday = atStartOfToday / daysLeft - cycle.todayUsed;
+  planTrack.hidden = false;
+  if (remaining <= 0) {
+    setData(planTrack, "data-tone", "over");
+    planTrack.textContent = t("popupPlanTrackSpent", bytes(-remaining));
+  } else if (leftToday > 0) {
+    setData(planTrack, "data-tone", null);
+    planTrack.textContent = t("popupPlanTrackLeft", bytes(leftToday));
+  } else {
+    setData(planTrack, "data-tone", "over");
+    planTrack.textContent = t("popupPlanTrackOver", bytes(-leftToday));
+  }
+
+  // Days of the cycle before recording began are unknown, and the figure above is
+  // "since Byte Budget started counting" until the next reset. Said here, under the
+  // number it qualifies, rather than left to the projection's basis alone.
+  if (cycle.unknownDays > 0) {
+    planSince.hidden = false;
+    planSince.textContent = t(
+      cycle.unknownDays === 1 ? "popupPlanSinceOne" : "popupPlanSinceOther",
+      [formatDayShort(cycle.recordedFrom), formatCount(cycle.unknownDays)],
+    );
+  } else {
+    planSince.hidden = true;
+  }
 }
 
 /**
@@ -473,8 +547,9 @@ function renderPlanAlerts(payload: OverviewPayload): void {
 
 function renderProjection(payload: OverviewPayload): void {
   const projection = payload.projection;
-  // `null` is no plan, or day one of the cycle. There is no honest sentence to write
-  // about a cycle whose only number is a few hours old, so nothing is written.
+  // `null` is no plan. With a plan the card is always there, from the first day: a
+  // first-time user should meet "too early — 0 of 6 days recorded" rather than an
+  // absence they cannot tell from a feature that does not exist.
   if (!projection) {
     projectionCard.hidden = true;
     return;
@@ -484,14 +559,25 @@ function renderProjection(payload: OverviewPayload): void {
   // already built and passes straight through. It is the one user-visible sentence on
   // this surface that is not a message here.
   projectionBasis.textContent = projection.basis;
+  projectionFigure.hidden = false;
 
-  // Too few finished days for the rate to mean anything. `basis` already says so in
-  // full and stands alone; printing the figure beside it would be the extrapolation
-  // the flag exists to withhold.
+  // Too few recorded days for the rate to mean anything. The figure is withheld — an
+  // extrapolation from three days is what the flag exists to stop — and its slot says
+  // how many days are on file and how many are needed, which is a sentence a person
+  // can check against tomorrow.
   if (!projection.confident) {
-    projectionFigure.hidden = true;
+    const early = t("popupProjectionTooEarly", [
+      formatCount(projection.recordedDays),
+      formatCount(projection.neededDays),
+    ]);
+    if (lastProjectionSignature !== early) {
+      lastProjectionSignature = early;
+      setData(projectionFigure, "data-tone", "early");
+      replaceChildren(projectionFigure, [early]);
+    }
     return;
   }
+  setData(projectionFigure, "data-tone", null);
 
   const endsOn = formatDayShort(dayKeyFromMs(cycleResetsAt(payload.settings) - 1));
   // The middle dots stay in code because the clause between them is a coloured span,
@@ -520,7 +606,13 @@ function renderProjection(payload: OverviewPayload): void {
       projection.exhaustedOn <= Date.now() ? "popupProjectionRanOut" : "popupProjectionRunsOut";
     parts.push(` · ${t(key, formatAgo(projection.exhaustedOn))}`);
   }
-  projectionFigure.hidden = false;
+  // Rebuilt only when the words change: this figure moves a few times an hour, and a
+  // poll that rewrote it every two seconds would reset a screen reader's place in it.
+  const signature = parts
+    .map((part) => (typeof part === "string" ? part : part ? (part.textContent ?? "") : ""))
+    .join("|");
+  if (signature === lastProjectionSignature) return;
+  lastProjectionSignature = signature;
   replaceChildren(projectionFigure, parts);
 }
 
@@ -538,17 +630,54 @@ const MEASURED_TITLE = t("popupMeasuredTitle");
  * character on a tenth of a percent and said nothing to anyone who had not read the
  * README. Wide bands cannot flicker, and only the band that is actually a caveat
  * gets the estimate colour.
+ *
+ * The caveat band is two spans, and the split is the honesty. The first is the floor:
+ * the bytes that were actually measured, printed with a `≥` because the real total
+ * cannot be below it. The second is the model's part with the number of requests it
+ * stood in for — "47 MB estimated · 12 unsized requests · could be more" — because a
+ * mean priced at the per-type default has been six times low on a host that streams
+ * every image opaque, and a reader who is told only "31% of this is estimated" has no
+ * way to know which direction the error runs.
  */
-function measuredNote(totals: OverviewPayload["totals"]): HTMLElement {
-  if (totals.down <= 0) return element("span", { text: t("popupMeasuredNone"), title: MEASURED_TITLE });
+function measuredNotes(payload: OverviewPayload): HTMLElement[] {
+  const totals = payload.totals;
+  if (totals.down <= 0) {
+    return [element("span", { text: t("popupMeasuredNone"), title: MEASURED_TITLE })];
+  }
   const share = measuredShare(totals);
-  if (share >= 0.97) return element("span", { text: t("popupMeasuredAll"), title: MEASURED_TITLE });
-  if (share >= 0.8) return element("span", { text: t("popupMeasuredNearlyAll"), title: MEASURED_TITLE });
-  return element("span", {
-    className: "meta-flag",
-    text: t("popupMeasuredEstimatedShare", formatPercent(1 - share)),
-    title: MEASURED_TITLE,
-  });
+  if (share >= 0.97) {
+    return [element("span", { text: t("popupMeasuredAll"), title: MEASURED_TITLE })];
+  }
+  const count = formatCount(payload.unsized);
+  if (share >= 0.8) {
+    return [
+      element("span", {
+        text:
+          payload.unsized === 1
+            ? t("popupMeasuredNearlyAllOne", count)
+            : payload.unsized > 1
+              ? t("popupMeasuredNearlyAllOther", count)
+              : t("popupMeasuredNearlyAll"),
+        title: MEASURED_TITLE,
+      }),
+    ];
+  }
+  const measured = Math.max(0, totals.down - totals.estimatedDown);
+  return [
+    element("span", {
+      className: "meta-floor",
+      text: t("popupMeasuredFloor", bytes(measured)),
+      title: t("popupMeasuredFloorTitle"),
+    }),
+    element("span", {
+      className: "meta-flag",
+      text: t(
+        payload.unsized === 1 ? "popupMeasuredEstimatedOne" : "popupMeasuredEstimatedOther",
+        [bytes(totals.estimatedDown), count],
+      ),
+      title: MEASURED_TITLE,
+    }),
+  ];
 }
 
 function renderMeta(payload: OverviewPayload): void {
@@ -565,7 +694,7 @@ function renderMeta(payload: OverviewPayload): void {
     );
   }
 
-  parts.push(measuredNote(payload.totals));
+  parts.push(...measuredNotes(payload));
 
   if (payload.totals.cacheAvoided > 0) {
     parts.push(
@@ -672,6 +801,99 @@ function renderTypes(payload: OverviewPayload): void {
       caption: t("popupTypesCaption"),
     }),
   ]);
+}
+
+/* ------------------------------------------------------------------ *
+ * Right now
+ * ------------------------------------------------------------------ */
+
+/** The hold on the site in the current tab, if there is one. */
+function currentHold(payload: OverviewPayload): HoldView | null {
+  const site = payload.current.site;
+  if (!site) return null;
+  return payload.holds.find((hold) => hold.site === site) ?? null;
+}
+
+function liveRow(host: OverviewPayload["live"]["hosts"][number], peak: number, seconds: number): HTMLLIElement {
+  const name = element("span", { className: "live-host" }, [
+    element("span", { className: "live-host-name", text: host.host, title: host.host }),
+    // The page the bytes were charged to, when the host is not that page: a CDN is
+    // not a site anyone visited, and the site is what a hold acts on.
+    host.site !== host.host
+      ? element("span", { className: "live-site", text: t("popupLiveOnSite", siteLabel(host.site)) })
+      : undefined,
+  ]);
+  const figures = element("span", { className: "live-figures" }, [
+    element("span", { className: "live-bytes", text: bytes(host.bytes) }),
+    element("span", {
+      className: "live-rate",
+      text: formatBytesPerSecond(host.bytes / seconds, units),
+    }),
+  ]);
+  const bar = element("span", { className: "live-bar", ariaHidden: true }, [
+    element("span", {
+      className: "live-bar-fill",
+      style: { width: `${peak > 0 ? Math.max(2, (host.bytes / peak) * 100) : 0}%` },
+    }),
+  ]);
+  return element("li", { className: "live-row" }, [name, figures, bar]);
+}
+
+/**
+ * What is eating the connection in the last minute, and the two things to do about
+ * the site in front of you.
+ *
+ * Shown whenever there is a site to act on or traffic to show; hidden on a new tab
+ * with nothing flowing, where it would be a heading over nothing. The buttons need
+ * no limit behind them — a hold is the answer to "stop that, now", and it expires on
+ * its own.
+ */
+function renderLive(payload: OverviewPayload): void {
+  const site = payload.current.site;
+  const actionable = site !== null && !isReservedSite(site);
+  const live = payload.live;
+  const show = actionable || live.total > 0;
+  livePanel.hidden = !show;
+  if (!show) return;
+
+  const seconds = Math.max(1, live.windowMs / 1000);
+  liveNote.textContent =
+    live.total > 0
+      ? t("popupLiveNote", formatBytesPerSecond(live.total / seconds, units))
+      : t("popupLiveNoteQuiet");
+
+  const rows = live.hosts.slice(0, LIVE_ROWS);
+  const peak = rows.reduce((max, host) => Math.max(max, host.bytes), 0);
+  liveEmpty.hidden = rows.length > 0;
+  liveEmpty.textContent = rows.length > 0 ? "" : t("popupLiveEmpty");
+  // Rebuilt only when the numbers move. Nothing in the list is focusable, but a
+  // screen reader parked on a row would otherwise lose it every two seconds.
+  const signature = `${units}|${rows.map((host) => `${host.site}|${host.host}:${host.bytes}`).join(",")}`;
+  if (signature !== lastLiveSignature) {
+    lastLiveSignature = signature;
+    replaceChildren(
+      liveList,
+      rows.map((host) => liveRow(host, peak, seconds)),
+    );
+  }
+
+  const hold = currentHold(payload);
+  liveActions.hidden = !actionable;
+  if (hold && site) {
+    liveHold.hidden = false;
+    liveHold.textContent = t(hold.tier === "strict" ? "popupHoldPaused" : "popupHoldTrim", [
+      site,
+      formatAgo(hold.until),
+    ]);
+    holdTrim.hidden = true;
+    holdStrict.hidden = true;
+    holdResume.hidden = false;
+  } else {
+    liveHold.hidden = true;
+    holdTrim.hidden = !actionable;
+    holdStrict.hidden = !actionable;
+    holdResume.hidden = true;
+  }
 }
 
 /* ------------------------------------------------------------------ *
@@ -975,12 +1197,19 @@ function showLimitStatus(status: BudgetStatus, payload: OverviewPayload): void {
   limitBarFill.style.width = `${Math.min(100, Math.max(1, status.share * 100)).toFixed(1)}%`;
   setData(limitBarFill, "data-over", over ? "true" : null);
 
-  // The tier is a consequence, not a status: "Page shell only" told someone the name
-  // of a setting when what they needed was the sentence underneath it.
+  // The tier is a consequence, not a status: a tier's name told someone the name of a
+  // setting when what they needed was the sentence underneath it. When a hold on the
+  // site is what is actually installed — deeper than the limit's own numbers call
+  // for — the sentence says so, or the card would be describing a tier the limit did
+  // not choose with no word about who did.
+  const hold = payload.holds.find((entry) => entry.site === status.budget.site);
+  const held = hold !== undefined && TIERS.indexOf(hold.tier) >= TIERS.indexOf(status.wouldBe);
   limitConsequence.hidden = false;
   limitConsequence.textContent = status.snoozed
     ? t("popupLimitPausedConsequence", TIER_DESCRIPTIONS[status.wouldBe])
-    : TIER_DESCRIPTIONS[status.tier];
+    : held
+      ? t("popupLimitHeldConsequence", [TIER_DESCRIPTIONS[status.tier], formatAgo(hold.until)])
+      : TIER_DESCRIPTIONS[status.tier];
 
   // The bytes a limit prevented, which used to be printed inside the "Data Saver on"
   // row and therefore vanished when Data Saver was off — a budget doing all the work
@@ -1027,10 +1256,29 @@ function renderLimit(payload: OverviewPayload, primary: BudgetStatus | null, sec
   if (actingOn?.budget.site !== primary?.budget.site) disarmRemove();
   actingOn = primary;
 
+  // The free tier's ceiling, reached before the button rather than after it. The
+  // worker refuses the create either way, but a preset that produces an error is a
+  // worse way to learn about a limit than a preset that is not offered — and this
+  // panel has no room for a lock notice, so the sentence carries it.
+  const atCeiling =
+    !plus.plus &&
+    statuses.filter((status) => status.budget.site !== ALL_SITES).length >= FREE_SITE_LIMITS;
+  // Presets are offered whenever the site in the tab has no limit of its own — under
+  // a plan-wide limit's figures as much as on a card with nothing else on it. They
+  // used to vanish the moment a plan existed, which for a plan user was always.
+  const ownLimit = site !== null && statuses.some((status) => status.budget.site === site);
+  const offerPresets = site !== null && !isReservedSite(site) && !ownLimit && !atCeiling;
+
   if (primary) {
     limitNote.hidden = true;
-    limitPresets.hidden = true;
     showLimitStatus(primary, payload);
+    // Under a plan-wide card the presets need a lead-in, or "100 MB a day" reads as a
+    // change to the plan above it.
+    limitPresetsLead.hidden = !(offerPresets && primary.budget.site === ALL_SITES);
+    if (!limitPresetsLead.hidden && site) {
+      limitPresetsLead.textContent = t("popupLimitPresetsLead", site);
+    }
+    limitPresets.hidden = !offerPresets;
   } else {
     setData(limitCard, "data-state", null);
     setData(limitScope, "data-scope", "site");
@@ -1042,14 +1290,8 @@ function renderLimit(payload: OverviewPayload, primary: BudgetStatus | null, sec
     limitPrevented.hidden = true;
     limitActions.hidden = true;
     limitNote.hidden = false;
-    // The free tier's ceiling, reached before the button rather than after it. The
-    // worker refuses the create either way, but a preset that produces an error is a
-    // worse way to learn about a limit than a preset that is not offered — and this
-    // panel has no room for a lock notice, so the sentence carries it.
-    const atCeiling =
-      !plus.plus &&
-      statuses.filter((status) => status.budget.site !== ALL_SITES).length >= FREE_SITE_LIMITS;
-    limitPresets.hidden = !site || atCeiling;
+    limitPresetsLead.hidden = true;
+    limitPresets.hidden = !offerPresets;
     limitNote.textContent = !site
       ? t("popupNoLimitHere")
       : atCeiling
@@ -1151,9 +1393,29 @@ function renderOptimize(payload: OverviewPayload, biting: boolean): void {
  * Painting
  * ------------------------------------------------------------------ */
 
+/**
+ * The cycle tab exists only while there is a cycle: without a plan, "this cycle" is
+ * a calendar month nobody asked about. Hidden rather than locked, because a lock
+ * says "Plus" and this is not that.
+ */
+function paintCycleTab(planSet: boolean): void {
+  const node = periodTabs.querySelector<HTMLButtonElement>('[data-option="cycle"]');
+  if (node) node.hidden = !planSet;
+}
+
 function paint(): void {
   const payload = overview;
   if (!payload) return;
+
+  const planSet = payload.settings.planBytes !== null;
+  paintCycleTab(planSet);
+  // A period chosen while a plan existed can outlive the plan. Corrected here rather
+  // than left on a tab that is no longer on screen — `period` is what the overview
+  // was fetched with, so the figures would be a cycle's under no visible control.
+  if (!planSet && period === "cycle") {
+    choosePeriod("today");
+    return;
+  }
 
   paintGroup(periodTabs, period);
   // Locked rather than disabled, and it opens Settings rather than doing nothing. In a
@@ -1169,6 +1431,7 @@ function paint(): void {
   renderPlanAlerts(payload);
   renderProjection(payload);
   renderMeta(payload);
+  renderLive(payload);
 
   const { primary, secondary } = governingLimit(payload.current.site);
   renderLimit(payload, primary, secondary);
@@ -1249,9 +1512,9 @@ async function loadFast(): Promise<void> {
 /**
  * Everything that is not a live number.
  *
- * The cycle total comes from the daily series rather than from a budget: budget
- * windows are calendar-anchored and a plan cycle is anchored to `cycleStartDay`, so
- * the two only coincide on a plan that resets on the 1st.
+ * The cycle total is not among these any more: it rides the overview payload, on the
+ * fast clock, so the headline and the limit card under it cannot spend eighteen
+ * seconds disagreeing.
  */
 async function loadSlow(): Promise<void> {
   try {
@@ -1277,22 +1540,6 @@ async function loadSlow(): Promise<void> {
     siteLimit = SITE_ROWS;
     void chrome.storage.local.set({ [PERIOD_STORAGE_KEY]: period });
     await loadFast();
-  }
-
-  // Read after the await, not before: on the first load this runs beside `loadFast`,
-  // and by now that call has usually supplied the settings this needs.
-  const current = settings;
-  if (current && current.planBytes !== null) {
-    try {
-      const { elapsedDays } = cycleElapsed(current);
-      const { points } = await sendRequest({ type: "GET_SERIES", days: elapsedDays });
-      cycleUsed = points.reduce((sum, point) => sum + point.down + point.up, 0);
-    } catch {
-      // Keep the previous figure; `renderHeadline` falls back to the period total
-      // only while it has never been read at all.
-    }
-  } else {
-    cycleUsed = null;
   }
 
   // Once per popup, and again after an optimize change. It reads page loads over
@@ -1452,6 +1699,29 @@ limitRemove.addEventListener("click", () => {
 
 query<HTMLButtonElement>("#limit-more").addEventListener("click", () => openSettings("limits"));
 
+/*
+ * The two holds, and the way out of one. Each reads the site at click time, like the
+ * presets, and asks for the hour the button promises; the worker's `HOLD_MINUTES` is
+ * the default, so the request carries no figure of its own.
+ */
+holdTrim.addEventListener("click", () => {
+  const site = overview?.current.site;
+  if (!site) return;
+  void ask({ type: "SET_HOLD", site, tier: "trim" }, t("popupErrorHold"));
+});
+
+holdStrict.addEventListener("click", () => {
+  const site = overview?.current.site;
+  if (!site) return;
+  void ask({ type: "SET_HOLD", site, tier: "strict" }, t("popupErrorHold"));
+});
+
+holdResume.addEventListener("click", () => {
+  const site = overview?.current.site;
+  if (!site) return;
+  void ask({ type: "CLEAR_HOLD", site }, t("popupErrorResumeHold"));
+});
+
 optimizeCheck.addEventListener("change", () => {
   const site = overview?.current.site;
   if (!site) return;
@@ -1555,6 +1825,17 @@ async function start(): Promise<void> {
     value: period,
     onSelect: choosePeriod,
   });
+  paintCycleTab(settings?.planBytes !== null && settings !== null);
+
+  // The hold buttons are fixed markup with no text of their own until now, because
+  // their labels name an hour and a site's worth of consequence, and both belong in
+  // the catalogue rather than in HTML.
+  holdTrim.textContent = t("popupHoldTrimButton");
+  holdTrim.title = t("popupHoldTrimTitle");
+  holdStrict.textContent = t("popupHoldStrictButton");
+  holdStrict.title = t("popupHoldStrictTitle");
+  holdResume.textContent = t("popupHoldResumeButton");
+  holdResume.title = t("popupHoldResumeTitle");
 
   // Presets are built once and read the current tab's site at click time, so the poll
   // never has to rebuild them.

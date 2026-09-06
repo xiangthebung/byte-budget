@@ -49,6 +49,25 @@ Every total carries how much of it came from (3), and the UI prints that as a
 measured percentage. A tracker that shows one confident number is a tracker that
 is occasionally wrong without saying so.
 
+It also carries *how many* requests (3) stood in for — the **unsized** count — and
+the two are printed together where the model's share is large enough to be a
+caveat: `≥ 105 MB measured` beside `47 MB estimated · 12 unsized requests · could be
+more`. The first is a floor, because the measured bytes are exactly that; the second
+says whether the modelled part is one opaque video or forty small images, and which
+way the error can run. A per-type default has been six times low on a host that
+streams every image cross-origin with no `Timing-Allow-Origin`, and a reader told only
+"31% of this is estimated" cannot know that. The dashboard's host table carries the
+same count per host and marks a host every one of whose requests was priced this way
+as *never measured*.
+
+The model also learns from a measurement that arrives too late to correct the row it
+belonged to. A parked request that expired on the queue's own timer is already on the
+ledger as an estimate, but the page's `transferSize` for it is still a real size for
+that host and type, so it is fed to the model for ninety seconds after the expiry. The
+booked estimate is not rewritten and stays labelled as one; the *next* request on that
+host is priced from a real sample rather than the default, which is the only way a
+host that never declares a length ever leaves the default at all.
+
 ### What is approximate, stated plainly
 
 - **The scope of the whole number.** Every total here covers one Chrome profile.
@@ -121,6 +140,37 @@ measures; it just cannot answer the question the plan is for.
 Setting a plan also sets a budget over everything at the same size — see below. A plan
 that enforces nothing and warns about nothing would be a number in a text field.
 
+### Where you stand
+
+With a plan set, the popup's headline is the cycle so far against the plan, and the
+meter under it carries a mark at where an evenly spent plan would be right now. The
+mark is named in the line beneath it — "Day 9 of 31 · resets in 22 days · the mark is
+even spending, 29% by now" — rather than left to a tooltip, and the line after that
+says what it means for today: **"180 MB left today to stay on track"**, or "Today's
+even share is spent · 120 MB over it", or "Plan spent · 2.3 GB over". That figure is
+division, not a forecast — what was left at the start of today, spread over the days
+left including today, minus what today has cost — so it carries no tilde.
+
+The headline and the limit card under it read the same counter. When the plan-wide
+limit is tracking the cycle, both print the governor's live figure; otherwise both
+print the cycle's daily rows, which arrive on the same two-second payload. They used
+to come from two reads twenty seconds apart and could read "798 kB of 4.2 MB" above
+"3.9 MB · 92%" on one screen.
+
+A fifth period tab, **Cycle**, appears once a plan is set and shows every site over
+the billing cycle so far. It is free on every tier for the reason the projection is:
+"which sites ate this cycle's plan" is the question the product exists to answer.
+
+### The days before the install are unknown, not zero
+
+The ledger keeps the day it started counting — the install, or the last time all
+recorded usage was deleted — and every window that reaches back past it says so.
+Installed on the 12th of a cycle that began on the 1st, the popup reads "Byte Budget
+has been counting since Sep 12. The 11 days of this cycle before that are not
+included." Those days are excluded from the projection's rate and from its
+total rather than read as eleven days of measured nothing, which is what they were
+before: one page load on the install day used to produce a confident month.
+
 ### The projection, and where it refuses to answer
 
 A cap is a deadline, and the only useful thing to say about a deadline is whether the
@@ -143,11 +193,13 @@ function is shaped the way it is.
   at a typical day, whichever is larger. Averaging in a day that is three hours old
   would make the projection fall every midnight and climb back through the day —
   comfortable at 9am, honest only at bedtime.
-- **Below five finished days, or a fifth of the cycle, no figure is printed at all.**
+- **Below five recorded days, or a fifth of the cycle, no figure is printed at all.**
   Not a wider figure, no figure. Three days into thirty, extrapolating multiplies
-  whatever the rate has wrong by ten. What gets printed instead is the reason, which
-  is written to stand on its own: "Too early to project: only 3 days of this 30-day
-  cycle have finished…"
+  whatever the rate has wrong by ten. What gets printed instead is how far along it
+  is — "Too early to project — 3 full days recorded, 6 needed" — from the first day of
+  the cycle, so a new install meets a sentence it can check against tomorrow rather
+  than an empty slot it cannot tell from a feature that does not exist. The days are
+  *recorded* days: a day before the install is not one of them.
 - **Every projection carries its basis in words,** and the UI cannot render the number
   without it. A byte count on its own is indistinguishable on screen from a
   measurement, and the sentence — what rate, over what window, with what treatment of
@@ -167,7 +219,7 @@ filling budget sheds weight in steps:
 | `off` | below 60% | nothing |
 | `trim` | 60% | video and audio |
 | `lean` | 85% | also images and web fonts |
-| `strict` | 100% | every subresource |
+| `strict` | 100% | everything but the page itself |
 
 The page's own HTML always loads, at every tier. Blocking the document gives
 Chrome's error page, which reads as a broken website rather than as a limit someone
@@ -197,6 +249,38 @@ at once, the banner names which one is doing it.
 A plan size and this budget are two different objects — one is a figure to reconcile
 against, the other is a thing that refuses requests and raises alerts — so every flow
 that captures a plan writes both, and edits and clears keep them in step.
+
+What it refuses, it is credited for. A request the plan-wide rule refused arrives at
+the ledger under the site of the tab that asked, and the credit used to be looked up
+by that site alone — so every refusal a plan-wide limit ever made was booked as
+having saved nothing, and the popup's "~42 MB refused rather than spent" line never
+appeared under it. The lookup now consults the limit over everything as well, and
+the browser suite asserts the credit against a server that was never asked.
+
+The popup's three per-site presets — "100 MB a day" and its neighbours — sit under
+the plan-wide card whenever the site in the tab has no limit of its own, led in by
+"Limit example.com on its own:". They used to vanish the moment a plan existed, which
+for a plan user was always.
+
+### Right now, and holds
+
+The popup's **Right now** panel lists what used data in the last sixty seconds, per
+host, with a rate beside each — the tab left streaming in the background, the page
+that turned out to be a 40 MB app bundle. It is fed from the same synchronous
+observer the governor reads and kept in the worker's memory only: after thirty idle
+seconds the worker is gone, and thirty idle seconds means nothing was eating the
+connection, so a fresh worker answering "nothing in the last minute" is telling the
+truth.
+
+Under it, two buttons act on the site in the tab with no limit behind them: **Skip
+video here for an hour** refuses video and audio on that site, and **Pause this site
+for an hour** refuses everything but the page itself. Each is a *hold* — a tier on
+one site with an expiry — and it ends on its own through the same minute alarm that
+rolls budget windows over, or sooner from the **Resume now** button that replaces
+them while one is in force. A hold composes with a limit on the same site the way a
+total and a per-site limit compose on one request: every tier's refused set is a
+prefix of one shed order, so the deeper one is what the page sees. The banner on the
+page says the hold was asked for, and offers Resume rather than "Pause for an hour".
 
 ### A limit outranks an optimizer
 
@@ -259,6 +343,27 @@ bury the one that matters, so the lower two are recorded as said without being s
 The record of what has been said is written to disk before anything is sent, so a
 service worker torn down mid-alert cannot announce 75% twice, and it outlives a
 browser restart — a monthly window does not.
+
+**It fires on the request that earns it.** The governor charges every request to
+its counters synchronously and runs its enforcement pass — which is also the alerting
+pass — when a share crosses a rung of the ladder, not only when the installed tier
+changes. On a hard plan the tier first changes at 100%, so the 75% and 90% alerts used
+to wait for the one-minute alarm, and a fast connection can stream through the whole
+band between two ticks. The alarm still runs, because a window can roll over with no
+traffic to notice it.
+
+### The toolbar badge
+
+On by default, and it shows the share of the plan still left — "62%", then "over" —
+in the colour the alerts use: teal, amber from 75% used, red from 90%, a darker red
+past the plan. Hovering the button says it in words: "38% of your plan left · 3.1 GB
+of 5 GB used · resets in 22 days". With no plan set it shows today's total, which is
+the most a badge can honestly say about a figure with nothing to divide it by. Today's
+or the session's total and off remain choices in Settings.
+
+It reads the same counter the popup headline does, and repaints on the ledger's own
+clock — every flush that lands, throttled to a few times a minute — so the toolbar and
+the popup cannot disagree about the plan.
 
 Plan alerts are on by default. Per-site alerts are off: a per-site limit is something
 you typed in, on a site you chose, expecting to reach — being told is being told what
@@ -424,7 +529,7 @@ What Plus holds back is depth, which also makes it the simplifier a first instal
 
 | Free | Plus |
 | --- | --- |
-| All measurement, all four period tabs bar one, the whole popup, the plan cycle and the projection at full accuracy | — |
+| All measurement, all five period tabs bar one — the plan cycle's tab included — the whole popup, the plan cycle and the projection at full accuracy, the Right now panel and both holds | — |
 | Data Saver on/off, Light/Balanced/Maximum, site exceptions | The eight individual switches, the six image services, the holdout rate |
 | The plan-wide limit, plus 3 site limits, daily | Unlimited site limits, and weekly/monthly/per-session windows |
 | Alerts, theme, toolbar badge, retention, delete, storage report | Units, and the calendar-versus-rolling week and month rules |
@@ -439,10 +544,12 @@ disk untouched, so subscribing reveals history that was already there and lapsin
 nothing. Gating retention instead would mean a billing event destroying data, which is not
 a trade anyone agreed to.
 
-**The plan cycle is exempt from the seven-day window.** The popup headline, the plan meter
-and the projection read the whole cycle — up to 31 days — on the free tier. Clipping them
-would not make the free tier smaller, it would make it wrong, and "will I make it to the
-reset date" is the question the product exists to answer.
+**The plan cycle is exempt from the seven-day window.** The popup headline, the plan meter,
+the projection and the Cycle period tab read the whole cycle — up to 31 days — on the free
+tier. Clipping them would not make the free tier smaller, it would make it wrong, and
+"will I make it to the reset date" and "which sites ate it" are the questions the product
+exists to answer. What stays paid is history: the trailing thirty days, the ninety-day
+chart, export past a week.
 
 Nothing already configured is ever disabled by a lapse. The ceilings are on what can be
 *added or changed*: eight limits set while subscribed keep running and stay editable, and
@@ -496,9 +603,10 @@ has to be on file *before* the load that would have rewritten it.
 Preferences — theme, badge, retention, whether per-host detail is recorded, your plan
 size, the day the cycle resets, and which alerts you want — live in
 `chrome.storage.sync` so they follow you between browsers. Nothing that names a site
-goes with them: limits and the never-optimize list are lists of domains, which is a
-browsing history in all but name, so they stay in `chrome.storage.local` on the
-machine you set them on, and so does the record of which alerts have already fired.
+goes with them: limits, holds and the never-optimize list are lists of domains, which
+is a browsing history in all but name, so they stay in `chrome.storage.local` on the
+machine you set them on, and so do the record of which alerts have already fired and
+the day recording began.
 Measurements never leave the device by either route. The cost is that a limit set on
 one machine is not a limit on the next, which is a worse product and a better promise.
 
@@ -526,9 +634,10 @@ public/manifest.json     base manifest; a Vite plugin patches it per channel and
                          writes a root manifest pointing into dist/
 src/core/                types, site keys, periods and billing cycles, formatting,
                          IndexedDB, messages, the projection
-src/track/               webRequest listeners, reconciliation, the ledger, queries
-src/limit/               budgets, the governor, tiers, rules, the in-page notice,
-                         the allowance alerts
+src/track/               webRequest listeners, reconciliation, the ledger, queries,
+                         the last minute, the day recording began
+src/limit/               budgets, the governor, tiers, rules, holds, the in-page
+                         notice, the allowance alerts
 src/optimize/            features, packs, rules, savings, the control group
 src/rules/session.ts     the single owner of declarativeNetRequest session rules
 src/content/             three classic scripts: timing, notice, page optimizers
@@ -624,6 +733,10 @@ per-type default exactly. An earlier version asserted a range and passed while t
 estimator was still answering from an in-memory copy of a table that had been deleted
 from disk. A range is what let that hide.
 
+Also under *Limits*: the tier ladder's other two tiers, and a limit over everything
+that refuses on a site it was never pointed at. The lines for those are in the script;
+the ones quoted above are the shape of every block.
+
 **That a budget enforces itself,** with nothing set by hand:
 
 ```
@@ -645,6 +758,52 @@ The live counter and the stored ledger agree to within a rounding tolerance of e
 other. They are two independent paths to the same number — one incremented per request
 in memory, one read back off disk — and a limit firing against a total nothing else
 agrees with would be indefensible.
+
+**That a plan-wide limit is credited, warns in time, and shows on the toolbar:**
+
+```
+ok    one load lands inside the alert band of a hard plan without changing its tier
+ok    and the 75% alert is on record within seconds, from the request rather than the minute alarm
+ok    a refusal under the limit over everything is credited as prevented bytes
+ok    and the dashboard's Data prevented tile is no longer 0 B
+ok    the badge reads "over" in the darkest red once the plan is spent
+ok    and its tooltip says so in words
+```
+
+**That the plan says the right thing on the day it is set:**
+
+```
+ok    the cycle knows recording began today, so the … earlier day(s) of it are unknown rather than zero
+ok    the projection refuses a figure on day one and says why
+ok    the badge shows the share of the plan left, by default
+ok    the popup says "too early" rather than printing a figure
+ok    and says what is left today to stay on track
+ok    and names the pace mark on the meter
+ok    the cycle tab appears once a plan exists
+```
+
+**That the popup can see a site and act on it,** with the site in a second window
+as it is in real use:
+
+```
+ok    the popup's Right now panel lists the host that just loaded
+ok    with a rate per host and across the window
+ok    "Skip video here for an hour" sets a one-hour hold with no limit behind it
+ok    and Chrome holds a media-only block scoped to the site
+ok    the hold refuses the audio and nothing else
+ok    the popup shows the hold and offers Resume
+ok    Resume ends the hold
+ok    the per-site presets stay under the plan-wide card
+ok    the headline and the limit card are one figure
+```
+
+**That an unsized request is counted as one:**
+
+```
+ok    the opaque cross-origin fetch is counted as unsized on its host
+ok    and the count reaches the overview, overall and on the site row
+ok    the Data used card says how many requests the estimator priced
+```
 
 **That the optimizers do what they say,** with the local server and Playwright's route
 handler as the witnesses:
@@ -699,11 +858,35 @@ permission, which is the only way MV3 can genuinely cap a tab's throughput:
 `Network.emulateNetworkConditions` sets a real ceiling, and a page's adaptive-bitrate
 logic responds to it the way it would to a slow connection — video steps down and
 keeps playing rather than stopping. A limit in that channel takes an optional kbps
-figure alongside its byte allowance.
+figure alongside its byte allowance: the **Speed cap** field under *Add a limit* in
+Settings, which only that channel shows, and which the limits list prints back as
+"Capped at 1,600 kbps". Editing the limit's size keeps the cap.
 
 Chrome does not allow `debugger` as an optional permission, so it cannot be requested
 at runtime from the people who want it; it would be an install warning for everyone.
 And attaching shows Chrome's "an extension is debugging this browser" banner, which
 cannot be suppressed and should not be. Hence a second channel. The packaging script
 fails if the wrong one declares the permission, and the store build compiles the
-throttle code out entirely rather than shipping a branch that can never be taken.
+throttle code out entirely rather than shipping a branch that can never be taken —
+along with the field, so a figure the store build cannot pace cannot be stored from
+it.
+
+`npm run smoke:throttle` builds that channel and runs the whole browser suite against
+it, plus the block only it can pass:
+
+```
+ok    the throttle channel declares the debugger permission
+ok    and Settings shows the speed-cap field
+ok    the form stores the cap on the limit
+ok    and the limits list says so
+ok    a 400 kB fetch under a 1,600 kbps cap takes at least 1.5 s
+ok    and removing the limit lifts the cap, so the same fetch is quick again
+```
+
+The clock is the witness on purpose: `chrome.debugger.getTargets()` reports every tab
+the test harness drives as attached, so it cannot tell the cap from the harness. Four
+hundred kilobytes at 1,600 kbps is two seconds, and the same fetch with the limit gone
+is a few hundred milliseconds.
+
+The store channel runs the same block the other way round — no permission, no field,
+and no `chrome.debugger` call anywhere in the bundle to make one with.

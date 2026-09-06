@@ -122,7 +122,7 @@
     "description": "First paragraph of welcomePlanDetailsSummary: what the number is used for."
   },
   "welcomePlanDetailsEnforcement": {
-    "message": "Nothing is refused below 100%. At 100% Byte Budget starts refusing subresources — images, video, scripts — on every site until the allowance rolls over. The page itself always loads, carrying a banner that says why. Change the allowance, pause it for an hour, or remove it entirely in Settings.",
+    "message": "Nothing is refused below 100%. At 100% Byte Budget starts refusing everything but the page itself — images, video, scripts — on every site until the allowance rolls over. The page itself always loads, carrying a banner that says why. Change the allowance, pause it for an hour, or remove it entirely in Settings.",
     "description": "Second paragraph of welcomePlanDetailsSummary: what actually gets refused, and every way back out of it."
   },
   "welcomePlanDetailsResetDay": {

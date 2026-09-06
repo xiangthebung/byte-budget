@@ -140,12 +140,18 @@ export const FREE_REPORT_DAYS = 7;
 /**
  * The periods a free install may select.
  *
- * `month` is the one that goes, because it is the only one of the four that reaches
- * past `FREE_REPORT_DAYS`. `week` is exactly seven days on the rolling setting that
- * ships by default; on the calendar setting it is at most seven, so it can never
- * exceed the ceiling either.
+ * `month` is the one that goes, because it is the only one of the five that reaches
+ * past `FREE_REPORT_DAYS` for a reason other than the plan. `week` is exactly seven
+ * days on the rolling setting that ships by default; on the calendar setting it is at
+ * most seven, so it can never exceed the ceiling either.
+ *
+ * `cycle` reaches back up to thirty-one days and is free anyway, for the reason
+ * `reportDays` gives: the plan cycle is the window the product exists to answer for,
+ * and a free tier that cannot say which sites ate this cycle's plan is not smaller,
+ * it is wrong. What stays paid is history — the trailing thirty days, the ninety-day
+ * chart, export past a week — none of which is the bill in front of the person.
  */
-export const FREE_PERIODS: readonly Period[] = ["session", "today", "week"];
+export const FREE_PERIODS: readonly Period[] = ["session", "today", "week", "cycle"];
 
 export function periodAllowed(period: Period, status: Pick<PlusStatus, "plus">): boolean {
   return status.plus || FREE_PERIODS.includes(period);

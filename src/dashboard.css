@@ -811,6 +811,17 @@ section[id] {
   font-weight: 600;
 }
 
+/* A host that never yields a measurement: every byte on its row is the model's, and
+   the row wears the colour every other modelled figure wears. */
+.host-tag[data-tone="estimate"] {
+  background: var(--estimate-soft);
+  color: var(--estimate);
+}
+
+.host-estimated {
+  color: var(--estimate);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

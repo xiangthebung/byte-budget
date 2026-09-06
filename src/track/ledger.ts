@@ -25,6 +25,7 @@ import {
   addTotals,
   addTypeBytes,
   emptyTotals,
+  unsizedOf,
   type HostRow,
   type ResourceType,
   type TypeBytes,
@@ -48,20 +49,28 @@ const HOURLY_RETENTION_DAYS = 3;
 
 export interface Delta extends UsageTotals {
   byType: TypeBytes;
+  /**
+   * Requests the estimator priced. Beside `UsageTotals` rather than inside it: the
+   * totals shape is copied verbatim into the portfolio that shows this product, and a
+   * count is not a byte figure — `addTotals` walks byte fields and this is summed
+   * alongside it, the way `byType` is.
+   */
+  unsized: number;
 }
 
 function emptyDelta(): Delta {
-  return { ...emptyTotals(), byType: {} };
+  return { ...emptyTotals(), byType: {}, unsized: 0 };
 }
 
-function addDelta(into: Delta, from: Readonly<Delta>): Delta {
+function addDelta(into: Delta, from: Readonly<Partial<Delta>>): Delta {
   addTotals(into, from);
-  addTypeBytes(into.byType, from.byType);
+  addTypeBytes(into.byType, from.byType ?? {});
+  into.unsized = (into.unsized ?? 0) + unsizedOf(from);
   return into;
 }
 
 /** One host's contribution to one site on one day, before it has a key. */
-type HostDelta = Omit<HostRow, "key" | "bucket" | "site" | "host">;
+type HostDelta = Omit<HostRow, "key" | "bucket" | "site" | "host"> & { unsized: number };
 
 /**
  * A flush whose writes did not all land.
@@ -133,7 +142,8 @@ class Ledger {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private trackHosts = true;
   private preFlush: (() => void) | null = null;
-  private usageObserver: ((site: string, bytes: number) => void) | null = null;
+  private postFlush: (() => void) | null = null;
+  private usageObserver: ((site: string, bytes: number, host: string) => void) | null = null;
   /** Serialises flushes; see `flush`. */
   private chain: Promise<void> = Promise.resolve();
   /** A flush that has been scheduled but has not yet swapped the buffers. */
@@ -155,14 +165,27 @@ class Ledger {
   }
 
   /**
-   * Called synchronously for every request, with the site and the bytes it cost.
+   * Runs after every flush that landed, synchronously.
    *
-   * This is how the budget governor sees traffic. A hook rather than a direct call
-   * for the same reason as `setPreFlush`: the governor reads the ledger to prime its
-   * counters, so importing it here would be a cycle. It also keeps the ledger
-   * ignorant of limits, which is the right split — one module counts, another decides.
+   * For the toolbar badge, which is a figure about the ledger and has to move while
+   * traffic flows: the flush is the two-second cadence at which the ledger's own
+   * numbers become readable, so it is the right clock for a display of them.
    */
-  setUsageObserver(hook: (site: string, bytes: number) => void): void {
+  setPostFlush(hook: () => void): void {
+    this.postFlush = hook;
+  }
+
+  /**
+   * Called synchronously for every request, with the site and the bytes it cost, and
+   * the host they came from.
+   *
+   * This is how the budget governor sees traffic, and how the "right now" panel does.
+   * A hook rather than a direct call for the same reason as `setPreFlush`: the
+   * governor reads the ledger to prime its counters, so importing it here would be a
+   * cycle. It also keeps the ledger ignorant of limits, which is the right split — one
+   * module counts, another decides.
+   */
+  setUsageObserver(hook: (site: string, bytes: number, host: string) => void): void {
     this.usageObserver = hook;
   }
 
@@ -189,6 +212,11 @@ class Ledger {
       blocked: entry.blocked ? 1 : 0,
       rewritten: entry.rewritten,
       byType: entry.down > 0 ? { [entry.type]: entry.down } : {},
+      // A request whose body the estimator priced. `estimatedDown` is set on exactly
+      // one path — a parked request expiring — so this is "the page never reported a
+      // size and the headers declared none", which is the count the popup prints as
+      // "N unsized requests" beside the estimated bytes.
+      unsized: entry.estimatedDown > 0 ? 1 : 0,
     };
 
     addDelta(this.bucket(this.daily, `${day}|${entry.site}`), delta);
@@ -197,12 +225,20 @@ class Ledger {
 
     if (this.trackHosts && entry.host) {
       const key = `${day}|${entry.site}|${entry.host}`;
-      const row = this.hosts.get(key) ?? { down: 0, up: 0, requests: 0, blocked: 0, saved: 0 };
+      const row = this.hosts.get(key) ?? {
+        down: 0,
+        up: 0,
+        requests: 0,
+        blocked: 0,
+        saved: 0,
+        unsized: 0,
+      };
       row.down += entry.down;
       row.up += entry.up;
       row.requests += 1;
       row.blocked += entry.blocked ? 1 : 0;
       row.saved += entry.saved;
+      row.unsized += delta.unsized;
       this.hosts.set(key, row);
     }
 
@@ -212,7 +248,7 @@ class Ledger {
     // than two seconds and several megabytes later.
     if (this.usageObserver && entry.down + entry.up > 0) {
       try {
-        this.usageObserver(entry.site, entry.down + entry.up);
+        this.usageObserver(entry.site, entry.down + entry.up, entry.host);
       } catch (error) {
         console.error("Byte Budget: usage observer failed", error);
       }
@@ -279,7 +315,7 @@ class Ledger {
         sites: {},
       };
       for (const [site, delta] of Object.entries(stored?.sites ?? {})) {
-        session.sites[site] = addDelta(emptyDelta(), { ...emptyDelta(), ...delta });
+        session.sites[site] = addDelta(emptyDelta(), delta);
       }
       // A delta may have been merged into `this.session` by a concurrent caller
       // while this read was in flight; fold it in rather than replacing it.
@@ -451,6 +487,11 @@ class Ledger {
 
     if (!failed) {
       this.flushError = null;
+      try {
+        this.postFlush?.();
+      } catch (error) {
+        console.error("Byte Budget: post-flush hook failed", error);
+      }
       return;
     }
     this.flushError = { at: Date.now(), message: describeFailure(firstReason) };
@@ -519,12 +560,15 @@ function foldHosts(into: Map<string, HostDelta>, from: Map<string, HostDelta>): 
     existing.requests += row.requests;
     existing.blocked += row.blocked;
     existing.saved += row.saved;
+    existing.unsized += row.unsized;
   }
 }
 
 function mergeTotalsInto(row: UsageRow, delta: Delta): UsageRow {
   addTotals(row, delta);
   addTypeBytes(row.byType, delta.byType);
+  // Rows written before the field existed carry none; read as zero, never `NaN`.
+  row.unsized = unsizedOf(row) + delta.unsized;
   return row;
 }
 
@@ -577,12 +621,14 @@ function mergeHostRows(deltas: Map<string, HostDelta>): Promise<void> {
           requests: 0,
           blocked: 0,
           saved: 0,
+          unsized: 0,
         };
         row.down += delta.down;
         row.up += delta.up;
         row.requests += delta.requests;
         row.blocked += delta.blocked;
         row.saved += delta.saved;
+        row.unsized = unsizedOf(row) + delta.unsized;
         objectStore.put(row);
       };
     }

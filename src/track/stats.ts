@@ -19,6 +19,7 @@ import {
   addDays,
   cycleElapsed,
   cycleRange,
+  cycleResetsAt,
   dayKey,
   dayKeysInRange,
   daysBetween,
@@ -35,6 +36,7 @@ import {
   addTotals,
   addTypeBytes,
   emptyTotals,
+  unsizedOf,
   type HostRow,
   type Period,
   type Settings,
@@ -44,6 +46,8 @@ import {
   type Visit,
 } from "../core/types";
 import type {
+  CycleStatus,
+  HoldView,
   HostUsage,
   OverviewPayload,
   SeriesPoint,
@@ -52,10 +56,12 @@ import type {
   StorageReport,
   VisitStats,
 } from "../core/messages";
+import { recordingSince } from "./history";
 import { ledger, type Delta } from "./ledger";
+import { liveUsage } from "./live";
 
 function emptyDelta(): Delta {
-  return { ...emptyTotals(), byType: {} };
+  return { ...emptyTotals(), byType: {}, unsized: 0 };
 }
 
 function totalOf(totals: Readonly<UsageTotals>): number {
@@ -81,14 +87,17 @@ function accumulate(rows: readonly UsageRow[]): {
   totals: UsageTotals;
   byType: TypeBytes;
   bySite: Map<string, Delta>;
+  unsized: number;
 } {
   const totals = emptyTotals();
   const byType: TypeBytes = {};
   const bySite = new Map<string, Delta>();
+  let unsized = 0;
 
   for (const row of rows) {
     addTotals(totals, row);
     addTypeBytes(byType, row.byType ?? {});
+    unsized += unsizedOf(row);
     let site = bySite.get(row.site);
     if (!site) {
       site = emptyDelta();
@@ -96,18 +105,23 @@ function accumulate(rows: readonly UsageRow[]): {
     }
     addTotals(site, row);
     addTypeBytes(site.byType, row.byType ?? {});
+    site.unsized += unsizedOf(row);
   }
 
-  return { totals, byType, bySite };
+  return { totals, byType, bySite, unsized };
 }
 
 function sitesFrom(bySite: Map<string, Delta>): SiteUsage[] {
   return [...bySite.entries()]
-    .map(([site, delta]) => ({
-      site,
-      totals: { ...(delta as UsageTotals) },
-      byType: { ...delta.byType },
-    }))
+    .map(([site, delta]) => {
+      const { byType, unsized, ...totals } = delta;
+      return {
+        site,
+        totals: { ...totals },
+        byType: { ...byType },
+        unsized,
+      };
+    })
     .sort((a, b) => totalOf(b.totals) - totalOf(a.totals));
 }
 
@@ -231,7 +245,25 @@ async function currentTab(): Promise<{ site: string | null; origin: string | nul
   }
 }
 
-export async function overview(period: Period, settings: Settings): Promise<OverviewPayload> {
+/**
+ * Bytes since the plan cycle began, every site, from the daily rows.
+ *
+ * For the toolbar badge when no `#all` budget is tracking the cycle live. One ranged
+ * read of the daily store; the same rows `overview` sums for `cycle.used`.
+ */
+export async function cycleUsed(settings: Settings): Promise<number> {
+  const cycle = cycleRange(settings);
+  const rows = await getAll<UsageRow>(STORES.daily, bucketRange(cycle.from, cycle.to));
+  let used = 0;
+  for (const row of rows) used += row.down + row.up;
+  return used;
+}
+
+export async function overview(
+  period: Period,
+  settings: Settings,
+  holds: readonly HoldView[] = [],
+): Promise<OverviewPayload> {
   const session = await ledger.sessionUsage();
   const range = await resolveRange(period, settings);
 
@@ -275,31 +307,63 @@ export async function overview(period: Period, settings: Settings): Promise<Over
   for (const row of previousRows) addTotals(previousTotals, row);
 
   let projection: Projection | null = null;
+  let cycleStatus: CycleStatus | null = null;
   if (cycle !== null) {
     const { elapsedDays, totalDays } = cycleElapsed(settings);
+    // Days of this cycle before recording began are unknown, not zero. `since` is the
+    // day the ledger started — the install, or the last time everything was deleted —
+    // and every day of the cycle before it is sliced off the series rather than read
+    // as a day nothing was used.
+    const since = await recordingSince();
+    const unknownDays = Math.max(0, Math.min(daysBetween(cycle.from, since), elapsedDays - 1));
     projection = forecast(
       bytesPerDay(cycleRows, dayKeysInRange(cycle.from, cycle.to)),
       elapsedDays,
       totalDays,
       settings.planBytes,
       startOfCycle(settings).getTime(),
+      unknownDays,
     );
+
+    const today = dayKey();
+    let used = 0;
+    let todayUsed = 0;
+    for (const row of cycleRows) {
+      const bytes = row.down + row.up;
+      used += bytes;
+      if (row.bucket === today) todayUsed += bytes;
+    }
+    cycleStatus = {
+      from: cycle.from,
+      to: cycle.to,
+      elapsedDays,
+      totalDays,
+      used,
+      todayUsed,
+      unknownDays,
+      recordedFrom: unknownDays > 0 ? since : cycle.from,
+      resetsAt: cycleResetsAt(settings),
+    };
   }
 
   let totals: UsageTotals;
   let byType: TypeBytes;
   let sites: SiteUsage[];
+  let unsized: number;
 
   if (period === "session") {
     const bySite = new Map<string, Delta>();
     totals = emptyTotals();
     byType = {};
+    unsized = 0;
     for (const [site, delta] of Object.entries(session.sites)) {
       const merged = addTotals(emptyDelta(), delta) as Delta;
       addTypeBytes(merged.byType, delta.byType ?? {});
+      merged.unsized = unsizedOf(delta);
       bySite.set(site, merged);
       addTotals(totals, delta);
       addTypeBytes(byType, delta.byType ?? {});
+      unsized += unsizedOf(delta);
     }
     sites = sitesFrom(bySite);
   } else {
@@ -307,6 +371,7 @@ export async function overview(period: Period, settings: Settings): Promise<Over
     totals = aggregated.totals;
     byType = aggregated.byType;
     sites = sitesFrom(aggregated.bySite);
+    unsized = aggregated.unsized;
   }
 
   // Today and the session are read at hour resolution: "where did today go" is a
@@ -341,6 +406,10 @@ export async function overview(period: Period, settings: Settings): Promise<Over
     series,
     previousTotals,
     projection,
+    cycle: cycleStatus,
+    unsized,
+    live: liveUsage(),
+    holds: [...holds],
     settings,
     generatedAt: Date.now(),
     sessionStartedAt: session.startedAt,
@@ -430,6 +499,7 @@ function collapseHosts(site: string, rows: readonly HostRow[]): HostUsage[] {
         down: 0,
         up: 0,
         requests: 0,
+        unsized: 0,
         thirdParty: isThirdParty(site, row.host),
       };
       byHost.set(row.host, usage);
@@ -437,6 +507,7 @@ function collapseHosts(site: string, rows: readonly HostRow[]): HostUsage[] {
     usage.down += row.down;
     usage.up += row.up;
     usage.requests += row.requests;
+    usage.unsized += unsizedOf(row);
   }
   return [...byHost.values()].sort((a, b) => b.down + b.up - (a.down + a.up));
 }

@@ -10,10 +10,12 @@
 
 import type { AlertSettings } from "../limit/alerts";
 import type { Budget, BudgetPeriod, BudgetShape } from "../limit/budgets";
+import type { Hold } from "../limit/holds";
 import type { Tier } from "../limit/tiers";
 import type { OptimizeSettings, PageFeatureId } from "../optimize/features";
 import type { PlusPage, PlusStatus } from "../plus/tier";
 import type { FlushError } from "../track/ledger";
+import type { LiveUsage } from "../track/live";
 import type { Projection } from "./forecast";
 import type { PeriodDescription } from "./period";
 import type {
@@ -32,7 +34,46 @@ export interface SiteUsage {
   site: string;
   totals: UsageTotals;
   byType: TypeBytes;
+  /** Requests the estimator priced. See `UsageRow.unsized`. */
+  unsized: number;
 }
+
+/**
+ * Where the billing cycle stands, measured, from the same rows every other cycle
+ * figure comes from.
+ *
+ * On the overview payload so the popup's headline moves on the same two-second clock
+ * as the limit card under it. It used to fetch the cycle total separately, every
+ * twenty seconds, and the two read "798 kB of 4.2 MB" above "3.9 MB · 92%" for the
+ * eighteen seconds between polls — one surface, two answers.
+ */
+export interface CycleStatus {
+  /** Inclusive `YYYY-MM-DD`. */
+  from: string;
+  /** Inclusive `YYYY-MM-DD`; today. */
+  to: string;
+  elapsedDays: number;
+  totalDays: number;
+  /** Bytes since the cycle began, every site, down plus up. */
+  used: number;
+  /** Bytes today, every site, down plus up. */
+  todayUsed: number;
+  /**
+   * Days of this cycle that passed before Byte Budget was counting.
+   *
+   * Not zero, not measured: unknown. The surfaces say so wherever the cycle is
+   * summed, because "1.2 GB of 5 GB" is a different claim on day 20 of a cycle
+   * recorded since day 12 than on one recorded from its first day.
+   */
+  unknownDays: number;
+  /** The first day this cycle was recorded from. `from` unless recording began later. */
+  recordedFrom: string;
+  /** Epoch ms of the local midnight the cycle rolls over at. */
+  resetsAt: number;
+}
+
+/** A hold as a surface sees it. The stored shape, unchanged. */
+export type HoldView = Hold;
 
 export interface SeriesPoint {
   /** A day (`YYYY-MM-DD`) or an hour (`YYYY-MM-DDTHH`) key. */
@@ -85,6 +126,14 @@ export interface OverviewPayload {
    * the mistake this codebase is organised to make impossible.
    */
   projection: Projection | null;
+  /** The plan cycle so far, or `null` when no plan is set. Measured. */
+  cycle: CycleStatus | null;
+  /** Requests in `totals` that the estimator priced. */
+  unsized: number;
+  /** The last minute, per host. Module memory in the worker; empty after an idle gap. */
+  live: LiveUsage;
+  /** Holds in force, so the popup can offer to end them. */
+  holds: HoldView[];
   settings: Settings;
   /**
    * When the worker composed this payload, epoch ms.
@@ -107,6 +156,12 @@ export interface HostUsage {
   down: number;
   up: number;
   requests: number;
+  /**
+   * Requests the estimator priced. Equal to `requests` for a host that never yields a
+   * measurement — a cross-origin edge that streams without a `Timing-Allow-Origin` —
+   * which the dashboard marks, because every byte from such a host is a model's.
+   */
+  unsized: number;
   thirdParty: boolean;
 }
 
@@ -227,6 +282,16 @@ export type ExtensionRequest =
   | { type: "SNOOZE_BUDGET"; site: string; minutes: number }
   | { type: "RESUME_BUDGET"; site: string }
   | { type: "GRANT_BYTES"; site: string; bytes: number }
+  /**
+   * A hold: one tier on one site for a while, with no budget behind it.
+   *
+   * "Skip video here for an hour" and "Pause this site for an hour" from the popup.
+   * `minutes` defaults to the hour the buttons promise; it is a parameter so a test
+   * can set a hold that expires inside the run.
+   */
+  | { type: "SET_HOLD"; site: string; tier: Tier; minutes?: number }
+  | { type: "CLEAR_HOLD"; site: string }
+  | { type: "GET_HOLDS" }
   /** Asked by the in-page banner for its own tab. */
   | { type: "GET_TAB_NOTICE" }
   | { type: "OPEN_DASHBOARD" }
@@ -357,6 +422,14 @@ export interface TabNotice {
   detail: string;
   /** False while already snoozed, so the button does not offer a no-op. */
   canPause: boolean;
+  /**
+   * True when a hold, not a budget, is what is refusing things.
+   *
+   * The banner then offers "Resume now" rather than "Pause for an hour": pausing a
+   * limit the site does not have would be an error, and the way out of a hold is to
+   * end it.
+   */
+  hold: boolean;
 }
 
 export type ResponseFor<T extends ExtensionRequest> = T extends { type: "GET_OVERVIEW" }
@@ -389,6 +462,8 @@ export type ResponseFor<T extends ExtensionRequest> = T extends { type: "GET_OVE
                             | "GRANT_BYTES";
                         }
                       ? { statuses: BudgetStatus[] }
+                      : T extends { type: "SET_HOLD" | "CLEAR_HOLD" | "GET_HOLDS" }
+                        ? { holds: HoldView[] }
                       : T extends { type: "GET_TAB_NOTICE" }
                         ? { notice: TabNotice | null }
                         : T extends {

@@ -1,6 +1,6 @@
 # Privacy policy — Byte Budget
 
-Effective: 29 August 2026
+Effective: 2 September 2026
 
 ## The short version
 
@@ -35,9 +35,14 @@ extension has no way to ask one and does not try.
 ## What is stored on your device
 
 - **Per-site byte counts**, per day and per hour: bytes received, bytes sent,
-  number of requests, how much of the figure was estimated, and cache hits.
+  number of requests, how much of the figure was estimated, how many requests were
+  estimated, and cache hits.
 - **Per-host byte counts** inside each site, so the extension can show that a
-  video CDN accounted for most of a page. Switchable off in settings.
+  video CDN accounted for most of a page, and how many of a host's requests had to be
+  estimated. Switchable off in settings.
+- **The last sixty seconds of requests**, per host, held in the service worker's
+  memory only and never written anywhere. It is what the popup's "Right now" panel
+  reads, and it is gone whenever the worker is — which is after thirty idle seconds.
 - **One row per page load**, holding the site, the page's origin (scheme and host,
   such as `https://www.example.com`), the time, and the bytes. It holds **no path
   and no query string** — the extension does not record which pages you visited,
@@ -59,14 +64,22 @@ extension has no way to ask one and does not try.
 - **Your settings**: theme, badge choice, how long byte counts are kept, whether
   per-host detail is recorded at all, the display defaults (units, and how a week and
   a month are counted), the size of your data plan, the day of the month it resets,
-  and which usage alerts you want.
+  and which usage alerts you want. The toolbar badge is on by default and shows the
+  share of your plan still unspent; it is drawn from the counts already on this device
+  and sends nothing anywhere.
 - **Which alerts have already been sent**: for each allowance, the current window and
   the thresholds announced in it, so the same warning is not repeated. It names the
   sites you set limits on, so it is held on this device with them — see "What leaves
   your device". Deleting your recorded usage clears it too.
-- **Your limits and your never-optimize list**: the domains you capped and the
-  domains you excluded. These name sites, so they are held separately from the
-  settings above and never leave this device — see "What leaves your device".
+- **Your limits, your holds and your never-optimize list**: the domains you capped,
+  the domains you asked to skip video on or pause for an hour, and the domains you
+  excluded. These name sites, so they are held separately from the settings above and
+  never leave this device — see "What leaves your device". A hold expires on its own
+  within the hour and is dropped from the record when it does.
+- **The day recording began**: the install date, or the date you last deleted all
+  recorded usage. It exists so that a plan cycle that started before the install can
+  say so rather than count those days as zero. A single date, holding nothing about
+  what was browsed.
 
 Byte counts are kept for as long as your retention setting says. There are four
 choices and no others: 30 days, 90 days, 400 days, or keep everything. Hourly
@@ -186,14 +199,16 @@ Google's own privacy terms. None of those values names a site: a plan size is a 
 of bytes, a reset day is a day of the month, and the alert preferences are two
 switches.
 
-Everything that does name a site stays here. Your limits and your never-optimize
-list are lists of domains you care about — the most opinionated slice of a browsing
-history there is — so they are kept in local storage on this device and are not
-synced. The record of which alerts have already fired stays with them, for the same
-reason and no other: it is keyed by the sites you capped. The cost of that is real and
-worth stating rather than discovering: a limit you set on your laptop does not appear
-on your desktop. Your measurements — byte counts, per-host counts, page loads — never
-leave the device by either route.
+Everything that does name a site stays here. Your limits, your holds and your
+never-optimize list are lists of domains you care about — the most opinionated slice
+of a browsing history there is — so they are kept in local storage on this device and
+are not synced. The record of which alerts have already fired stays with them, for
+the same reason and no other: it is keyed by the sites you capped. The day recording
+began stays local too, because it is moved by deleting this device's data and would
+mean nothing on another one. The cost of that is real and worth stating rather than
+discovering: a limit you set on your laptop does not appear on your desktop. Your
+measurements — byte counts, per-host counts, page loads — never leave the device by
+either route.
 
 ## Chrome Web Store Limited Use
 
@@ -221,7 +236,8 @@ Web Store User Data Policy, including its Limited Use requirements.
   question it exists to answer.
 - **`declarativeNetRequest`**: for three things, all of them lists compiled into the
   extension. To refuse requests once a site — or the browser as a whole, if you set a
-  total limit — is over a limit you set. To redirect image requests to smaller
+  total limit — is over a limit you set, or while a hold you asked for from the popup
+  is in force on a site. To redirect image requests to smaller
   versions of the same file on a fixed list of image services: `pbs.twimg.com`,
   `upload.wikimedia.org`, Photon (`i0-2.wp.com`), the Shopify CDN (`cdn.shopify.com`)
   and Cloudinary (`res.cloudinary.com`). No other host is ever rewritten. And, while optimizing is on, to refuse beacons sent to

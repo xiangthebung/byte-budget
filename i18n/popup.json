@@ -67,6 +67,10 @@
     "message": "Could not raise the allowance.",
     "description": "Shown when the grant button fails."
   },
+  "popupErrorHold": {
+    "message": "Could not set the hold.",
+    "description": "Shown when one of the two hold buttons fails."
+  },
   "popupErrorOptimize": {
     "message": "Could not change Data Saver.",
     "description": "Shown when switching Data Saver on or off for every site fails."
@@ -86,6 +90,10 @@
   "popupErrorResume": {
     "message": "Could not resume the limit.",
     "description": "Shown when resuming a paused limit fails."
+  },
+  "popupErrorResumeHold": {
+    "message": "Could not end the hold.",
+    "description": "Shown when the Resume button fails to end a hold."
   },
   "popupErrorSetLimit": {
     "message": "Could not set the limit.",
@@ -128,6 +136,58 @@
         "example": "15 GB"
       }
     }
+  },
+  "popupHoldPaused": {
+    "message": "$SITE$ paused · resumes $WHEN$",
+    "description": "Right now panel line while a pausing hold is in force on the site in the tab.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "watch.example"
+      },
+      "when": {
+        "content": "$2",
+        "example": "in 43 minutes"
+      }
+    }
+  },
+  "popupHoldResumeButton": {
+    "message": "Resume now",
+    "description": "Button that ends the hold on the site in the current tab straight away."
+  },
+  "popupHoldResumeTitle": {
+    "message": "Ends the hold on this site now.",
+    "description": "Tooltip on popupHoldResumeButton."
+  },
+  "popupHoldStrictButton": {
+    "message": "Pause this site for an hour",
+    "description": "Button in the Right now panel that refuses everything but the page itself on the site in the current tab for an hour."
+  },
+  "popupHoldStrictTitle": {
+    "message": "Refuses everything but the page itself on the site in this tab for an hour. Ends on its own, or when you press Resume.",
+    "description": "Tooltip on popupHoldStrictButton."
+  },
+  "popupHoldTrim": {
+    "message": "Video and audio skipped on $SITE$ · resumes $WHEN$",
+    "description": "Right now panel line while a video-skipping hold is in force on the site in the tab.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "watch.example"
+      },
+      "when": {
+        "content": "$2",
+        "example": "in 43 minutes"
+      }
+    }
+  },
+  "popupHoldTrimButton": {
+    "message": "Skip video here for an hour",
+    "description": "Button in the Right now panel that refuses video and audio on the site in the current tab for an hour, with no limit behind it."
+  },
+  "popupHoldTrimTitle": {
+    "message": "Refuses video and audio on the site in this tab for an hour. Needs no limit, and ends on its own.",
+    "description": "Tooltip on popupHoldTrimButton."
   },
   "popupLimitAlso": {
     "message": "Also $SHARE$ of $WINDOW$ on $SITE$.",
@@ -182,6 +242,20 @@
   "popupLimitHeading": {
     "message": "Data limit",
     "description": "Heading of the popup's limit card."
+  },
+  "popupLimitHeldConsequence": {
+    "message": "$DESCRIPTION$ You asked for this from Right now · resumes $WHEN$.",
+    "description": "Limit card consequence line when a hold, not the limit's own figures, is what is installed on the site. DESCRIPTION is the shared sentence for the installed tier.",
+    "placeholders": {
+      "description": {
+        "content": "$1",
+        "example": "Refuses everything but the page itself."
+      },
+      "when": {
+        "content": "$2",
+        "example": "in 43 minutes"
+      }
+    }
   },
   "popupLimitLine": {
     "message": "$USED$ of $ALLOWANCE$ · $SHARE$ of $WINDOW$ · resets $WHEN$",
@@ -244,8 +318,8 @@
     "description": "Limit card status at or above 100% of the allowance. Describes the user's position, not the mechanism."
   },
   "popupLimitPause": {
-    "message": "Pause 1 hour",
-    "description": "Button that suspends enforcement of the limit for an hour."
+    "message": "Pause limit 1 hour",
+    "description": "Button that suspends enforcement of the limit for an hour. Names the limit, because the Right now panel above the card has a \"Pause this site\" button that does something different."
   },
   "popupLimitPauseTitle": {
     "message": "Stops refusing anything for an hour. The counter keeps running.",
@@ -292,6 +366,16 @@
       "size": {
         "content": "$1",
         "example": "500 MB"
+      }
+    }
+  },
+  "popupLimitPresetsLead": {
+    "message": "Limit $SITE$ on its own:",
+    "description": "Lead-in above the three per-site presets when they sit under a plan-wide limit's figures, so \"100 MB a day\" is not read as a change to the plan.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "watch.example"
       }
     }
   },
@@ -365,9 +449,69 @@
     "message": "Within limit",
     "description": "Limit card status below 85% of the allowance."
   },
+  "popupLiveEmpty": {
+    "message": "Nothing loaded in the last minute.",
+    "description": "Body of the Right now panel while no host used data in the window."
+  },
+  "popupLiveHeading": {
+    "message": "Right now",
+    "description": "Heading of the popup panel listing which hosts used data in the last minute."
+  },
+  "popupLiveNote": {
+    "message": "$RATE$ over the last minute",
+    "description": "Note beside the Right now heading: the average rate across every host in the window.",
+    "placeholders": {
+      "rate": {
+        "content": "$1",
+        "example": "1.2 MB/s"
+      }
+    }
+  },
+  "popupLiveNoteQuiet": {
+    "message": "last 60 s",
+    "description": "Note beside the Right now heading while nothing was loaded in the window. Lower case; it names the window, not a result."
+  },
+  "popupLiveOnSite": {
+    "message": "on $SITE$",
+    "description": "Beside a host in the Right now panel, naming the site its bytes were charged to, when the host is not that site itself — a video CDN on a video site.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "watch.example"
+      }
+    }
+  },
   "popupMeasuredAll": {
     "message": "Measured, not estimated",
     "description": "Meta line label when at least 97% of the period's bytes came from a real size rather than the estimator."
+  },
+  "popupMeasuredEstimatedOne": {
+    "message": "$AMOUNT$ estimated · $COUNT$ unsized request · could be more",
+    "description": "Meta line caveat on a period where under 80% of the bytes were measured, singular: the estimator's bytes, how many responses it stood in for, and the direction the error can run. Shown in the estimate colour.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "47 MB"
+      },
+      "count": {
+        "content": "$2",
+        "example": "1"
+      }
+    }
+  },
+  "popupMeasuredEstimatedOther": {
+    "message": "$AMOUNT$ estimated · $COUNT$ unsized requests · could be more",
+    "description": "Meta line caveat on a period where under 80% of the bytes were measured, plural. Paired with popupMeasuredEstimatedOne. \"Could be more\" is deliberate: a per-type default has been six times low on a host that streams every image opaque.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "47 MB"
+      },
+      "count": {
+        "content": "$2",
+        "example": "12"
+      }
+    }
   },
   "popupMeasuredEstimatedShare": {
     "message": "$SHARE$ of this is estimated",
@@ -379,9 +523,43 @@
       }
     }
   },
+  "popupMeasuredFloor": {
+    "message": "≥ $AMOUNT$ measured",
+    "description": "Meta line entry on a period where under 80% of the bytes were measured: the part that was, as a floor. The ≥ is the claim — the real total cannot be below this — and must be kept.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "105 MB"
+      }
+    }
+  },
+  "popupMeasuredFloorTitle": {
+    "message": "The floor. These bytes came from a declared length or the page's own resource timing, so the real total cannot be below this figure.",
+    "description": "Tooltip on popupMeasuredFloor."
+  },
   "popupMeasuredNearlyAll": {
     "message": "Nearly all measured",
     "description": "Meta line label when 80–97% of the period's bytes came from a real size."
+  },
+  "popupMeasuredNearlyAllOne": {
+    "message": "Nearly all measured · $COUNT$ unsized request",
+    "description": "popupMeasuredNearlyAll with the count of requests the estimator priced, singular.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "popupMeasuredNearlyAllOther": {
+    "message": "Nearly all measured · $COUNT$ unsized requests",
+    "description": "popupMeasuredNearlyAll with the count of requests the estimator priced, plural. Paired with popupMeasuredNearlyAllOne.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "3"
+      }
+    }
   },
   "popupMeasuredNone": {
     "message": "Nothing measured yet",
@@ -612,12 +790,12 @@
     "description": "Button beside popupPlanCtaCopy. Opens the plan panel in settings."
   },
   "popupPlanCtaCopy": {
-    "message": "No plan set, so this total has no denominator.",
-    "description": "Shown in the popup in place of the plan meter when the user has never recorded a monthly allowance. 'Denominator' is meant literally: there is a number but nothing to divide it by."
+    "message": "No plan set yet, so there is nothing to measure this against.",
+    "description": "Shown in the popup in place of the plan meter when the user has never recorded a monthly allowance. Plain words: it used to say the total \"has no denominator\"."
   },
   "popupPlanLine": {
-    "message": "Day $DAY$ of $DAYS$ · resets $WHEN$",
-    "description": "Line under the plan meter. Assembled as one sentence so the two halves can be reordered; the middle dot is the separator used throughout this surface.",
+    "message": "Day $DAY$ of $DAYS$ · resets $WHEN$ · the mark is even spending, $PACE$ by now",
+    "description": "Line under the plan meter. Names the tick drawn across the meter — where an evenly spent plan would be right now — rather than leaving it to a tooltip. The middle dot is the separator used throughout this surface.",
     "placeholders": {
       "day": {
         "content": "$1",
@@ -630,6 +808,10 @@
       "when": {
         "content": "$3",
         "example": "in 22 days"
+      },
+      "pace": {
+        "content": "$4",
+        "example": "29%"
       }
     }
   },
@@ -673,6 +855,64 @@
       }
     }
   },
+  "popupPlanSinceOne": {
+    "message": "Byte Budget has been counting since $DATE$. The $COUNT$ day of this cycle before that is not included.",
+    "description": "Under the plan line while the cycle reaches back past the day recording began, singular. Those days are unknown, not zero; every cycle figure above is since that date.",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Sep 10"
+      },
+      "count": {
+        "content": "$2",
+        "example": "1"
+      }
+    }
+  },
+  "popupPlanSinceOther": {
+    "message": "Byte Budget has been counting since $DATE$. The $COUNT$ days of this cycle before that are not included.",
+    "description": "Under the plan line while the cycle reaches back past the day recording began, plural. Paired with popupPlanSinceOne.",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Sep 10"
+      },
+      "count": {
+        "content": "$2",
+        "example": "9"
+      }
+    }
+  },
+  "popupPlanTrackLeft": {
+    "message": "$AMOUNT$ left today to stay on track",
+    "description": "Under the plan line. What is left of the plan, spread evenly over the days left including today, minus what today has already cost. Arithmetic, not a forecast — no tilde.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "180 MB"
+      }
+    }
+  },
+  "popupPlanTrackOver": {
+    "message": "Today's even share is spent · $AMOUNT$ over it",
+    "description": "Replaces popupPlanTrackLeft once today has cost more than an even day's share, while the plan as a whole still has something left.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "120 MB"
+      }
+    }
+  },
+  "popupPlanTrackSpent": {
+    "message": "Plan spent · $AMOUNT$ over",
+    "description": "Replaces popupPlanTrackLeft once the whole plan is spent.",
+    "placeholders": {
+      "amount": {
+        "content": "$1",
+        "example": "2.3 GB"
+      }
+    }
+  },
   "popupPlusLimitCeiling": {
     "message": "You are using all $COUNT$ free site limits. Remove one to set another, or open Settings to see Plus.",
     "description": "Replaces the limit presets in the popup when a free install has reached its ceiling. Offers the free way out first, because removing a limit is a real answer and not a lesser one.",
@@ -682,6 +922,10 @@
         "example": "3"
       }
     }
+  },
+  "popupPreviousWindowCycle": {
+    "message": "the cycle before",
+    "description": "Names the comparison window in the popup pace line, when the period is the plan cycle. The comparison is against a window of the same length immediately before it."
   },
   "popupPreviousWindowMonth": {
     "message": "the period before",
@@ -762,6 +1006,20 @@
       "amount": {
         "content": "$1",
         "example": "2.1 GB"
+      }
+    }
+  },
+  "popupProjectionTooEarly": {
+    "message": "Too early to project — $RECORDED$ full days recorded, $NEEDED$ needed",
+    "description": "Projection card figure while too few finished days are on file for a rate to mean anything. No byte figure is printed in this state on purpose. Shown from the first day of a cycle, so it can read \"0 full days recorded\".",
+    "placeholders": {
+      "recorded": {
+        "content": "$1",
+        "example": "3"
+      },
+      "needed": {
+        "content": "$2",
+        "example": "6"
       }
     }
   },

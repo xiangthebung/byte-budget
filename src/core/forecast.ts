@@ -7,16 +7,23 @@
  *
  * Everything this module returns is MODELLED. It is arithmetic over days that have not
  * happened, which makes it the least defensible number in a product whose whole
- * discipline is keeping measured figures apart from inferred ones. Three consequences,
+ * discipline is keeping measured figures apart from inferred ones. Four consequences,
  * all deliberate:
  *
  * - `basis` is a required field, and it is a sentence rather than a code. A projection
  *   that reaches a screen without saying what rate it assumed and over what window is
  *   a confident-looking byte count with nothing behind it.
  * - `confident` is false rather than the function guessing harder. Three days into a
- *   thirty-day cycle, extrapolating is astrology with a unit attached.
+ *   thirty-day cycle, extrapolating is astrology with a unit attached. The surfaces
+ *   print no figure while it is false; they print how many days are recorded and how
+ *   many are needed, which is the sentence a person can check tomorrow.
  * - The days already recorded are carried through as themselves. Only the remainder is
  *   modelled, so the measured part of the answer is never overwritten by the model.
+ * - A day the ledger did not exist for is unknown, not zero. Installed on the twelfth
+ *   day of a cycle, this used to read eleven days of measured nothing, call the rate
+ *   established after one page load, and print a confident month. Those days are now
+ *   `unknownDays`: excluded from the rate, excluded from the total, and named in the
+ *   basis so the figure is read as "since Byte Budget started counting".
  *
  * Pure: no chrome API, and no clock. The cycle's start arrives as a parameter so the
  * whole thing runs under `node --test` — a forecast that reads `Date.now()` internally
@@ -44,6 +51,12 @@ export interface Projection {
   basis: string;
   /** False when there are too few finished days for the rate to mean anything. */
   confident: boolean;
+  /** Finished days the ledger recorded this cycle. What the rate rests on. */
+  recordedDays: number;
+  /** Finished, recorded days needed before `confident` can be true. */
+  neededDays: number;
+  /** Days of this cycle that passed before recording began. Never counted. */
+  unknownDays: number;
 }
 
 const DAY_MS = 86_400_000;
@@ -71,9 +84,10 @@ const RATE_WINDOW_DAYS = 14;
  * number that leveraged should not be printed at all.
  *
  * Both have to hold. Below either, `confident` is false and the caller must say so
- * instead of showing the figure.
+ * instead of showing the figure. `neededDays` on the result is the larger of the two,
+ * so the caller can say how many days are still to come rather than only "not yet".
  */
-const MIN_RATE_DAYS = 5;
+export const MIN_RATE_DAYS = 5;
 const MIN_CYCLE_SHARE = 0.2;
 
 /**
@@ -107,6 +121,11 @@ function dayCount(count: number): string {
   return `${count} day${count === 1 ? "" : "s"}`;
 }
 
+/** Finished, recorded days needed before a figure is printed for a cycle this long. */
+export function neededDaysFor(totalDays: number): number {
+  return Math.max(MIN_RATE_DAYS, Math.ceil(totalDays * MIN_CYCLE_SHARE));
+}
+
 /**
  * When the plan is expected to run out, or `null` if it is not expected to inside the
  * cycle.
@@ -121,6 +140,9 @@ function dayCount(count: number): string {
  * calendar, so a daylight-saving change inside the cycle moves the answer by an hour.
  * That is several orders of magnitude inside the model's own error and the alternative
  * is threading day keys through a module whose whole input is a plain array.
+ *
+ * `recordedStart` is the first recorded day's midnight — the cycle start plus the
+ * unknown days — because `finished[0]` is that day, not the cycle's first.
  */
 function exhaustionMs(
   finished: readonly number[],
@@ -130,6 +152,7 @@ function exhaustionMs(
   elapsed: number,
   totalDays: number,
   cycleStart: number,
+  recordedStart: number,
 ): number | null {
   let cumulative = 0;
   for (let index = 0; index < finished.length; index++) {
@@ -138,14 +161,14 @@ function exhaustionMs(
       // The store keeps a day's total and not the hour each byte arrived in, so the
       // crossing is placed proportionally through the day it happened on.
       const share = day > 0 ? (planBytes - cumulative) / day : 0;
-      return cycleStart + (index + share) * DAY_MS;
+      return recordedStart + (index + share) * DAY_MS;
     }
     cumulative += day;
   }
 
   if (cumulative + today >= planBytes) {
     const share = today > 0 ? (planBytes - cumulative) / today : 0;
-    return cycleStart + (finished.length + share) * DAY_MS;
+    return recordedStart + (finished.length + share) * DAY_MS;
   }
 
   if (!(rate > 0)) return null;
@@ -161,11 +184,15 @@ function exhaustionMs(
  *
  * `dailyBytes` is the cycle to date, one total per day, oldest first and aligned to
  * `cycleStart` — so the last entry is today and is partial. `elapsedDays` says how
- * many days of the cycle have begun and `totalDays` how many it holds.
+ * many days of the cycle have begun and `totalDays` how many it holds. `unknownDays`
+ * is how many of the leading entries predate recording; they are sliced off rather
+ * than read as zero.
  *
- * `null` when there is nothing to project: no plan, or no day of the cycle has
- * finished yet. A first-day cycle has exactly one number in it and that number is a
- * few hours old; there is no honest sentence to write about it.
+ * `null` only when there is nothing to project against: no plan, or a cycle with no
+ * length. A cycle with no finished day in it still answers, with `confident: false`
+ * and `recordedDays: 0`, so a surface can say "too early — 0 days recorded, 6 needed"
+ * on the first day rather than showing nothing and leaving the reader to wonder
+ * whether the feature exists.
  */
 export function forecast(
   dailyBytes: readonly number[],
@@ -173,18 +200,19 @@ export function forecast(
   totalDays: number,
   planBytes: number | null,
   cycleStart: number,
+  unknownDays = 0,
 ): Projection | null {
   if (planBytes === null || !(planBytes > 0)) return null;
   if (!(totalDays > 0)) return null;
 
   const elapsed = Math.max(0, Math.min(Math.floor(elapsedDays), dailyBytes.length));
-  const days = dailyBytes.slice(0, elapsed);
+  const unknown = Math.max(0, Math.min(Math.floor(unknownDays), elapsed));
+  const days = dailyBytes.slice(unknown, elapsed);
   // Today is excluded from the rate, not from the totals. Averaging in a day that is a
   // few hours old drags the rate down by however much of it is left, every day and
   // worst in the morning — a plan being overspent would read as comfortable at 9am and
   // only admit it at midnight.
   const finished = days.slice(0, -1);
-  if (finished.length === 0) return null;
 
   // Named `recent` rather than `window`: this module is loaded into the service worker,
   // where shadowing the DOM global is the kind of thing that reads as a mistake later.
@@ -200,29 +228,48 @@ export function forecast(
   // already blown past it, which is exactly the day someone needs telling.
   const projected = usedFinished + Math.max(today, rate) + rate * remaining;
 
-  const confident =
-    finished.length >= MIN_RATE_DAYS && finished.length >= totalDays * MIN_CYCLE_SHARE;
+  const recordedDays = finished.length;
+  const neededDays = neededDaysFor(totalDays);
+  const confident = recordedDays >= neededDays;
 
   // Formatted on the SI scale regardless of the units setting: this figure is compared
   // against a carrier's plan, and a plan is sold in decimal gigabytes. A basis quoting
   // GiB against a "15 GB" plan is a sentence the reader cannot check.
   const perDay = formatBytes(rate);
+  const unknownNote =
+    unknown > 0
+      ? ` The first ${dayCount(unknown)} of this cycle passed before Byte Budget was ` +
+        `counting, so they are not included anywhere in this figure.`
+      : "";
   const basis = confident
-    ? `${dayCount(elapsed)} of this cycle are measured. The ${dayCount(remaining)} after ` +
-      `today are modelled at about ${perDay} each — the typical day across the last ` +
-      `${dayCount(recent.length)}, with the heaviest and lightest pulled in so one ` +
-      `unusual day cannot set the pace. Today counts at what it has used so far, or at ` +
-      `that same figure, whichever is larger.`
-    : `Too early to project: only ${dayCount(finished.length)} of this ${totalDays}-day ` +
-      `cycle have finished. The figure assumes about ${perDay} a day, which ` +
-      `${dayCount(finished.length)} cannot establish.`;
+    ? `${dayCount(recordedDays)} of this cycle are measured and carried as themselves. ` +
+      `The ${dayCount(remaining)} after today are modelled at about ${perDay} each — ` +
+      `the typical day across the last ${dayCount(recent.length)}, with the heaviest and ` +
+      `lightest pulled in so one unusual day cannot set the pace. Today counts at what it ` +
+      `has used so far, or at that same figure, whichever is larger.${unknownNote}`
+    : `Too early to project: only ${dayCount(recordedDays)} of this ${totalDays}-day ` +
+      `cycle ${recordedDays === 1 ? "has" : "have"} finished since Byte Budget started ` +
+      `counting, and ${dayCount(neededDays)} are needed before a daily rate means ` +
+      `anything.${unknownNote}`;
 
   return {
     projected,
     planBytes,
     overBy: Math.max(0, projected - planBytes),
-    exhaustedOn: exhaustionMs(finished, today, rate, planBytes, elapsed, totalDays, cycleStart),
+    exhaustedOn: exhaustionMs(
+      finished,
+      today,
+      rate,
+      planBytes,
+      elapsed,
+      totalDays,
+      cycleStart,
+      cycleStart + unknown * DAY_MS,
+    ),
     basis,
     confident,
+    recordedDays,
+    neededDays,
+    unknownDays: unknown,
   };
 }

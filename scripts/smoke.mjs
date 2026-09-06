@@ -41,7 +41,20 @@ import { fileURLToPath } from 'node:url';
 import { crc32 } from './crc32.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const dist = path.join(root, 'dist');
+
+/**
+ * Which channel is under test.
+ *
+ * `--throttle` loads `dist-throttle/` — the sideloaded channel that declares the
+ * `debugger` permission — and runs the whole suite against it plus the block at the
+ * end that only that channel can pass: the speed-cap field in Settings, a limit that
+ * stores a kbps figure, and a fetch that measurably takes longer under the cap. The
+ * store channel runs the same block the other way round, asserting the field is
+ * absent and the bundle carries no debugger call, because a field the store build
+ * cannot honour is a promise it cannot keep.
+ */
+const THROTTLE = process.argv.includes('--throttle');
+const dist = path.join(root, THROTTLE ? 'dist-throttle' : 'dist');
 
 /**
  * Fixture sizes, chosen so the expected total is arithmetic rather than a guess.
@@ -243,6 +256,13 @@ const AUDIO = buildWav();
  * nothing else once usage has been deleted.
  */
 const DEFAULT_IMAGE_ESTIMATE = await readDefaultImageEstimate();
+
+/**
+ * The plan every block that sets one uses: the welcome page's, the popup-under-a-plan
+ * block's, and the badge's. One figure at module scope, because the first block to
+ * need it runs before the welcome block that used to declare it.
+ */
+const PLAN_BYTES = 2_000_000_000;
 
 async function readDefaultImageEstimate() {
   const source = await readFile(path.join(root, 'src', 'track', 'estimate.ts'), 'utf8');
@@ -771,7 +791,9 @@ async function main() {
     console.log(`${condition ? 'ok  ' : 'FAIL'}  ${message}`);
   };
 
-  await checkRootLoad(chromium, check);
+  // The generated root manifest points into `dist/`, so the root-load check is a
+  // store-channel property; the throttle channel has no root manifest of its own.
+  if (!THROTTLE) await checkRootLoad(chromium, check);
 
   const context = await launch(chromium, dist);
 
@@ -1629,6 +1651,39 @@ async function main() {
       )} B over ${carried.visits?.count ?? 0} load(s))`,
     );
 
+    /*
+     * That request is also the one honest example of an *unsized* request in this run:
+     * cross-origin, chunked, no `Timing-Allow-Origin`, so the page reported nothing and
+     * the queue priced it from the model. The count of such requests travels with the
+     * total — per site, per host and overall — so a reader can tell "47 MB estimated"
+     * from one opaque video apart from forty small images, and a host every one of
+     * whose requests was priced this way is marked as never measured.
+     */
+    const unsizedHost = (carried.hosts ?? []).find((host) => host.host === '127.0.0.1');
+    check(
+      (unsizedHost?.unsized ?? 0) >= 1 && (unsizedHost?.unsized ?? 0) <= (unsizedHost?.requests ?? 0),
+      `the opaque cross-origin fetch is counted as unsized on its host (${unsizedHost?.unsized ?? 0} of ${
+        unsizedHost?.requests ?? 0
+      } requests from ${unsizedHost?.host ?? 'nothing'})`,
+    );
+    const withUnsized = await ask({ type: 'GET_OVERVIEW', period: 'today' });
+    const localhostRow = (withUnsized.sites ?? []).find((entry) => entry.site === 'localhost');
+    check(
+      (withUnsized.unsized ?? 0) >= 1 && (localhostRow?.unsized ?? 0) >= 1,
+      `and the count reaches the overview, overall and on the site row (${withUnsized.unsized ?? 0} overall, ${
+        localhostRow?.unsized ?? 0
+      } on localhost)`,
+    );
+    await dashboard.reload();
+    await dashboard.waitForSelector('#stats .stat', { timeout: 10_000 });
+    const unsizedNote = await dashboard.$$eval('#stats .stat-note', (nodes) =>
+      nodes.map((node) => node.textContent ?? '').find((text) => /unsized request/.test(text)) ?? '',
+    );
+    check(
+      /^\d+ unsized requests?, priced by the estimator$/.test(unsizedNote),
+      `the Data used card says how many requests the estimator priced (${JSON.stringify(unsizedNote)})`,
+    );
+
     // Dark theme is a whole second palette; a broken token shows up as unreadable
     // text rather than as an error, so at least confirm it is applied.
     await dashboard.evaluate(
@@ -2046,6 +2101,225 @@ async function main() {
     );
 
     /* ---------------------------------------------------------------- *
+     * The popup on a site: right now, holds, and the presets under a plan
+     *
+     * The popup asks Chrome which site the active tab of the last focused window is
+     * showing, so a popup opened as a tab beside the site reports "not showing a
+     * website". The site goes in a second window instead, created focused, and the
+     * popup stays in this one — which is also the shape of real use, where the popup
+     * hangs off the toolbar of the window the site is in.
+     *
+     * Everything here is driven through the popup's own buttons, because the holds are
+     * the one enforcement a person reaches without setting a limit and the popup is the
+     * only place they exist.
+     * ---------------------------------------------------------------- */
+
+    await ask({ type: 'CLEAR_DATA' });
+    const sitePagePromise = context.waitForEvent('page', { timeout: 10_000 });
+    await dashboard.evaluate(
+      (url) => chrome.windows.create({ url, focused: true, width: 1100, height: 800 }),
+      'about:blank',
+    );
+    const sitePage = await sitePagePromise;
+    const popup = await context.newPage();
+    try {
+      await sitePage.setViewportSize({ width: 1100, height: 760 });
+      resetHits();
+      await sitePage.goto(`${origin}/tiers?popup`, { waitUntil: 'load' });
+      await until(() => hits, (list) => TIER_ASSETS.every((asset) => list.includes(asset)), {
+        timeout: 20_000,
+      });
+
+      await popup.setViewportSize({ width: 420, height: 900 });
+      await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+      await popup.waitForSelector('#app[data-state="ready"]', { timeout: 10_000 });
+      // Playwright opens a new page in the last focused window — the site's — so the
+      // popup tab just became that window's active tab, and "the active tab of the last
+      // focused window" is the popup itself. Bringing the site's tab back to the front
+      // is what a real popup never has to do: it hangs off the toolbar and is not a
+      // tab. `chrome.windows.update({ focused })` is not enough; the window was never
+      // unfocused, its active tab changed.
+      await sitePage.bringToFront();
+
+      const liveState = () =>
+        popup.evaluate(() => ({
+          panelHidden: document.querySelector('#live-panel')?.hidden ?? true,
+          hosts: [...document.querySelectorAll('#live-list .live-host-name')].map(
+            (node) => node.textContent ?? '',
+          ),
+          rows: [...document.querySelectorAll('#live-list .live-row')].map((node) =>
+            (node.textContent ?? '').replace(/\s+/g, ' ').trim(),
+          ),
+          note: document.querySelector('#live-note')?.textContent ?? '',
+          trim: {
+            hidden: document.querySelector('#hold-trim')?.hidden ?? true,
+            text: document.querySelector('#hold-trim')?.textContent ?? '',
+          },
+          strict: {
+            hidden: document.querySelector('#hold-strict')?.hidden ?? true,
+            text: document.querySelector('#hold-strict')?.textContent ?? '',
+          },
+          resumeHidden: document.querySelector('#hold-resume')?.hidden ?? true,
+          hold: document.querySelector('#live-hold')?.textContent ?? '',
+          scope: document.querySelector('#limit-scope')?.textContent ?? '',
+          current: [...document.querySelectorAll('.site-row[aria-current="true"] .site-name')].map(
+            (node) => node.textContent ?? '',
+          ),
+        }));
+      const live = await until(
+        liveState,
+        (state) => !state.panelHidden && state.hosts.includes('127.0.0.1') && !state.trim.hidden,
+        { timeout: 15_000 },
+      );
+      console.log('  popup right now:', JSON.stringify(live));
+      check(
+        !live.panelHidden && live.hosts.includes('127.0.0.1'),
+        `the popup's Right now panel lists the host that just loaded (${JSON.stringify(live.hosts)})`,
+      );
+      check(
+        live.rows.some((row) => /\d .?B\/s/.test(row)) && /\/s over the last minute$/.test(live.note),
+        `with a rate per host and across the window (${JSON.stringify(live.rows[0])}, ${JSON.stringify(live.note)})`,
+      );
+      check(
+        live.current.includes('127.0.0.1'),
+        `and the popup knows which site the second window is showing (${JSON.stringify(live.current)})`,
+      );
+      check(
+        !live.trim.hidden &&
+          live.trim.text === 'Skip video here for an hour' &&
+          !live.strict.hidden &&
+          live.strict.text === 'Pause this site for an hour' &&
+          live.resumeHidden,
+        `and offers the two holds on that site (${JSON.stringify([live.trim.text, live.strict.text])})`,
+      );
+
+      // Skip video, from the button. No limit exists on the site.
+      await popup.click('#hold-trim');
+      const held = await until(
+        () => ask({ type: 'GET_HOLDS' }),
+        (value) => (value.holds ?? []).some((hold) => hold.site === '127.0.0.1' && hold.tier === 'trim'),
+        { timeout: 10_000 },
+      );
+      const hold = (held.holds ?? []).find((entry) => entry.site === '127.0.0.1');
+      check(
+        Boolean(hold) && hold.until - Date.now() > 55 * 60_000 && hold.until - Date.now() <= 60 * 60_000,
+        `"Skip video here for an hour" sets a one-hour hold with no limit behind it (${JSON.stringify(hold)})`,
+      );
+      const holdRules = await until(() => heldRules(), (rules) => rules.length > 0, { timeout: 10_000 });
+      console.log('  rules Chrome holds for the hold:', describeRules(holdRules));
+      check(
+        holdRules.length > 0 &&
+          holdRules.every((rule) => {
+            const types = rule.condition?.resourceTypes ?? [];
+            return (
+              rule.action?.type === 'block' &&
+              types.length === 1 &&
+              types[0] === 'media' &&
+              (rule.condition?.initiatorDomains ?? []).includes('127.0.0.1')
+            );
+          }),
+        `and Chrome holds a media-only block scoped to the site (${describeRules(holdRules)})`,
+      );
+
+      resetHits();
+      await sitePage.goto(`${origin}/tiers?held`, { waitUntil: 'load' });
+      await until(() => hits, (list) => list.includes('/fixture.js'), { timeout: 20_000 });
+      console.log('  server hits under the hold:', JSON.stringify(hits));
+      check(
+        !hits.includes('/fixture.wav') && hits.includes('/fixture.png') && hits.includes('/fixture.js'),
+        `the hold refuses the audio and nothing else (hits: ${hits.join(' ')})`,
+      );
+      await checkWait(check, 'and the page carries a banner saying it was asked for', () =>
+        sitePage.waitForFunction(() => Boolean(document.getElementById('byte-budget-notice')), null, {
+          timeout: 15_000,
+        }),
+      );
+
+      const holding = await until(liveState, (state) => !state.resumeHidden, { timeout: 10_000 });
+      check(
+        !holding.resumeHidden && holding.trim.hidden && /^Video and audio skipped on 127\.0\.0\.1 · resumes /.test(holding.hold),
+        `the popup shows the hold and offers Resume (${JSON.stringify(holding.hold)})`,
+      );
+
+      await popup.click('#hold-resume');
+      const released = await until(
+        () => ask({ type: 'GET_HOLDS' }),
+        (value) => (value.holds ?? []).length === 0,
+        { timeout: 10_000 },
+      );
+      check((released.holds ?? []).length === 0, 'Resume ends the hold');
+      const afterHold = await until(() => heldRules(), (rules) => rules.length === 0, { timeout: 10_000 });
+      check(afterHold.length === 0, `and Chrome holds no rule for it afterwards (${describeRules(afterHold)})`);
+      resetHits();
+      await sitePage.goto(`${origin}/tiers?released`, { waitUntil: 'load' });
+      await until(() => hits, (list) => list.includes('/fixture.wav'), { timeout: 20_000 });
+      check(hits.includes('/fixture.wav'), `and the audio loads again (hits: ${hits.join(' ')})`);
+
+      /*
+       * The presets under a plan-wide limit. They used to be offered only while nothing
+       * governed the tab, which for anyone with a plan was never — the one route from
+       * the popup to a per-site limit disappeared the moment the product was set up.
+       */
+      await ask({ type: 'SAVE_SETTINGS', changes: { planBytes: PLAN_BYTES, cycleStartDay: 0 } });
+      await ask({ type: 'PUT_BUDGET', site: '#all', bytes: PLAN_BYTES, period: 'month', shape: 'hard' });
+      const underPlan = await until(
+        () =>
+          popup.evaluate(() => ({
+            scope: document.querySelector('#limit-scope')?.getAttribute('data-scope') ?? '',
+            leadHidden: document.querySelector('#limit-presets-lead')?.hidden ?? true,
+            lead: document.querySelector('#limit-presets-lead')?.textContent ?? '',
+            presetsHidden: document.querySelector('#limit-presets')?.hidden ?? true,
+            presets: [...document.querySelectorAll('#limit-presets button')].map((node) => node.textContent ?? ''),
+            headline: `${document.querySelector('#total-value')?.textContent ?? ''} ${
+              document.querySelector('#total-unit')?.textContent ?? ''
+            }`,
+            limitLine: document.querySelector('#limit-line')?.textContent ?? '',
+            pause: document.querySelector('#limit-pause')?.textContent ?? '',
+            cycleTabHidden: document.querySelector('#period-tabs [data-option="cycle"]')?.hidden ?? true,
+          })),
+        (state) => state.scope === 'all' && !state.presetsHidden,
+        { timeout: 15_000 },
+      );
+      console.log('  popup under the plan:', JSON.stringify(underPlan));
+      check(
+        underPlan.scope === 'all' && !underPlan.presetsHidden && underPlan.presets.length === 3,
+        `the per-site presets stay under the plan-wide card (${JSON.stringify(underPlan.presets)})`,
+      );
+      check(
+        !underPlan.leadHidden && underPlan.lead === 'Limit 127.0.0.1 on its own:',
+        `led in by the site they act on (${JSON.stringify(underPlan.lead)})`,
+      );
+      // The headline and the card read the same counter: both name the used figure,
+      // and the used figure in the card is the one in the headline.
+      const usedInCard = /^([\d.,]+ .?B) of /.exec(underPlan.limitLine)?.[1] ?? '';
+      const usedInHeadline = /^([\d.,]+)(?: ([kMG]?B))? of ([\d.,]+ .?B)$/.exec(underPlan.headline.trim());
+      check(
+        Boolean(usedInHeadline) &&
+          usedInCard !== '' &&
+          usedInCard.startsWith(usedInHeadline[1]),
+        `the headline and the limit card are one figure (${JSON.stringify(underPlan.headline.trim())} vs ${JSON.stringify(
+          underPlan.limitLine,
+        )})`,
+      );
+      check(
+        underPlan.pause === 'Pause limit 1 hour' && !underPlan.cycleTabHidden,
+        `the limit's pause button names the limit, and the cycle tab is on (${JSON.stringify(underPlan.pause)})`,
+      );
+      await ask({ type: 'REMOVE_BUDGET', site: '#all' });
+      await ask({ type: 'SAVE_SETTINGS', changes: { planBytes: null } });
+      const noPlan = await until(
+        () => popup.evaluate(() => document.querySelector('#period-tabs [data-option="cycle"]')?.hidden ?? false),
+        (hidden) => hidden === true,
+        { timeout: 10_000 },
+      );
+      check(noPlan === true, 'and the cycle tab goes with the plan');
+    } finally {
+      await popup.close().catch(() => undefined);
+      await sitePage.close().catch(() => undefined);
+    }
+    await ask({ type: 'CLEAR_DATA' });
+
+    /* ---------------------------------------------------------------- *
      * A budget enforcing itself
      *
      * The experiment above set a tier by hand. This one sets a *budget* and lets
@@ -2289,7 +2563,6 @@ async function main() {
      * the two together, in both directions.
      * ---------------------------------------------------------------- */
 
-    const PLAN_BYTES = 2_000_000_000;
     const welcome = await context.newPage();
     try {
       await welcome.goto(`chrome-extension://${extensionId}/welcome.html`);
@@ -2338,6 +2611,96 @@ async function main() {
         )})`,
       );
 
+      /*
+       * What the plan says on the day it is set, which is the day every user meets it.
+       *
+       * The install is today, so every earlier day of this cycle is unknown rather than
+       * zero: the projection must refuse a figure, say how many days it has and how many
+       * it needs, and the cycle must carry the unknown days rather than reading them as
+       * eleven days of measured nothing. The badge switches to the plan's share left
+       * the moment a plan exists.
+       */
+      const plannedView = await ask({ type: 'GET_OVERVIEW', period: 'today' });
+      const cycle = plannedView.cycle;
+      const projection = plannedView.projection;
+      check(
+        Boolean(cycle) && cycle.elapsedDays >= 1 && cycle.unknownDays === cycle.elapsedDays - 1,
+        `the cycle knows recording began today, so the ${cycle?.unknownDays ?? '?'} earlier day(s) of it are unknown rather than zero (day ${
+          cycle?.elapsedDays ?? '?'
+        } of ${cycle?.totalDays ?? '?'})`,
+      );
+      check(
+        Boolean(projection) && projection.confident === false && projection.recordedDays === 0,
+        `the projection refuses a figure on day one and says why (${projection?.recordedDays ?? '?'} recorded, ${
+          projection?.neededDays ?? '?'
+        } needed)`,
+      );
+      check(
+        Boolean(projection) && projection.neededDays >= 5 && projection.unknownDays === cycle?.unknownDays,
+        `and it needs at least five recorded days, none of them before the install (${projection?.neededDays ?? '?'} needed, ${
+          projection?.unknownDays ?? '?'
+        } unknown)`,
+      );
+
+      const badgeText = await until(
+        () => dashboard.evaluate(() => chrome.action.getBadgeText({})),
+        (text) => /^(\d+%|>99%|<1%|over)$/.test(text),
+        { timeout: 10_000 },
+      );
+      const badgeColour = await dashboard.evaluate(() => chrome.action.getBadgeBackgroundColor({}));
+      check(
+        /^(\d+%|>99%|<1%)$/.test(badgeText),
+        `the badge shows the share of the plan left, by default (${JSON.stringify(badgeText)})`,
+      );
+      check(
+        JSON.stringify(badgeColour) === JSON.stringify([15, 106, 98, 255]),
+        `and is teal while under 75% of the plan (${JSON.stringify(badgeColour)})`,
+      );
+
+      const planPopup = await context.newPage();
+      try {
+        await planPopup.setViewportSize({ width: 420, height: 900 });
+        await planPopup.goto(`chrome-extension://${extensionId}/popup.html`);
+        await planPopup.waitForSelector('#app[data-state="ready"]', { timeout: 10_000 });
+        const early = await until(
+          () =>
+            planPopup.evaluate(() => ({
+              figure: document.querySelector('#projection-figure')?.textContent ?? '',
+              figureHidden: document.querySelector('#projection-figure')?.hidden ?? true,
+              track: document.querySelector('#plan-track')?.textContent ?? '',
+              trackHidden: document.querySelector('#plan-track')?.hidden ?? true,
+              since: document.querySelector('#plan-since')?.textContent ?? '',
+              sinceHidden: document.querySelector('#plan-since')?.hidden ?? true,
+              line: document.querySelector('#plan-line')?.textContent ?? '',
+              cycleTabHidden: document.querySelector('#period-tabs [data-option="cycle"]')?.hidden ?? true,
+            })),
+          (state) => /Too early to project/.test(state.figure) && !state.trackHidden,
+          { timeout: 10_000 },
+        );
+        console.log('  popup plan block:', JSON.stringify(early));
+        check(
+          !early.figureHidden && /^Too early to project — 0 full days recorded, \d+ needed$/.test(early.figure),
+          `the popup says "too early" rather than printing a figure (${JSON.stringify(early.figure)})`,
+        );
+        check(
+          !early.trackHidden && /^[\d.,]+ .?B left today to stay on track$/.test(early.track),
+          `and says what is left today to stay on track (${JSON.stringify(early.track)})`,
+        );
+        check(
+          /the mark is even spending, \d+% by now$/.test(early.line),
+          `and names the pace mark on the meter (${JSON.stringify(early.line)})`,
+        );
+        check(
+          (cycle?.unknownDays ?? 0) === 0
+            ? early.sinceHidden
+            : !early.sinceHidden && /^Byte Budget has been counting since /.test(early.since),
+          `and says which days are not counted, exactly when there are some (${JSON.stringify(early.since)})`,
+        );
+        check(!early.cycleTabHidden, 'the cycle tab appears once a plan exists');
+      } finally {
+        await planPopup.close();
+      }
+
       // The other direction, which is the one that leaves a browser broken when it is
       // missing: clearing the plan has to take the allowance with it, or a `hard` cap
       // keeps refusing requests on the strength of a figure no surface displays any more.
@@ -2384,7 +2747,47 @@ async function main() {
 
     const totalOf = (statuses) => (statuses ?? []).find((entry) => entry.budget?.site === '#all');
 
+    /*
+     * A warning that arrives on the request that earns it.
+     *
+     * A hard plan changes tier once, at 100%, and the governor used to run its pass
+     * only on a tier change — so the 75% and 90% alerts waited for the minute alarm,
+     * and a fast connection can stream through that whole band between two ticks. One
+     * load of this page is about 81% of an 800 kB allowance: the record of what has
+     * been announced has to show 75% within seconds of it, with no alarm involved.
+     * Read from storage, because a notification is invisible headless.
+     */
     await ask({ type: 'CLEAR_DATA' });
+    await ask({ type: 'PUT_BUDGET', site: '#all', bytes: ALLOWANCE, period: 'day', shape: 'hard' });
+    resetHits();
+    await page.goto(`${origin}/?alert-1`, { waitUntil: 'load' });
+    const announced = await until(
+      () => dashboard.evaluate(() => chrome.storage.local.get('alertHistory')),
+      (stored) => (stored?.alertHistory?.['#all']?.thresholds ?? []).includes(0.75),
+      { timeout: 15_000 },
+    );
+    const hardStatus = totalOf((await ask({ type: 'GET_BUDGETS' })).statuses);
+    console.log(
+      '  hard plan after one load:',
+      JSON.stringify({ share: hardStatus?.share, tier: hardStatus?.tier, history: announced?.alertHistory }),
+    );
+    check(
+      (hardStatus?.share ?? 0) >= 0.75 && (hardStatus?.share ?? 0) < 1 && hardStatus?.tier === 'off',
+      `one load lands inside the alert band of a hard plan without changing its tier (${formatShare(
+        hardStatus?.share,
+      )}, ${hardStatus?.tier})`,
+    );
+    check(
+      (announced?.alertHistory?.['#all']?.thresholds ?? []).includes(0.75),
+      `and the 75% alert is on record within seconds, from the request rather than the minute alarm (${JSON.stringify(
+        announced?.alertHistory?.['#all']?.thresholds ?? [],
+      )})`,
+    );
+    await ask({ type: 'REMOVE_BUDGET', site: '#all' });
+
+    await ask({ type: 'CLEAR_DATA' });
+    // A plan of the same size beside the budget, so the badge has a share to show.
+    await ask({ type: 'SAVE_SETTINGS', changes: { planBytes: ALLOWANCE, cycleStartDay: 0 } });
     const total = await ask({
       type: 'PUT_BUDGET',
       site: '#all',
@@ -2468,6 +2871,75 @@ async function main() {
       hits.some((url) => url.startsWith('/?all-2')),
       'while the document itself is never refused, at any tier',
     );
+
+    /*
+     * And the refusal is credited.
+     *
+     * The rule that refused the image names no site, so the error arrives under the
+     * site of the tab that asked. The credit used to be looked up by that site alone,
+     * found no limit there, and booked `saved = 0` for every refusal a plan-wide limit
+     * made — the popup had no "refused rather than spent" line and the dashboard read
+     * "Data prevented 0 B" while this server was never asked for the image. The
+     * figure is the model's, as every refusal's is — and by now the model has seen
+     * this host's images arrive measured, so it is the learned mean and not the
+     * per-type default. Asserted as positive and in the right order of magnitude,
+     * the way the per-site block above asserts its credit, rather than as a multiple
+     * of a default the model has already left.
+     */
+    const credited = await until(
+      () => ask({ type: 'GET_OVERVIEW', period: 'today' }),
+      (value) => (value.totals?.saved ?? 0) > 0,
+      { timeout: 15_000 },
+    );
+    console.log(
+      '  under the total budget:',
+      JSON.stringify({ blocked: credited.totals?.blocked, saved: credited.totals?.saved }),
+    );
+    check(
+      (credited.totals?.blocked ?? 0) >= 1 &&
+        (credited.totals?.saved ?? 0) > 0 &&
+        (credited.totals?.saved ?? 0) <=
+          (credited.totals?.blocked ?? 0) * Math.max(IMAGE_BYTES, DEFAULT_IMAGE_ESTIMATE) * 3,
+      `a refusal under the limit over everything is credited as prevented bytes (${credited.totals?.saved ?? 0} B for ${
+        credited.totals?.blocked ?? 0
+      } refusal(s))`,
+    );
+    await dashboard.reload();
+    await dashboard.waitForSelector('#stats .stat', { timeout: 10_000 });
+    const prevented = await dashboard.$$eval('.stat', (nodes) =>
+      nodes
+        .map((node) => ({
+          label: node.querySelector('.stat-label')?.textContent ?? '',
+          value: node.querySelector('.stat-value')?.textContent ?? '',
+        }))
+        .find((stat) => /prevented/i.test(stat.label)),
+    );
+    check(
+      Boolean(prevented) && /^~[\d.,]+ .?B$/.test(prevented.value) && !/^0 B$/.test(prevented.value),
+      `and the dashboard's Data prevented tile is no longer 0 B (${JSON.stringify(prevented?.value)})`,
+    );
+
+    // The badge past the plan: the same share, in the colour the alerts use, and a
+    // word rather than "0%" for the state that is not a share.
+    const overBadge = await until(
+      () =>
+        dashboard.evaluate(async () => ({
+          text: await chrome.action.getBadgeText({}),
+          colour: await chrome.action.getBadgeBackgroundColor({}),
+          title: await chrome.action.getTitle({}),
+        })),
+      (state) => state.text === 'over',
+      { timeout: 15_000 },
+    );
+    check(
+      overBadge.text === 'over' && JSON.stringify(overBadge.colour) === JSON.stringify([122, 31, 24, 255]),
+      `the badge reads "over" in the darkest red once the plan is spent (${JSON.stringify(overBadge)})`,
+    );
+    check(
+      /^Plan spent · .+ used · resets /.test(overBadge.title),
+      `and its tooltip says so in words (${JSON.stringify(overBadge.title)})`,
+    );
+    await ask({ type: 'SAVE_SETTINGS', changes: { planBytes: null } });
 
     const totalRemoved = await ask({ type: 'REMOVE_BUDGET', site: '#all' });
     check(
@@ -3013,6 +3485,93 @@ async function main() {
       await setPlus(true);
     }
 
+    /* ---------------------------------------------------------------- *
+     * The speed cap, in the one channel that can honour it
+     *
+     * The throttle channel declares `debugger` and paces a tab through
+     * `Network.emulateNetworkConditions`; the store channel has no such API and must
+     * show no field for one. Both are asserted here, each channel the way round it
+     * has to be. The pacing itself is checked by timing a fetch the server answers in
+     * milliseconds: under a 1,600 kbps cap 400 kB takes about two seconds, and a cap
+     * that reports itself installed while the fetch is instant is a cap in name only.
+     * ---------------------------------------------------------------- */
+
+    const manifestPermissions = await dashboard.evaluate(() => chrome.runtime.getManifest().permissions ?? []);
+    await settings.reload();
+    await settings.waitForSelector('#pane-limits', { state: 'attached', timeout: 10_000 });
+    await openSection('limits');
+    const kbpsRowHidden = await settings.$eval('#limit-kbps-row', (node) => node.hidden);
+    const bundle = await readFile(path.join(dist, 'background.js'), 'utf8');
+
+    if (THROTTLE) {
+      check(manifestPermissions.includes('debugger'), 'the throttle channel declares the debugger permission');
+      check(!kbpsRowHidden, 'and Settings shows the speed-cap field');
+
+      // A cap stored through the form, and shown back in the list.
+      await settings.fill('#limit-site', 'localhost');
+      await settings.fill('#limit-size', '5 GB');
+      await settings.fill('#limit-kbps', '1600');
+      await settings.click('#limit-add');
+      const capped = await until(
+        () => ask({ type: 'GET_BUDGETS' }),
+        (value) => (value.statuses ?? []).some((entry) => entry.budget?.site === 'localhost' && entry.budget?.kbps === 1600),
+        { timeout: 10_000 },
+      );
+      const cappedBudget = (capped.statuses ?? []).find((entry) => entry.budget?.site === 'localhost')?.budget;
+      check(cappedBudget?.kbps === 1600, `the form stores the cap on the limit (${JSON.stringify(cappedBudget)})`);
+      await checkWait(check, 'and the limits list says so', () =>
+        settings.waitForFunction(
+          () => /Capped at 1,?600 kbps/.test(document.querySelector('#limits-list')?.textContent ?? ''),
+          null,
+          { timeout: 10_000 },
+        ),
+      );
+
+      /*
+       * The witness is the clock, not `chrome.debugger.getTargets()`. Every tab in this
+       * run reports `attached: true` there whether or not the extension has attached to
+       * it, because Playwright drives the browser over its own CDP session and that is
+       * a debugger client too — so "attached" cannot tell the cap from the harness, in
+       * either direction. What can is the arithmetic: 400 kB at 1,600 kbps is two
+       * seconds, and the same fetch with the limit gone is a few hundred milliseconds.
+       * Both are read until they hold, because the cap lands on the governor's pass
+       * after the navigation rather than on it.
+       */
+      resetHits();
+      await page.goto(`http://localhost:${port}/plain`, { waitUntil: 'load' });
+      const timed = async () =>
+        page.evaluate(async (url) => {
+          const started = performance.now();
+          const response = await fetch(url, { cache: 'no-store' });
+          await response.arrayBuffer();
+          return performance.now() - started;
+        }, `http://localhost:${port}/fixture.js`);
+      const throttled = await until(timed, (ms) => ms >= 1500, { timeout: 15_000, interval: 500 });
+      check(
+        throttled >= 1500,
+        `a 400 kB fetch under a 1,600 kbps cap takes at least 1.5 s (${Math.round(throttled)} ms)`,
+      );
+      await ask({ type: 'REMOVE_BUDGET', site: 'localhost' });
+      await until(
+        () => ask({ type: 'GET_BUDGETS' }),
+        (value) => !(value.statuses ?? []).some((entry) => entry.budget?.site === 'localhost'),
+        { timeout: 10_000 },
+      );
+      const unthrottled = await until(timed, (ms) => ms < throttled / 2, { timeout: 15_000, interval: 500 });
+      console.log('  fetch of 400 kB:', JSON.stringify({ throttled: Math.round(throttled), unthrottled: Math.round(unthrottled) }));
+      check(
+        unthrottled < throttled / 2,
+        `and removing the limit lifts the cap, so the same fetch is quick again (${Math.round(unthrottled)} ms)`,
+      );
+    } else {
+      check(!manifestPermissions.includes('debugger'), 'the store channel does not ask for the debugger permission');
+      check(kbpsRowHidden, 'and Settings shows no speed-cap field, because it could not honour one');
+      check(
+        !bundle.includes('chrome.debugger') && !bundle.includes('emulateNetworkConditions'),
+        'and the bundle carries no debugger call to make it with',
+      );
+    }
+
     const errors = await worker.evaluate(() => 'ok');
     check(errors === 'ok', 'the service worker is still alive and evaluable');
 
@@ -3174,6 +3733,11 @@ async function main() {
     process.exit(1);
   }
   console.log('\nall checks passed');
+}
+
+/** A share as the log prints it. */
+function formatShare(share) {
+  return typeof share === 'number' ? `${Math.round(share * 100)}%` : 'unknown';
 }
 
 /** Reads "1.2 MB" back into bytes, in whichever unit system the UI used. */

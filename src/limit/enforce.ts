@@ -19,7 +19,7 @@
  * `ensureEnforcementReady` republishes them before it resolves.
  */
 
-import { asResourceType, type ResourceType } from "../core/types";
+import { ALL_SITES, asResourceType, type ResourceType } from "../core/types";
 import { publishRules, type RuleSpec } from "../rules/session";
 import { enforcementRules, type EnforcementEntry } from "./rules";
 import { isTier, tierBlocks, type Tier } from "./tiers";
@@ -207,9 +207,18 @@ export function enforcementFor(site: string): Tier {
  * requests this extension actually refused.
  */
 export function isEnforcedByUs(site: string, type: ResourceType | string): boolean {
-  const entry = entries.get(site);
-  if (!entry) return false;
-  return tierBlocks(entry.tier, asResourceType(String(type)));
+  const resource = asResourceType(String(type));
+  const own = entries.get(site);
+  if (own && tierBlocks(own.tier, resource)) return true;
+  // The limit over everything is keyed `#all` and its rule names no site, so a
+  // request it refused arrives here under the site of the tab that made it. Looking
+  // up that site alone found nothing, and every refusal under a plan-wide limit was
+  // booked with `saved = 0`: the popup had no "refused rather than spent" line and the
+  // dashboard read "Data prevented 0 B" while the server was never asked. The same
+  // request cannot be `#all`-keyed itself — `noteUsage` guards that key — so this
+  // cannot count one refusal twice.
+  const total = entries.get(ALL_SITES);
+  return total !== undefined && tierBlocks(total.tier, resource);
 }
 
 export function enforcementSnapshot(): EnforcementView[] {

@@ -1,4 +1,72 @@
 {
+  "coreBadgeOver": {
+    "message": "over",
+    "description": "Toolbar badge text once the plan is spent. At most four characters — Chrome truncates anything longer — and lower case, because it sits on a 16px icon."
+  },
+  "coreBadgeOverTitle": {
+    "message": "Plan spent · $USED$ of $PLAN$ used · resets $WHEN$",
+    "description": "Tooltip on the toolbar button once the plan is spent, when the badge reads coreBadgeOver. The first substitution (the share left) is unused here on purpose.",
+    "placeholders": {
+      "left": {
+        "content": "$1",
+        "example": "0%"
+      },
+      "used": {
+        "content": "$2",
+        "example": "5.4 GB"
+      },
+      "plan": {
+        "content": "$3",
+        "example": "5 GB"
+      },
+      "when": {
+        "content": "$4",
+        "example": "in 22 days"
+      }
+    }
+  },
+  "coreBadgePlanTitle": {
+    "message": "$LEFT$ of your plan left · $USED$ of $PLAN$ used · resets $WHEN$",
+    "description": "Tooltip on the toolbar button while the badge shows the share of the plan left. The badge itself carries only LEFT.",
+    "placeholders": {
+      "left": {
+        "content": "$1",
+        "example": "38%"
+      },
+      "used": {
+        "content": "$2",
+        "example": "3.1 GB"
+      },
+      "plan": {
+        "content": "$3",
+        "example": "5 GB"
+      },
+      "when": {
+        "content": "$4",
+        "example": "in 22 days"
+      }
+    }
+  },
+  "coreBadgeSessionTitle": {
+    "message": "$USED$ used since this browser started",
+    "description": "Tooltip on the toolbar button while the badge shows the session total.",
+    "placeholders": {
+      "used": {
+        "content": "$1",
+        "example": "312 MB"
+      }
+    }
+  },
+  "coreBadgeTodayTitle": {
+    "message": "$USED$ used today, in this Chrome profile",
+    "description": "Tooltip on the toolbar button while the badge shows today's total.",
+    "placeholders": {
+      "used": {
+        "content": "$1",
+        "example": "312 MB"
+      }
+    }
+  },
   "coreBudgetPeriodDay": {
     "message": "per day",
     "description": "How often a limit's allowance refills. Appears after a byte figure, e.g. '500 MB per day'."
@@ -17,7 +85,7 @@
   },
   "coreBudgetShapeHard": {
     "message": "Stops at the limit",
-    "description": "One of two choices for what a limit does as it fills. This one changes nothing until the allowance is spent, then refuses every subresource. It is what most people mean by 'a cap'."
+    "description": "One of two choices for what a limit does as it fills. This one changes nothing until the allowance is spent, then refuses everything but the page itself. It is what most people mean by 'a cap'."
   },
   "coreBudgetShapeProgressive": {
     "message": "Cuts back gradually",
@@ -281,21 +349,35 @@
       }
     }
   },
+  "corePeriodCycle": {
+    "message": "This cycle · $SPAN$",
+    "description": "Says what the \"cycle\" period covers: the plan's billing cycle from its reset day to today. The separator is a middle dot. Shown under the headline total.",
+    "placeholders": {
+      "span": {
+        "content": "$1",
+        "example": "Aug 17 – Sep 1"
+      }
+    }
+  },
+  "corePeriodOptionCycle": {
+    "message": "Cycle",
+    "description": "Option text in the period selector for the plan's billing cycle so far. Sits in a five-up control, so keep it short. Only shown while a plan is set."
+  },
   "corePeriodOptionMonth": {
     "message": "30 days",
-    "description": "Option text in the period selector for the month view. Sits in a four-up control, so keep it short. The exact window — calendar month or the trailing thirty days — is a setting and is spelled out underneath by corePeriodCalendarMonth or corePeriodRollingDays."
+    "description": "Option text in the period selector for the month view. Sits in a five-up control, so keep it short. The exact window — calendar month or the trailing thirty days — is a setting and is spelled out underneath by corePeriodCalendarMonth or corePeriodRollingDays."
   },
   "corePeriodOptionSession": {
     "message": "Session",
-    "description": "Option text in the period selector, meaning \"since this browser started\". Sits in a four-up control, so keep it short."
+    "description": "Option text in the period selector, meaning \"since this browser started\". Sits in a five-up control, so keep it short."
   },
   "corePeriodOptionToday": {
     "message": "Today",
-    "description": "Option text in the period selector. Sits in a four-up control, so keep it short."
+    "description": "Option text in the period selector. Sits in a five-up control, so keep it short."
   },
   "corePeriodOptionWeek": {
     "message": "7 days",
-    "description": "Option text in the period selector for the week view. Sits in a four-up control, so keep it short. The exact window — calendar week or the trailing seven days — is a setting and is spelled out underneath by corePeriodCalendarWeek or corePeriodRollingDays."
+    "description": "Option text in the period selector for the week view. Sits in a five-up control, so keep it short. The exact window — calendar week or the trailing seven days — is a setting and is spelled out underneath by corePeriodCalendarWeek or corePeriodRollingDays."
   },
   "corePeriodRollingDays": {
     "message": "Last $DAYS$ days · $SPAN$",
@@ -416,12 +498,12 @@
     "description": "Name of an enforcement tier: nothing is being refused on this site."
   },
   "coreTierStrictDescription": {
-    "message": "Refuses every subresource. The page's own HTML still loads so it can tell you what happened, but nothing else does.",
+    "message": "Refuses everything but the page itself. The page's own HTML still loads so it can tell you what happened, but nothing else does.",
     "description": "One-line consequence shown under the last tier's name. The point of the second sentence is that the page is deliberately not broken outright — the document loads so the site can explain itself."
   },
   "coreTierStrictLabel": {
-    "message": "Page shell only",
-    "description": "Name of the last enforcement tier: only the page's own HTML loads and every other request is refused."
+    "message": "Only the page itself",
+    "description": "Name of the last enforcement tier: only the page's own HTML loads and every other request is refused. Plain words on purpose — this replaced \"Page shell only\", which named a developer's concept."
   },
   "coreTierTrimDescription": {
     "message": "Video and audio segments are refused. Players usually drop to a lower quality or pause.",

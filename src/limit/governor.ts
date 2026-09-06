@@ -33,8 +33,10 @@ import {
   type BudgetPeriod,
   type BudgetWindow,
 } from "./budgets";
-import { checkAllowanceAlerts, type AllowanceReading } from "./alerts";
+import { checkAllowanceAlerts, crossesAlertThreshold, type AllowanceReading } from "./alerts";
 import { enforcementFor, setEnforcement } from "./enforce";
+import { clearHold, deeperTier, getHolds, type Hold } from "./holds";
+import { noticeForHold } from "./notify";
 import { TIERS, type Tier } from "./tiers";
 import { applyThrottleToTabs, clearAllThrottles } from "./throttle";
 
@@ -47,6 +49,15 @@ interface Live {
 }
 
 const live = new Map<string, Live>();
+/**
+ * Holds in force, by site. Loaded with the budgets and re-read when one changes.
+ *
+ * Kept beside `live` rather than folded into it because a hold is not a counter: it
+ * has no allowance, no window and no reading for the alerts, only a tier and an
+ * expiry. What it shares with a budget is the enforcement pass, which is why it is
+ * here and not in `holds.ts`.
+ */
+const holds = new Map<string, Hold>();
 let settings: Settings | null = null;
 let ready: Promise<void> | null = null;
 /** Coalesces the enforcement writes that a burst of requests would otherwise cause. */
@@ -73,6 +84,33 @@ async function refreshSessionStart(periods: Iterable<BudgetPeriod>): Promise<voi
 
 export function budgetedSites(): string[] {
   return [...live.keys()];
+}
+
+async function loadHolds(): Promise<void> {
+  holds.clear();
+  for (const hold of await getHolds()) holds.set(hold.site, hold);
+}
+
+/** The holds in force, for a surface. A copy; the map is the governor's. */
+export function holdSnapshot(): Hold[] {
+  return [...holds.values()].map((hold) => ({ ...hold }));
+}
+
+/**
+ * Called after a hold is set or ended.
+ *
+ * A hold ended by hand on a site with no budget leaves the enforcement loop the moment
+ * the map is reloaded, so nothing in the pass would visit it and its rules would stay
+ * installed — the site is neither a lapsed hold nor a budgeted site by then. It is
+ * handed to the pass as retired, the way a removed budget is, so the rules are lifted
+ * with the record.
+ */
+export async function holdsChanged(): Promise<void> {
+  await ensureReady();
+  const before = [...holds.keys()];
+  await loadHolds();
+  const ended = before.filter((site) => !holds.has(site) && !live.has(site));
+  await syncEnforcement(ended);
 }
 
 /**
@@ -130,6 +168,7 @@ export async function reloadBudgets(): Promise<void> {
   }
 
   await Promise.all([...live.values()].filter((entry) => !entry.primed).map(prime));
+  await loadHolds();
   await syncEnforcement(dropped);
 }
 
@@ -190,14 +229,29 @@ async function prime(entry: Live): Promise<void> {
   entry.primed = true;
 }
 
+/** The tier a budget's own numbers call for, ignoring any hold on the site. */
+function budgetTier(entry: Live): Tier {
+  const allowance = allowanceOf(entry.budget, entry.periodKey);
+  return isSnoozed(entry.budget) ? "off" : tierFor(entry.budget, entry.used, allowance);
+}
+
 /**
- * Adds bytes to one live counter, and says whether the installed tier is now wrong.
+ * Adds bytes to one live counter, and says whether the enforcement pass has to run.
+ *
+ * Two reasons it might. The installed tier is now wrong — the original test. Or the
+ * share just crossed a rung of the alert ladder: on a hard plan the tier is first
+ * wrong at 100%, so the 75% and 90% alerts used to wait for the minute alarm, which
+ * on a fast connection is after the band they warn about has been streamed through.
+ * The pass is what sends the alert, so a crossing wakes it.
  */
 function charge(entry: Live, site: string, bytes: number): boolean {
-  entry.used += bytes;
   const allowance = allowanceOf(entry.budget, entry.periodKey);
-  const wanted = isSnoozed(entry.budget) ? "off" : tierFor(entry.budget, entry.used, allowance);
-  return wanted !== enforcementFor(site);
+  const before = allowance > 0 ? entry.used / allowance : 0;
+  entry.used += bytes;
+  const after = allowance > 0 ? entry.used / allowance : 0;
+  const hold = holds.get(site);
+  const wanted = hold ? deeperTier(budgetTier(entry), hold.tier) : budgetTier(entry);
+  return wanted !== enforcementFor(site) || crossesAlertThreshold(before, after);
 }
 
 /**
@@ -392,8 +446,30 @@ async function publishNotices(claims: ReadonlyMap<number, Claim>): Promise<void>
  */
 export async function syncEnforcement(dropped: readonly string[] = []): Promise<void> {
   const units = settings?.units ?? "si";
+  const now = Date.now();
 
-  for (const site of dropped) {
+  // Holds that have run out. Retired on this pass rather than on a timer of their own:
+  // the minute alarm that calls this is what makes "for an hour" end within a minute of
+  // the hour, and it is the same clock a snooze expires on.
+  const lapsed: string[] = [];
+  for (const [site, hold] of holds) {
+    if (hold.until > now) continue;
+    holds.delete(site);
+    lapsed.push(site);
+  }
+  for (const site of lapsed) {
+    try {
+      await clearHold(site, now);
+    } catch {
+      // `getHolds` drops an expired hold on read anyway; the stored copy is tidied
+      // next time, and the map above is what enforcement is computed from.
+    }
+  }
+  // A site that has just lost its hold and has no budget leaves the loop below, so
+  // its rules have to be lifted here, the way a removed budget's are.
+  const retired = [...dropped, ...lapsed.filter((site) => !live.has(site))];
+
+  for (const site of retired) {
     try {
       await setEnforcement(site, "off", []);
       // No tabs: with no cap left to apply, the empty set is the retraction, and the
@@ -418,23 +494,34 @@ export async function syncEnforcement(dropped: readonly string[] = []): Promise<
    */
   const readings: AllowanceReading[] = [];
 
-  for (const [site, entry] of live) {
+  // Every site with something to enforce: a budget, a hold, or both.
+  const sites = new Set<string>([...live.keys(), ...holds.keys()]);
+
+  for (const site of sites) {
     // Guarded per site. The loop used to be unguarded, so a single rejected rule
     // install aborted it and every site after this one in iteration order went
     // unevaluated — including sites that were over budget and enforcing nothing.
     try {
+      const entry = live.get(site);
+      const hold = holds.get(site);
       const total = site === ALL_SITES;
       const tabIds = total ? announceableTabs() : tabIdsForSite(site);
-      const allowance = allowanceOf(entry.budget, entry.periodKey);
-      const wanted = isSnoozed(entry.budget) ? "off" : tierFor(entry.budget, entry.used, allowance);
 
-      readings.push({
-        site,
-        used: entry.used,
-        allowance,
-        periodKey: entry.periodKey,
-        resetsAt: periodResetsAt(entry.budget.period, budgetWindow()),
-      });
+      let fromBudget: Tier = "off";
+      if (entry) {
+        fromBudget = budgetTier(entry);
+        readings.push({
+          site,
+          used: entry.used,
+          allowance: allowanceOf(entry.budget, entry.periodKey),
+          periodKey: entry.periodKey,
+          resetsAt: periodResetsAt(entry.budget.period, budgetWindow()),
+        });
+      }
+      // A budget and a hold on one site compose the way a total and a per-site limit
+      // do: every tier's refused set is a prefix of one shed order, so the deeper one
+      // is what the reader sees and there is nothing to arbitrate.
+      const wanted = hold ? deeperTier(fromBudget, hold.tier) : fromBudget;
 
       // The total budget's rule is unscoped, so it is given no tabs to be scoped by.
       // Handing it the tabs its banner goes to would make every tab that opens or
@@ -447,8 +534,14 @@ export async function syncEnforcement(dropped: readonly string[] = []): Promise<
       if (wanted !== "off") {
         // Composed from the same numbers that just installed the rules, so the banner
         // can never claim a limit that has been lifted or miss one that has just
-        // landed.
-        const notice = noticeFrom(statusOf(entry, wanted), units);
+        // landed. The hold explains the banner whenever it is at least as deep as the
+        // budget: it is the newer decision, and the one with a Resume button.
+        const notice =
+          hold && TIERS.indexOf(hold.tier) >= TIERS.indexOf(fromBudget)
+            ? noticeForHold(hold, wanted)
+            : entry
+              ? noticeFrom(statusOf(entry, wanted), units)
+              : null;
         if (notice) {
           for (const tabId of tabIds) {
             claims.set(tabId, strongest(claims.get(tabId), { site, tier: wanted, notice }));
@@ -456,7 +549,7 @@ export async function syncEnforcement(dropped: readonly string[] = []): Promise<
         }
       }
 
-      await applyThrottleToTabs(site, entry.budget.kbps ?? null, tabIds);
+      if (entry) await applyThrottleToTabs(site, entry.budget.kbps ?? null, tabIds);
     } catch (error) {
       console.error("Byte Budget: could not enforce the budget for", site, error);
     }
@@ -484,9 +577,18 @@ export async function noticeForTab(site: string): Promise<TabNotice | null> {
   let best: Claim | undefined;
   for (const key of site === ALL_SITES ? [ALL_SITES] : [site, ALL_SITES]) {
     const entry = live.get(key);
+    const hold = holds.get(key);
     const tier = enforcementFor(key);
-    if (!entry || tier === "off") continue;
-    const notice = noticeFrom(statusOf(entry, tier), units);
+    if (tier === "off") continue;
+    const fromBudget = entry ? budgetTier(entry) : "off";
+    // The same arbitration as `syncEnforcement`, so the banner a page asks for on load
+    // is the one the pass would have pushed.
+    const notice =
+      hold && TIERS.indexOf(hold.tier) >= TIERS.indexOf(fromBudget)
+        ? noticeForHold(hold, tier)
+        : entry
+          ? noticeFrom(statusOf(entry, tier), units)
+          : null;
     if (notice) best = strongest(best, { site: key, tier, notice });
   }
   return best?.notice ?? null;

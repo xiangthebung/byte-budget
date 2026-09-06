@@ -245,6 +245,19 @@ export interface UsageRow extends UsageTotals {
   bucket: string;
   site: string;
   byType: TypeBytes;
+  /**
+   * Requests whose size nobody measured, so the estimator priced them.
+   *
+   * A count beside `estimatedDown`'s bytes, because the two answer different
+   * questions. The bytes say how much of the total is modelled; the count says how
+   * many responses the model had to stand in for, which is what tells a reader
+   * whether "47 MB estimated" is one opaque video or forty small images — and it is
+   * the figure the per-host table uses to say a host never yields a measurement.
+   *
+   * Optional because rows written before it existed have no such field, and a
+   * missing count reads as zero rather than as `NaN` in every aggregate.
+   */
+  unsized?: number;
 }
 
 /** One third-party host's contribution to one site on one day. */
@@ -259,6 +272,13 @@ export interface HostRow {
   requests: number;
   blocked: number;
   saved: number;
+  /** Requests priced by the estimator. See `UsageRow.unsized`. */
+  unsized?: number;
+}
+
+/** The count of estimated requests on a row, read defensively for rows that predate it. */
+export function unsizedOf(row: Readonly<{ unsized?: number | undefined }>): number {
+  return typeof row.unsized === "number" && row.unsized > 0 ? row.unsized : 0;
 }
 
 /**
@@ -345,14 +365,26 @@ export interface SizeSample {
  * Periods
  * ------------------------------------------------------------------ */
 
-export const PERIODS = ["session", "today", "week", "month"] as const;
+/**
+ * The windows a surface can show.
+ *
+ * `cycle` is the plan's billing cycle to date — the window the carrier is counting,
+ * which `month` (a calendar month or the trailing thirty days) is not. It exists as a
+ * period of its own because "which sites ate my plan this cycle" is the question a
+ * metered user actually asks, and it is free on every tier for the reason
+ * `plus/tier.ts` gives: the cycle is exempt from the reporting ceiling because
+ * clipping it would make the free tier wrong rather than smaller. It is only offered
+ * while a plan is set; without one there is no cycle to speak of.
+ */
+export const PERIODS = ["session", "today", "week", "cycle", "month"] as const;
 export type Period = (typeof PERIODS)[number];
 
-/** The option text in the period selector. Short: these sit in a four-up control. */
+/** The option text in the period selector. Short: these sit in a five-up control. */
 export const PERIOD_LABELS: Record<Period, string> = {
   session: t("corePeriodOptionSession"),
   today: t("corePeriodOptionToday"),
   week: t("corePeriodOptionWeek"),
+  cycle: t("corePeriodOptionCycle"),
   month: t("corePeriodOptionMonth"),
 };
 
@@ -372,8 +404,16 @@ export interface Settings {
   weekStart: 0 | 1;
   /** Days of daily rows to keep. 0 keeps everything. */
   retentionDays: number;
-  /** What the toolbar badge counts, if anything. */
-  badge: "off" | "session" | "today";
+  /**
+   * What the toolbar badge shows, if anything.
+   *
+   * `plan` is the share of the plan still left, coloured by the alert ladder — the
+   * one figure a metered user glances at — and falls back to today's bytes while no
+   * plan is set. It is the default because a badge that ships off is an instrument
+   * nobody was given; the audit that added this found an install could run, correct,
+   * and watch someone spend 90% of a month in silence.
+   */
+  badge: "off" | "plan" | "session" | "today";
   /** Record per-host breakdowns. Off makes the drill-down poorer and the DB smaller. */
   trackHosts: boolean;
   /**
@@ -449,7 +489,7 @@ export const DEFAULT_SETTINGS: Settings = {
   monthMode: "rolling",
   weekStart: 1,
   retentionDays: 400,
-  badge: "off",
+  badge: "plan",
   trackHosts: true,
   planBytes: null,
   cycleStartDay: 0,

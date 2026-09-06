@@ -80,6 +80,8 @@ const planAllowance = query<HTMLDivElement>("#plan-allowance");
 const limitsList = query<HTMLUListElement>("#limits-list");
 const limitsEmpty = query<HTMLParagraphElement>("#limits-empty");
 const limitStatus = query<HTMLParagraphElement>("#limit-form-status");
+const limitKbpsRow = query<HTMLDivElement>("#limit-kbps-row");
+const limitKbpsInput = query<HTMLInputElement>("#limit-kbps");
 const limitPeriodGroup = query<HTMLDivElement>("#limit-period-group");
 const limitShapeGroup = query<HTMLDivElement>("#limit-shape-group");
 const limitShapeHint = query<HTMLSpanElement>("#limit-shape-hint");
@@ -1068,6 +1070,15 @@ function limitCard(status: BudgetStatus): HTMLLIElement {
       className: "row-sub",
       text: BUDGET_SHAPE_LABELS[status.budget.shape],
     }),
+    // A cap stored by the throttle channel is shown wherever it is stored, store
+    // build included: a limit carrying a figure this build cannot pace is a fact the
+    // person should be able to see, not one to hide because it is inert here.
+    status.budget.kbps
+      ? element("span", {
+          className: "row-sub",
+          text: t("settingsLimitKbpsNote", formatCount(status.budget.kbps)),
+        })
+      : null,
   ]);
 
   return element("li", { className: "limit-card" }, [
@@ -1202,6 +1213,9 @@ function startEditing(status: BudgetStatus, block: HTMLElement): void {
       bytes: Math.round(value * factor),
       period: status.budget.period,
       shape: status.budget.shape,
+      // Carried through, or editing the size of a throttled limit silently drops
+      // its speed cap: `putBudget` writes the record it is handed.
+      ...(status.budget.kbps ? { kbps: status.budget.kbps } : {}),
     }).then((saved) => {
       endEditing();
       if (!saved) return;
@@ -1263,13 +1277,43 @@ query<HTMLFormElement>("#limit-form").addEventListener("submit", (event) => {
   const replacing = statuses.some((status) => status.budget.site === site);
   const shape = formShape;
 
+  /*
+   * The speed cap, in the one channel that can honour it.
+   *
+   * `__THROTTLE_BUILD__` is a build-time literal, so the store bundle compiles this
+   * block away along with the field it reads — a kbps figure the store build cannot
+   * pace must not be storable from it, or a limit would carry a promise no API keeps.
+   */
+  let kbps: number | undefined;
+  if (__THROTTLE_BUILD__) {
+    const rawKbps = limitKbpsInput.value.trim();
+    if (rawKbps !== "") {
+      const parsedKbps = Number(rawKbps.replace(/[\s,_]/g, ""));
+      if (!Number.isInteger(parsedKbps) || parsedKbps <= 0) {
+        limitStatus.textContent = t("settingsLimitKbpsUnreadable", rawKbps);
+        limitStatus.dataset.tone = "error";
+        limitKbpsInput.focus();
+        return;
+      }
+      kbps = parsedKbps;
+    }
+  }
+
   limitStatus.textContent = t("settingsSaving");
   limitStatus.dataset.tone = "";
-  void changeLimit({ type: "PUT_BUDGET", site, bytes: size, period: formPeriod, shape }).then(
+  void changeLimit({
+    type: "PUT_BUDGET",
+    site,
+    bytes: size,
+    period: formPeriod,
+    shape,
+    ...(kbps !== undefined ? { kbps } : {}),
+  }).then(
     (saved) => {
       if (!saved) return;
       siteInput.value = "";
       sizeInput.value = "";
+      if (__THROTTLE_BUILD__) limitKbpsInput.value = "";
       // Names the site key that was actually stored, which is the only signal that a
       // pasted URL was trimmed to a domain — and says when an existing limit was
       // replaced, which the form used to do silently.
@@ -2032,13 +2076,19 @@ function bindControls(): void {
   bindGroup<Settings["badge"]>({
     container: query<HTMLDivElement>("#badge-group"),
     options: [
-      { value: "off", label: t("settingsBadgeOff") },
-      { value: "session", label: t("settingsBadgeSession") },
+      { value: "plan", label: t("settingsBadgePlan"), title: t("settingsBadgePlanTitle") },
       { value: "today", label: t("settingsBadgeToday") },
+      { value: "session", label: t("settingsBadgeSession") },
+      { value: "off", label: t("settingsBadgeOff") },
     ],
-    value: "off",
+    value: "plan",
     onSelect: (value) => void applySettings({ badge: value }),
   });
+
+  // The speed-cap field exists only in the channel that can honour it. The literal
+  // folds to `false` in the store build, so the row stays hidden there and the code
+  // that reads it is compiled out.
+  if (__THROTTLE_BUILD__) limitKbpsRow.hidden = false;
 
   // The two option labels are the unit symbols themselves — see the note above
   // `SI_EDIT_UNITS` for why those are not messages.

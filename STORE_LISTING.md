@@ -17,13 +17,22 @@ stay in this Chrome profile.
 ## Detailed description
 
 Byte Budget shows how much network data each site uses in this Chrome profile. See a
-session, day, week or month at a glance, open a per-site breakdown, and export the
-figures as CSV or JSON.
+session, day, week, plan cycle or month at a glance, open a per-site breakdown, and
+export the figures as CSV or JSON. The toolbar badge shows how much of your plan is
+left, in the colour of the warning it is nearest to, and the popup's "Right now" panel
+shows which hosts used data in the last minute.
 
 Set a plan-wide allowance or daily limits for individual sites. As a limit fills, Byte
-Budget can progressively refuse heavy resources such as video and images, or stop
-subresources only after the allowance is spent. Page HTML remains available so the
-site can explain what happened.
+Budget can progressively refuse heavy resources such as video and images, or refuse
+everything but the page itself only after the allowance is spent. Page HTML remains
+available so the site can explain what happened. Two one-tap holds — skip video on
+this site for an hour, or pause this site for an hour — need no limit at all and end
+on their own.
+
+With a plan set, the popup says what is left today to stay on track and projects the
+cycle's total once enough days are recorded — never from days before the install,
+which are counted as unknown rather than zero. Every figure says how much of it was
+measured and how many requests had to be estimated.
 
 Data Saver can request smaller versions of known image-service URLs, avoid selected
 background transfers, and report measured and modelled savings separately. It ships
@@ -45,9 +54,10 @@ Important scope and privacy facts:
   updates, or other devices sharing the connection.
 
 Free includes all measurement, the dashboard, daily limits, standard Data Saver levels,
-alerts, export of the recent window and the plan projection. Byte Budget Plus adds
-longer reporting and export, additional limit windows, more site limits, individual
-Data Saver controls, third-party host detail and appearance options. Plus is CA$0.99 per
+alerts, the toolbar badge, the Right now panel and holds, export of the recent window,
+the plan cycle view and the plan projection. Byte Budget Plus adds longer reporting and
+export, additional limit windows, more site limits, individual Data Saver controls,
+third-party host detail and appearance options. Plus is CA$0.99 per
 month or CA$7.99 per year (CAD), with a 14-day trial. Subscriptions renew until cancelled.
 The developer of Byte Budget, not Google, is the seller. Cancellation and refund terms
 are displayed inside the extension before checkout.
@@ -63,8 +73,9 @@ are displayed inside the extension before checkout.
   hosts the extension may access; measuring only selected sites would make the report
   incomplete.
 - `webNavigation`: associate subresource traffic with the site currently shown in a tab.
-- `declarativeNetRequest`: install user-selected limit rules and the optional fixed Data
-  Saver rules for smaller image variants and selected background requests.
+- `declarativeNetRequest`: install user-selected limit rules, the one-hour holds a user
+  sets from the popup, and the optional fixed Data Saver rules for smaller image
+  variants and selected background requests.
 - `scripting`: report Resource Timing transfer sizes, show a limit notice, and run the
   optional page-side Data Saver features. The scripts do not read page text or forms.
 - `alarms`: flush buffered counts, roll allowance windows, refresh alerts and prune data.
@@ -119,7 +130,9 @@ No product homepage URL is declared in the manifest.
 2. Browse an ordinary HTTP or HTTPS page, then open the popup and Dashboard to see the
    site and byte totals.
 3. In Settings, set a daily limit for the current site. A small test limit demonstrates
-   the limit notice and progressive resource refusal.
+   the limit notice and progressive resource refusal. Or, from the popup's Right now
+   panel, press "Skip video here for an hour" to see a hold and its banner without
+   setting a limit.
 4. Turn on Data Saver and choose Light, Balanced or Maximum; the Dashboard reports
    measured and modelled prevented data separately.
 5. To review Plus, open Settings → Plus → **I already subscribed** and use the reviewer

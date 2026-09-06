@@ -33,6 +33,24 @@ came from the last one.
 `measuredShare` in `core/types.ts` is `1 - estimatedDown / down`. The percentage on
 screen is computed from the ledger, never asserted.
 
+`unsized` travels beside it — how many requests source 3 stood in for — on every row,
+site, host and session delta. It is deliberately *not* a field of `UsageTotals`: that
+shape is copied verbatim into the portfolio that shows this product, and a count is
+not a byte figure. `addTotals` walks the byte fields; the count is summed alongside,
+the way `byType` is. The surfaces print the two together, with the measured bytes as a
+`≥` floor, because "31% estimated" says nothing about which direction the error runs
+and a per-type default has been six times low on a host that streams opaque.
+
+A measurement that arrives after its request expired still trains the model
+(`track/reconcile.ts`, `LATE_LEARNING_MS`). The row is written and is not rewritten;
+the sample is real and would otherwise be the one such a host never yields.
+
+**The days before recording began are unknown, not zero.** `track/history.ts` keeps
+the day the ledger started — the install, or the last deletion — and `forecast()`
+slices every earlier day of the cycle off its series. Every read of the daily store
+fills a missing day with 0, which is right for an idle day and wrong for a day the
+extension did not exist; the projection is where the two differ by a whole month.
+
 ### Reconciliation
 
 A response with no `Content-Length` is *parked* rather than guessed at: source 2
@@ -116,6 +134,23 @@ The governor (`limit/governor.ts`) keeps a live byte count per budgeted site in 
 primed from the database once and incremented synchronously afterwards. It is
 deliberately not re-read from rows: rows lag the traffic by the flush debounce, so a
 check against them would let a site sail past its cap for two seconds.
+
+Its pass runs when a counter's tier is wrong *or when the share crosses a rung of the
+alert ladder* (`crossesAlertThreshold` in `limit/alerts.ts`). The pass is also the
+alerting pass, and on a hard plan the tier is first wrong at 100%.
+
+A **hold** (`limit/holds.ts`) is the other thing the pass enforces: one tier on one
+site with an expiry, set from the popup with no budget behind it. It composes with a
+budget on the same site to the deeper tier — every tier's refused set is a prefix of
+one shed order, so there is nothing to arbitrate — and it explains the banner whenever
+it is at least as deep as the budget's own tier, because it is the newer decision and
+the one with a Resume button. Holds survive a deletion of all recorded usage; they are
+something the person asked for, not something derived from usage.
+
+`isEnforcedByUs` consults the site's own entry *and* `#all`. The plan-wide rule names
+no site, so its refusals arrive under the site of the tab that asked, and a lookup by
+that site alone credited nothing — which is how the product's showcase line, "~42 MB
+refused rather than spent", was one the product could not produce under a plan.
 
 ### What enforcement cannot do, stated in the UI
 
@@ -206,14 +241,19 @@ requests.ts    The webRequest listeners. The only source that sees every request
                including ones no page can observe. Prices from Content-Length here.
 reconcile.ts   The parked-request queue. Owns its own sweep timer AND drains on
                onSuspend — the maintenance alarm cannot substitute, it wakes a
-               fresh worker with an empty queue.
+               fresh worker with an empty queue. Also the late-learning keys.
 estimate.ts    The size model. Two different clamps (see Measurement); the cold-key
                one is wider than the outlier one on purpose.
 ledger.ts      Buffers, swap-flush, IndexedDB writes. A rejected write folds its
                deltas back into the live buffer; the failure surfaces as
-               lastFlushError on the dashboard rather than vanishing.
+               lastFlushError on the dashboard rather than vanishing. Two hooks
+               out: the usage observer (per request) and the post-flush hook.
+live.ts        The last sixty seconds, per host, in worker memory only. Fed by the
+               usage observer; read by the popup's Right now panel.
+history.ts     The day recording began. storage.local, so CLEAR_DATA can move it.
 tabs.ts        Tab-to-site mapping and visit lifecycle. Mirrored to storage.session.
-stats.ts       Every aggregation the UI reads, plus CSV/JSON export.
+stats.ts       Every aggregation the UI reads, plus CSV/JSON export. The cycle
+               status and the unsized counts ride the overview payload.
 wire.ts        Where the listeners are attached.
 ```
 
@@ -223,7 +263,8 @@ wire.ts        Where the listeners are attached.
 budgets.ts     Budget records. In chrome.storage.local, NOT sync — a budget names a
                site, and site names never leave the device. Migrates old sync rows.
 governor.ts    Live counters, threshold crossing, rule installation. Counters are
-               never re-read from rows; see Enforcement.
+               never re-read from rows; see Enforcement. Also applies holds.
+holds.ts       A tier on one site for an hour, set from the popup. storage.local.
 tiers.ts       The shed order. Each tier is a prefix of one list.
 enforce.ts     Session-scoped DNR rules and the decision map. ensureEnforcementReady
                republishes the rules before it resolves — restoring the map is not
@@ -297,6 +338,11 @@ Change what a byte figure means?    track/requests.ts → track/reconcile.ts →
                                     track/estimate.ts, then re-read Measurement above.
 Add an enforcement behaviour?       limit/tiers.ts (shed order) → limit/rules.ts →
                                     limit/governor.ts. Check the priority gap holds.
+Add a hold tier?                    limit/holds.ts (HOLD_TIERS) → the two popup buttons
+                                    → limit/notify.ts (noticeForHold). Never `off`.
+Change what the badge shows?        background.ts (updateBadge) and core/types.ts
+                                    (Settings.badge) together; the tooltip strings
+                                    are in i18n/core.json.
 Add an image pack?                  optimize/packs.ts AND tests/packs.test.mjs AND
                                     the host list in PRIVACY_POLICY.md — the policy
                                     says "no other host is ever rewritten", and
@@ -392,6 +438,17 @@ blindly obeyed or silently ignored.
 18. **Do not edit generated output.** `dist/`, `dist-throttle/`, the root
     `manifest.json` and `_locales/` are all built. Edit the source and rebuild.
 
+19. **A day before recording began is unknown, and every window that reaches past it
+    says so.** `recordingSince()` is the only source of that date; anything summing
+    the cycle — the projection, the headline, the plan panel — reads it and slices
+    or labels. A read of the daily store that fills a missing day with 0 is correct
+    for an idle day and is the whole defect for a pre-install one.
+
+20. **A count of estimated requests travels wherever the estimated bytes do.**
+    `unsized` on rows, hosts, session deltas and the overview; a surface that prints
+    the share without the count is back to "31% estimated" with no way to say which
+    way the error runs.
+
 ## Traps
 
 **Looks wrong, is correct:**
@@ -456,7 +513,13 @@ blindly obeyed or silently ignored.
 - **A capability with no surface is not shipped.** The largest single audit finding was
   fourteen implemented, in some cases tested, features no user could reach.
 - **No kbps claim in the published build.** MV3 cannot pace requests; saying otherwise
-  in a store listing would be false.
+  in a store listing would be false. The throttle channel's speed-cap field is behind
+  `__THROTTLE_BUILD__` with the code that honours it, so the store build has neither.
+- **The badge ships on.** An instrument nobody was given is not an instrument; the
+  audit found an install could run, correct, and watch someone spend 90% of a month in
+  silence. Off is a choice, not the default.
+- **A hold needs no limit and no tier.** The one-tap answer to a site eating the
+  connection right now cannot sit behind a form or a ceiling.
 
 ### Considered and deliberately not built
 

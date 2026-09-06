@@ -26,6 +26,7 @@ import {
   sortTypeBytes,
   type BudgetStatus,
   type ExtensionRequest,
+  type HoldView,
   type OverviewPayload,
   type SavingsReport,
   type SeriesPoint,
@@ -248,6 +249,8 @@ let searchTimer: number | null = null;
 /** Everything the detail panel is currently showing, for the partial re-renders below. */
 let detail: SiteDetailPayload | null = null;
 let detailBudget: BudgetStatus | null = null;
+/** The hold on the site, if one is in force. Set from the popup; endable from here. */
+let detailHold: HoldView | null = null;
 let detailOptimize: OptimizeSettings | null = null;
 let detailError: string | null = null;
 let detailPeriod: BudgetPeriod = "day";
@@ -517,7 +520,8 @@ interface StatCardOptions {
   hintTone?: "over";
   tone?: "estimate" | "saved";
   pill?: { text: string; title: string; tone?: "estimate" };
-  note?: string;
+  /** One line each, under the hint. */
+  notes?: string[];
   link?: { text: string; href: string };
 }
 
@@ -554,7 +558,7 @@ function statCard(label: string, value: string, options: StatCardOptions = {}): 
             dataset: options.hintTone ? { tone: options.hintTone } : {},
           })
         : undefined,
-      options.note ? element("p", { className: "stat-note", text: options.note }) : undefined,
+      ...(options.notes ?? []).map((note) => element("p", { className: "stat-note", text: note })),
       link,
     ],
   );
@@ -571,6 +575,8 @@ function previousWindowLabel(payload: OverviewPayload): string {
       return t(
         payload.settings.weekMode === "calendar" ? "dashboardWindowWeek" : "dashboardWindowSevenDays",
       );
+    case "cycle":
+      return t("dashboardWindowCycle");
     case "month":
       return t(
         payload.settings.monthMode === "calendar"
@@ -631,8 +637,13 @@ function projectionCard(payload: OverviewPayload): HTMLElement {
         });
   }
   if (!projection.confident) {
+    // How many days are on file and how many are needed, rather than a bare "not
+    // yet": the first is a sentence a person can check against tomorrow.
     return statCard(t("dashboardStatProjected"), t("dashboardProjectedTooEarly"), {
-      hint: t("dashboardProjectedTooEarlyHint"),
+      hint: t("dashboardProjectedTooEarlyHint", [
+        formatCount(projection.recordedDays),
+        formatCount(projection.neededDays),
+      ]),
     });
   }
   const split = splitBytes(projection.projected, units);
@@ -680,6 +691,17 @@ function renderStats(payload: OverviewPayload): void {
   const topBytes = top ? totalBytes(top.totals) : 0;
   const saved = payload.totals.saved;
   const comparison = comparisonNote(payload);
+  // The count beside the pill's percentage: how many responses the estimator stood
+  // in for. "82% measured" and "12 unsized requests" are two different facts about
+  // the same total, and the second is the one that says whether the model's part is
+  // one opaque video or forty small images.
+  const notes: string[] = [];
+  if (comparison) notes.push(comparison);
+  if (payload.unsized > 0) {
+    notes.push(
+      plural(payload.unsized, "dashboardUnsizedOne", "dashboardUnsizedOther"),
+    );
+  }
 
   replaceChildren(stats, [
     // Accuracy is a near-constant metric about the tool, and it overclaims: the
@@ -704,7 +726,7 @@ function renderStats(payload: OverviewPayload): void {
             },
           }
         : {}),
-      ...(comparison ? { note: comparison } : {}),
+      ...(notes.length > 0 ? { notes } : {}),
     }),
     statCard(t("dashboardStatTopSite"), top ? bytes(topBytes) : "–", {
       hint: top
@@ -860,6 +882,12 @@ function siteRow(entry: SiteUsage, peak: number, periodTotal: number): HTMLButto
           estimated ? "dashboardSiteShareOfTotalEstimated" : "dashboardSiteShareOfTotal",
           formatPercent(periodTotal > 0 ? own / periodTotal : 0),
         ),
+        // The count behind the caveat, where the row has no room to print it.
+        ...(entry.unsized > 0
+          ? {
+              title: plural(entry.unsized, "dashboardSiteUnsizedOne", "dashboardSiteUnsizedOther"),
+            }
+          : {}),
       }),
     ]),
     // The rows have always opened a panel and never looked like it.
@@ -942,13 +970,15 @@ function closeDetail(options: { fromHistory?: boolean } = {}): void {
 /** Fetches everything the panel shows. Returns false when nothing could be read. */
 async function loadDetail(site: string): Promise<boolean> {
   try {
-    const [payload, budgets, optimize] = await Promise.all([
+    const [payload, budgets, optimize, holds] = await Promise.all([
       sendRequest({ type: "GET_SITE", site, period }),
       sendRequest({ type: "GET_BUDGETS" }),
       sendRequest({ type: "GET_OPTIMIZE" }),
+      sendRequest({ type: "GET_HOLDS" }),
     ]);
     detail = payload;
     detailBudget = budgets.statuses.find((status) => status.budget.site === site) ?? null;
+    detailHold = holds.holds.find((hold) => hold.site === site) ?? null;
     detailOptimize = optimize.optimize;
     detailError = null;
     // A limit already on the site is the window to edit, not whatever was last picked.
@@ -1019,18 +1049,39 @@ function renderDetail(payload: SiteDetailPayload): void {
 
   replaceChildren(
     detailHostsBody,
-    payload.hosts.slice(0, 25).map((host) =>
-      element("tr", {}, [
+    payload.hosts.slice(0, 25).map((host) => {
+      // A host every one of whose requests the estimator priced never yields a
+      // measurement — a cross-origin edge that streams without a `Timing-Allow-Origin`
+      // — and every byte on its row is a model's. The tag says so in the estimate
+      // colour, because a table that lists such a host beside a measured one with no
+      // mark between them is laundering the guess.
+      const neverMeasured = host.requests > 0 && host.unsized >= host.requests;
+      return element("tr", {}, [
         element("td", {}, [
           element("span", { className: "host-name", text: host.host, title: host.host }),
           host.thirdParty
             ? element("span", { className: "host-tag", text: t("dashboardHostThirdParty") })
             : undefined,
+          neverMeasured
+            ? element("span", {
+                className: "host-tag",
+                dataset: { tone: "estimate" },
+                text: t("dashboardHostNeverMeasured"),
+                title: t("dashboardHostNeverMeasuredTitle"),
+              })
+            : undefined,
         ]),
-        element("td", { className: "numeric", text: bytes(host.down + host.up) }),
+        element("td", {
+          className: neverMeasured ? "numeric host-estimated" : "numeric",
+          text: neverMeasured ? `~${bytes(host.down + host.up)}` : bytes(host.down + host.up),
+        }),
         element("td", { className: "numeric", text: formatCount(host.requests) }),
-      ]),
-    ),
+        element("td", {
+          className: host.unsized > 0 ? "numeric host-estimated" : "numeric",
+          text: host.unsized > 0 ? formatCount(host.unsized) : "–",
+        }),
+      ]);
+    }),
   );
 }
 
@@ -1086,9 +1137,28 @@ function renderDetailLimit(): void {
   detailLimitControls.hidden = false;
   const status = detailBudget;
 
+  // A hold set from the popup, which is the one enforcement on a site that is not a
+  // limit. It is said before the limit, because when both are in force the hold is
+  // the newer decision and the one whose tier the page is actually seeing.
+  const hold = detailHold;
   replaceChildren(detailLimitStatus, [
     detailError
       ? element("p", { className: "form-status", dataset: { tone: "error" }, text: detailError })
+      : undefined,
+    hold
+      ? element("div", { className: "detail-presets" }, [
+          element("p", {
+            className: "field-hint",
+            text: t(hold.tier === "strict" ? "dashboardHoldPaused" : "dashboardHoldTrim", [
+              site,
+              formatAgo(hold.until),
+            ]),
+          }),
+          button("ghost-button", {
+            text: t("dashboardHoldResume"),
+            onClick: () => void endHold(site),
+          }),
+        ])
       : undefined,
     status ? limitStatusBlock(status) : undefined,
     status
@@ -1210,6 +1280,19 @@ async function applyLimit(site: string, size: number): Promise<void> {
       BUDGET_PERIOD_LABELS[detailPeriod],
     ]),
   );
+}
+
+async function endHold(site: string): Promise<void> {
+  try {
+    const { holds } = await sendRequest({ type: "CLEAR_HOLD", site });
+    detailHold = holds.find((hold) => hold.site === site) ?? null;
+    detailError = null;
+    announce(t("dashboardAnnounceHoldEnded", siteLabel(site)));
+  } catch (error) {
+    detailError = errorMessage(error, t("dashboardErrorGeneric"));
+    announce(detailError);
+  }
+  rerenderKeepingFocus(detailLimitBlock, renderDetailLimit);
 }
 
 type LimitRequest = Extract<
@@ -1513,14 +1596,20 @@ async function loadPlan(): Promise<void> {
   const settings = overview?.settings;
   if (!settings) return;
   try {
-    const { elapsedDays, totalDays } = cycleElapsed(settings);
-    const [series, budgets] = await Promise.all([
-      sendRequest({ type: "GET_SERIES", days: elapsedDays }),
-      sendRequest({ type: "GET_BUDGETS" }),
-    ]);
-    const used = series.points.reduce((sum, point) => sum + point.down + point.up, 0);
+    // The cycle rides the overview payload now — the same rows and the same read the
+    // headline is summed from — so this is one request rather than two, and the plan
+    // panel cannot disagree with the tiles above it by a poll.
+    const cycle = overview?.cycle ?? null;
+    const { elapsedDays, totalDays } = cycle ?? cycleElapsed(settings);
+    const used =
+      cycle?.used ??
+      (await sendRequest({ type: "GET_SERIES", days: elapsedDays })).points.reduce(
+        (sum, point) => sum + point.down + point.up,
+        0,
+      );
+    const budgets = await sendRequest({ type: "GET_BUDGETS" });
     const everything = budgets.statuses.find((status) => status.budget.site === ALL_SITES) ?? null;
-    renderPlan(settings, used, elapsedDays, totalDays, everything);
+    renderPlan(settings, used, elapsedDays, totalDays, everything, cycle);
   } catch (error) {
     planNote.textContent = errorMessage(error, t("dashboardErrorReadCycle"));
   }
@@ -1532,6 +1621,7 @@ function renderPlan(
   elapsedDays: number,
   totalDays: number,
   everything: BudgetStatus | null,
+  cycle: OverviewPayload["cycle"],
 ): void {
   const from = formatDayShort(cycleRange(settings).from);
   const resetsAt = cycleResetsAt(settings);
@@ -1539,6 +1629,19 @@ function renderPlan(
   planNote.textContent = t("dashboardPlanNote", [String(elapsedDays), String(totalDays), from]);
 
   const plan = settings.planBytes;
+
+  // Days of the cycle before recording began are unknown, not zero, and every figure
+  // in this panel is "since Byte Budget started counting" until the next reset.
+  const sinceNote =
+    cycle && cycle.unknownDays > 0
+      ? element("p", {
+          className: "field-hint",
+          text: t(cycle.unknownDays === 1 ? "dashboardPlanSinceOne" : "dashboardPlanSinceOther", [
+            formatDayShort(cycle.recordedFrom),
+            formatCount(cycle.unknownDays),
+          ]),
+        })
+      : undefined;
 
   if (plan === null) {
     // Whole sentence per case rather than an anchor phrase dropped into a shared one:
@@ -1560,6 +1663,7 @@ function renderPlan(
       }),
       element("p", { className: "field-hint", text: t("dashboardPlanNoPlanHint") }),
       element("p", { className: "field-hint", text: cycleNote }),
+      sinceNote,
       element("p", { className: "detail-presets" }, [
         linkButton(t("dashboardPlanSetLink"), "./settings.html"),
       ]),
@@ -1609,6 +1713,7 @@ function renderPlan(
             ])
           : t("dashboardPlanSpent"),
     }),
+    sinceNote,
     planEnforcementBlock(plan, everything, resetsAt),
   ]);
 }
@@ -1817,9 +1922,28 @@ onSettingsChanged((settings) => {
   void loadPlan();
 });
 
+/**
+ * The cycle tab exists only while there is a cycle. Hidden rather than locked: a lock
+ * says "Plus", and a calendar month nobody set a plan for is not that.
+ */
+function paintCycleTab(planSet: boolean): void {
+  const node = periodTabs.querySelector<HTMLButtonElement>('[data-option="cycle"]');
+  if (node) node.hidden = !planSet;
+}
+
 async function load(): Promise<void> {
   try {
     const payload = await sendRequest({ type: "GET_OVERVIEW", period });
+    const planSet = payload.settings.planBytes !== null;
+    paintCycleTab(planSet);
+    // A cycle period can outlive the plan it belonged to. Re-fetched as today rather
+    // than drawn under a tab that is no longer on screen.
+    if (!planSet && period === "cycle") {
+      period = "today";
+      paintGroup(periodTabs, period);
+      await load();
+      return;
+    }
     overview = payload;
     paintDashboardSettings(payload.settings);
     periodDescription.textContent = formatPeriodDescription(payload.description);

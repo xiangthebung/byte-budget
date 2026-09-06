@@ -11,7 +11,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { forecast } from "../src/core/forecast.ts";
+import { forecast, MIN_RATE_DAYS, neededDaysFor } from "../src/core/forecast.ts";
 
 const GB = 1_000_000_000;
 const DAY_MS = 86_400_000;
@@ -34,12 +34,88 @@ test("no plan means no projection", () => {
   assert.equal(forecast(series(9, GB), 10, 31, -1, CYCLE_START), null);
 });
 
-test("a cycle with no finished day in it projects nothing", () => {
-  // Day one. One number, a few hours old. There is no honest sentence to write.
-  assert.equal(forecast([2 * GB], 1, 31, 15 * GB, CYCLE_START), null);
-  assert.equal(forecast([], 0, 31, 15 * GB, CYCLE_START), null);
+test("a cycle with no finished day in it says so rather than projecting nothing", () => {
+  // Day one. One number, a few hours old. The honest sentence is "too early, and here
+  // is how many days that takes" — which used to be `null`, and a surface handed
+  // `null` on the first day showed no card at all, indistinguishable from a feature
+  // that does not exist. This replaced the test that pinned the `null`.
+  const first = forecast([2 * GB], 1, 31, 15 * GB, CYCLE_START);
+  assert.ok(first, "day one still answers");
+  assert.equal(first.confident, false);
+  assert.equal(first.recordedDays, 0);
+  assert.equal(first.neededDays, neededDaysFor(31));
+  assert.match(first.basis, /too early/i);
+  assert.match(first.basis, /0 days/);
+  assert.match(first.basis, /7 days are needed/);
+
+  const empty = forecast([], 0, 31, 15 * GB, CYCLE_START);
+  assert.ok(empty);
+  assert.equal(empty.confident, false);
+  assert.equal(empty.projected, 0);
   // A cycle with no length is not a window to project over.
   assert.equal(forecast(series(9, GB), 10, 0, 15 * GB, CYCLE_START), null);
+});
+
+test("the days needed are the larger of the sample floor and a fifth of the cycle", () => {
+  assert.equal(neededDaysFor(7), MIN_RATE_DAYS);
+  assert.equal(neededDaysFor(30), 6);
+  assert.equal(neededDaysFor(31), 7);
+  assert.equal(neededDaysFor(28), 6);
+  // And `confident` flips exactly there, so the count a surface prints is the count
+  // that matters rather than an approximation of it.
+  const needed = neededDaysFor(30);
+  assert.equal(forecast(series(needed - 1, GB), needed, 30, 15 * GB, CYCLE_START).confident, false);
+  assert.equal(forecast(series(needed, GB), needed + 1, 30, 15 * GB, CYCLE_START).confident, true);
+});
+
+test("days before recording began are unknown, not zero", () => {
+  // Installed on the twelfth day of a 31-day cycle. The eleven days before are read
+  // by the ledger as zero — there are simply no rows — and used to be fed in as
+  // eleven measured days of nothing: the rate was "established" after one page load
+  // and a confident month was printed from it.
+  const days = [...Array(11).fill(0), ...Array(9).fill(GB), GB];
+  const projection = forecast(days, 21, 31, 15 * GB, CYCLE_START, 11);
+
+  assert.equal(projection.unknownDays, 11);
+  assert.equal(projection.recordedDays, 9, "the finished days since the install");
+  assert.equal(projection.confident, true, "nine recorded days clear a 31-day cycle's floor");
+  // 9 recorded days + today + 10 to come, at 1 GB. The unknown days add nothing:
+  // they are not carried as zero into the total, and they are not modelled either.
+  assert.equal(projection.projected, 9 * GB + GB + 10 * GB);
+  assert.match(projection.basis, /first 11 days of this cycle passed before Byte Budget was counting/);
+  assert.match(projection.basis, /9 days of this cycle are measured/);
+
+  // Without the parameter the same series reads as twenty measured days at 0.55 GB,
+  // which is the defect: the rate is wrong and the confidence is unearned.
+  const naive = forecast(days, 21, 31, 15 * GB, CYCLE_START);
+  assert.equal(naive.recordedDays, 20);
+  assert.ok(naive.projected < projection.projected);
+});
+
+test("the unknown days keep the rate from being established too early", () => {
+  // Three recorded days after an eleven-day gap: fourteen elapsed, three known.
+  const days = [...Array(11).fill(0), GB, GB, GB, GB];
+  const projection = forecast(days, 15, 31, 15 * GB, CYCLE_START, 11);
+  assert.equal(projection.recordedDays, 3);
+  assert.equal(projection.confident, false);
+  assert.match(projection.basis, /3 days of this 31-day cycle have finished since Byte Budget started counting/);
+});
+
+test("the exhaustion date is placed on the recorded days, not the unknown ones", () => {
+  // 5 GB a day from day 12 against a 12 GB plan: the crossing is four fifths of the
+  // way through the third recorded day, which is day 14 of the cycle.
+  const days = [...Array(11).fill(0), ...Array(5).fill(5 * GB), 5 * GB];
+  const projection = forecast(days, 17, 30, 12 * GB, CYCLE_START, 11);
+  assert.equal(dayOffset(projection.exhaustedOn), 11 + 2.4);
+});
+
+test("unknown days are clamped to the cycle so far", () => {
+  // More unknown days than elapsed days cannot happen, but a bad `recordingSince`
+  // could ask for it; the answer is "nothing recorded" rather than a negative slice.
+  const projection = forecast(series(3, GB), 4, 30, 15 * GB, CYCLE_START, 40);
+  assert.equal(projection.unknownDays, 4);
+  assert.equal(projection.recordedDays, 0);
+  assert.equal(projection.confident, false);
 });
 
 test("too few finished days is answered with confident: false, not a guess", () => {

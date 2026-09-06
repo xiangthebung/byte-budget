@@ -116,6 +116,59 @@ let sweep: ReturnType<typeof setTimeout> | null = null;
  */
 let lastSweepNow = 0;
 
+/**
+ * Requests committed on an estimate, kept addressable a little longer for the model's
+ * sake.
+ *
+ * A timing report that arrives after its request expired — the page's batch was late,
+ * the queue was over its cap and forced the entry out early, the worker that parked
+ * it was torn down and this one never saw it — used to be discarded, because the row
+ * it could have corrected is already written. The row is indeed gone, but the
+ * *measurement* is not worthless: it is exactly the sample a host that always streams
+ * without a `Content-Length` never otherwise yields, and without it the model priced
+ * that host at the per-type default for ever. So the host and type are remembered
+ * for `LATE_LEARNING_MS`, and a late report trains the model even though it cannot
+ * settle the request. The estimate already booked stays booked and stays labelled
+ * estimated — nothing here rewrites a total — but the next request on that host is
+ * priced from a real size.
+ */
+const LATE_LEARNING_MS = 90_000;
+const MAX_LATE = 600;
+
+interface LateKey {
+  host: string;
+  type: CommitEntry["type"];
+  at: number;
+}
+
+/** `tabId|url` of recently estimated requests. Insertion-ordered, oldest first. */
+const lateKeys = new Map<string, LateKey>();
+
+function rememberForLateLearning(matchKey: string, entry: CommitEntry, now: number): void {
+  if (!entry.host) return;
+  // Re-inserted so the map's order stays the eviction order.
+  lateKeys.delete(matchKey);
+  lateKeys.set(matchKey, { host: entry.host, type: entry.type, at: now });
+  while (lateKeys.size > MAX_LATE) {
+    const oldest = lateKeys.keys().next();
+    if (oldest.done) break;
+    lateKeys.delete(oldest.value);
+  }
+}
+
+/** A late report's host and type, if the request expired recently enough to remember. */
+function takeLateKey(matchKey: string, now: number): LateKey | null {
+  const late = lateKeys.get(matchKey);
+  if (!late) return null;
+  lateKeys.delete(matchKey);
+  return now - late.at <= LATE_LEARNING_MS ? late : null;
+}
+
+/** How many expired requests are still remembered for a late measurement. For tests. */
+export function lateLearningCount(): number {
+  return lateKeys.size;
+}
+
 /** Drops the fragment: it is never sent, so it can only break a match. */
 export function matchableUrl(url: string): string {
   const hash = url.indexOf("#");
@@ -226,11 +279,12 @@ function unpark(pending: Pending): void {
  * safe direction: the alternative is a request claiming a measurement it does not
  * have.
  */
-function commitEstimate(pending: Pending): void {
+function commitEstimate(pending: Pending, now = Date.now()): void {
   unpark(pending);
   const entry = pending.entry;
   entry.down = Math.max(pending.estimate, pending.headerBytes);
   entry.estimatedDown = entry.down;
+  rememberForLateLearning(pending.matchKey, entry, now);
   ledger.record(entry);
 }
 
@@ -241,12 +295,23 @@ function commitEstimate(pending: Pending): void {
  * estimate rather than adding to it. Returns whether anything matched, which is
  * what tells the caller a timing report was useful rather than noise.
  */
-export function settleTiming(tabId: number, url: string, transferSize: number): boolean {
+export function settleTiming(
+  tabId: number,
+  url: string,
+  transferSize: number,
+  now = Date.now(),
+): boolean {
   if (transferSize <= 0) return false;
-  const bucket = index.get(matchKeyFor(tabId, url));
+  const matchKey = matchKeyFor(tabId, url);
+  const bucket = index.get(matchKey);
   // A miss is normal and not an error: most resources were already sized from a
-  // `Content-Length`, so nothing was parked for them.
-  if (!bucket) return false;
+  // `Content-Length`, so nothing was parked for them. The one miss worth acting on is
+  // a request that was parked and has since expired — see `LATE_LEARNING_MS`.
+  if (!bucket) {
+    const late = takeLateKey(matchKey, now);
+    if (late) sizeModel.observe(late.host, late.type, transferSize);
+    return false;
+  }
 
   // The oldest entry still waiting. Several identical URLs in one tab are the same
   // resource requested more than once, and any pairing of sizes to requests is as
@@ -301,7 +366,7 @@ export function expirePending(now: number, force = 0): void {
     if (!tooOld && expired >= force) break;
 
     queue.shift();
-    commitEstimate(pending);
+    commitEstimate(pending, now);
     expired += 1;
   }
 
@@ -309,6 +374,11 @@ export function expirePending(now: number, force = 0): void {
     index.clear();
     cancelSweep();
   }
+}
+
+/** Forgets the late-learning keys. For "delete all recorded usage", and for tests. */
+export function forgetLateLearning(): void {
+  lateKeys.clear();
 }
 
 /**

@@ -10,19 +10,22 @@
  */
 
 import { bucketRange, clearAllUsage, getAll, STORES } from "./core/db";
-import { formatBytesBadge } from "./core/format";
-import { dayKey, retentionCutoff } from "./core/period";
+import { formatAgo, formatBytes, formatBytesBadge, formatPercent } from "./core/format";
+import { t } from "./core/i18n";
+import { cycleResetsAt, dayKey, retentionCutoff } from "./core/period";
 import { runtimeFile } from "./core/runtime";
 import { getSettings, onSettingsChanged, saveSettings } from "./core/settings";
 import type { Envelope, ExtensionRequest } from "./core/messages";
 import { ALL_SITES, emptyTotals, type Settings, type UsageRow } from "./core/types";
 import {
+  ALERT_THRESHOLDS,
   checkAllowanceAlerts,
   clearAlertHistory,
   getAlertSettings,
   isAlertNotification,
   saveAlertSettings,
 } from "./limit/alerts";
+import { clearHold, setHold } from "./limit/holds";
 import {
   getBudgets,
   grantBytes,
@@ -41,10 +44,13 @@ import {
   setEnforcement,
 } from "./limit/enforce";
 import {
+  budgetStatusFor,
   budgetStatuses,
   budgetsChanged,
   currentPeriodKey,
   forgetAnnouncedTab,
+  holdSnapshot,
+  holdsChanged,
   noteUsage,
   noticeForTab,
   refreshWindows,
@@ -76,8 +82,16 @@ import { PLUS_ALLOW_RULES } from "./plus/rules";
 import { budgetPeriodAllowed, FREE_SITE_LIMITS, reportDays } from "./plus/tier";
 import { publishRules, ruleCounts } from "./rules/session";
 import { sizeModel } from "./track/estimate";
+import { markRecordingStart } from "./track/history";
 import { ledger, pruneOldRows } from "./track/ledger";
-import { drainPending, expirePending, forgetTab, settleTiming } from "./track/reconcile";
+import { noteLiveUsage, resetLiveUsage } from "./track/live";
+import {
+  drainPending,
+  expirePending,
+  forgetLateLearning,
+  forgetTab,
+  settleTiming,
+} from "./track/reconcile";
 import { registerRequestListeners, sweepUploads } from "./track/requests";
 import { siteKeyFromUrl } from "./core/sites";
 import {
@@ -90,7 +104,14 @@ import {
   tabIdsForSite,
   tabRecord,
 } from "./track/tabs";
-import { dailySeries, exportData, overview, siteDetail, storageReport } from "./track/stats";
+import {
+  cycleUsed,
+  dailySeries,
+  exportData,
+  overview,
+  siteDetail,
+  storageReport,
+} from "./track/stats";
 
 const MAINTENANCE_ALARM = "maintenance";
 const PRUNE_ALARM = "prune";
@@ -100,7 +121,16 @@ const PRUNE_ALARM = "prune";
  * ------------------------------------------------------------------ */
 
 ledger.setPreFlush(() => expirePending(Date.now()));
-ledger.setUsageObserver(noteUsage);
+// Two readers of the same event: the governor, which decides, and the "right now"
+// ring, which only remembers. Both synchronous, both per request.
+ledger.setUsageObserver((site, bytes, host) => {
+  noteUsage(site, bytes);
+  noteLiveUsage(site, host, bytes);
+});
+// The badge follows the ledger's own clock — every flush that lands — throttled so a
+// page that flushes every two seconds repaints the toolbar a few times a minute
+// rather than thirty.
+ledger.setPostFlush(queueBadgeUpdate);
 setOptimizedResolver((site, tabId) => {
   const settings = optimizeSettingsSnapshot();
   return Boolean(settings) && optimizes(settings!, site) && !isHoldoutTab(tabId);
@@ -249,7 +279,16 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install" || details.reason === "update") {
     void injectIntoOpenTabs();
   }
-  if (details.reason === "install") void openWelcome();
+  if (details.reason === "install") {
+    // Today is the first day anything can be known about. Every window that reaches
+    // back past it — the plan cycle, above all — says so rather than reading the
+    // days before as zero. An update leaves the date alone: the ledger's oldest row
+    // already answers for a profile that predates the field.
+    void markRecordingStart().catch((error: unknown) => {
+      console.error("Byte Budget: could not record the install day", error);
+    });
+    void openWelcome();
+  }
 });
 
 /**
@@ -480,10 +519,82 @@ async function injectIntoOpenTabs(): Promise<void> {
  * Badge
  * ------------------------------------------------------------------ */
 
+/**
+ * The badge's colours, one per rung of the alert ladder.
+ *
+ * Teal is the accent; amber is `--estimate`, red is `--danger`, and past the plan a
+ * darker red. A glance at the toolbar then says the same thing the notifications say
+ * at 75, 90 and 100 — and it says it continuously, which the notifications cannot.
+ */
+const BADGE_COLOURS = {
+  fine: "#0f6a62",
+  warn: "#9c5406",
+  urgent: "#b6382f",
+  over: "#7a1f18",
+} as const;
+
+function badgeColourFor(share: number): string {
+  const [warn = 0.75, urgent = 0.9, over = 1] = ALERT_THRESHOLDS;
+  if (share >= over) return BADGE_COLOURS.over;
+  if (share >= urgent) return BADGE_COLOURS.urgent;
+  if (share >= warn) return BADGE_COLOURS.warn;
+  return BADGE_COLOURS.fine;
+}
+
+/** Throttles the post-flush badge repaint; see `ledger.setPostFlush`. */
+const BADGE_THROTTLE_MS = 3000;
+let badgeTimer: ReturnType<typeof setTimeout> | null = null;
+
+function queueBadgeUpdate(): void {
+  if (badgeTimer !== null) return;
+  badgeTimer = setTimeout(() => {
+    badgeTimer = null;
+    void updateBadge().catch((error: unknown) => {
+      console.error("Byte Budget: could not update the badge", error);
+    });
+  }, BADGE_THROTTLE_MS);
+}
+
+/**
+ * Paints the toolbar badge, and the tooltip that explains it.
+ *
+ * `plan` is the share of the plan still left, from the same counter the limit card
+ * reads when a `#all` budget is tracking the cycle, and from the cycle's daily rows
+ * otherwise — so the badge and the popup cannot disagree about the plan. Below a plan
+ * it shows today's bytes, which is the most a badge can honestly say about a figure
+ * with nothing to divide it by.
+ */
 async function updateBadge(settings?: Settings): Promise<void> {
   const resolved = settings ?? (await getSettings());
+  const action = chrome.action;
+
   if (resolved.badge === "off") {
-    await chrome.action.setBadgeText({ text: "" });
+    await action.setBadgeText({ text: "" });
+    await action.setTitle({ title: t("extensionActionTitle") });
+    return;
+  }
+
+  if (resolved.badge === "plan" && resolved.planBytes !== null) {
+    const plan = resolved.planBytes;
+    const status = await budgetStatusFor(ALL_SITES);
+    const used =
+      status && status.budget.period === "month" ? status.used : await cycleUsed(resolved);
+    const share = plan > 0 ? used / plan : 0;
+    const left = Math.max(0, 1 - share);
+    const resets = formatAgo(cycleResetsAt(resolved));
+    await action.setBadgeBackgroundColor({ color: badgeColourFor(share) });
+    await action.setBadgeTextColor({ color: "#ffffff" });
+    // Four characters at most, which `formatPercent` keeps to: `>99%` and `<1%` fit,
+    // and "over" is plainer than "0%" for the one state that is not a share.
+    await action.setBadgeText({ text: share >= 1 ? t("coreBadgeOver") : formatPercent(left) });
+    await action.setTitle({
+      title: t(share >= 1 ? "coreBadgeOverTitle" : "coreBadgePlanTitle", [
+        formatPercent(left),
+        formatBytes(used, resolved.units),
+        formatBytes(plan, resolved.units),
+        resets,
+      ]),
+    });
     return;
   }
 
@@ -502,10 +613,15 @@ async function updateBadge(settings?: Settings): Promise<void> {
     }
   }
 
-  await chrome.action.setBadgeBackgroundColor({ color: "#0f6a62" });
-  await chrome.action.setBadgeTextColor({ color: "#ffffff" });
-  await chrome.action.setBadgeText({
-    text: formatBytesBadge(totals.down + totals.up, resolved.units),
+  const used = totals.down + totals.up;
+  await action.setBadgeBackgroundColor({ color: BADGE_COLOURS.fine });
+  await action.setBadgeTextColor({ color: "#ffffff" });
+  await action.setBadgeText({ text: formatBytesBadge(used, resolved.units) });
+  await action.setTitle({
+    title: t(
+      resolved.badge === "session" ? "coreBadgeSessionTitle" : "coreBadgeTodayTitle",
+      formatBytes(used, resolved.units),
+    ),
   });
 }
 
@@ -598,7 +714,7 @@ async function handle(
       // expire here: a measurement two seconds away beats an estimate now, and a
       // committed estimate cannot be corrected later.
       await ledger.flush();
-      return overview(request.period, await getSettings());
+      return overview(request.period, await getSettings(), holdSnapshot());
     }
 
     case "GET_SITE": {
@@ -664,17 +780,27 @@ async function handle(
       // life of the worker — so without this the next request rewrote its key with
       // every sample it had ever seen.
       sizeModel.reset();
-      // Budgets are settings and survive, but their windows restart from zero —
-      // otherwise a site would stay limited on the strength of usage that no longer
-      // exists anywhere.
-      await resetCounters();
-      // After the governor, not before: it is what walks the budgeted sites back to
-      // `off` and withdraws their banners. This then drops anything it does not know
-      // about — a site whose budget was removed while it was being enforced, or an
-      // entry restored from the session mirror with no budget behind it any more.
-      // Rules outliving the usage they were derived from is the case where someone
-      // deletes everything and the browser stays broken.
+      // The last minute and the late-learning keys are recorded usage too, held in
+      // memory; a "right now" panel still showing traffic from before the deletion
+      // would be the session-total defect at a shorter timescale.
+      resetLiveUsage();
+      forgetLateLearning();
+      // Everything before now is unknown again, the way it was before the install.
+      // The projection reads this: a cycle whose first fortnight was just deleted must
+      // not model the month from a fortnight of zeroes.
+      await markRecordingStart();
+      // Every enforcement decision goes first. This drops anything the governor does
+      // not know about — a site whose budget was removed while it was being enforced,
+      // or an entry restored from the session mirror with no budget behind it any
+      // more. Rules outliving the usage they were derived from is the case where
+      // someone deletes everything and the browser stays broken.
       await clearEnforcement();
+      // Then the governor: budgets are settings and survive, but their windows restart
+      // from zero — otherwise a site would stay limited on the strength of usage that
+      // no longer exists anywhere. Its pass is also what withdraws the banners, and
+      // what puts back the one kind of rule that is not derived from usage: a hold,
+      // which the person asked for and which the clear above took down with the rest.
+      await resetCounters();
       // The record of which thresholds have already been announced goes with the usage
       // it was derived from. `resetCounters` above has just put every window back to
       // zero, so a kept record would mean climbing through 75% and 90% again in total
@@ -743,6 +869,28 @@ async function handle(
       await grantBytes(request.site, request.bytes, await currentPeriodKey(request.site));
       await budgetsChanged();
       return { statuses: await budgetStatuses() };
+    }
+
+    case "SET_HOLD": {
+      if (!isTier(request.tier)) throw new Error(`Unknown tier: ${String(request.tier)}`);
+      if (!request.site) throw new Error("Which site is the hold for?");
+      await setHold(request.site, request.tier, request.minutes);
+      // No free-tier ceiling here. A hold is the one-tap answer to a site eating the
+      // connection right now, and it expires on its own; charging for it would be
+      // charging for the emergency stop.
+      await holdsChanged();
+      return { holds: holdSnapshot() };
+    }
+
+    case "CLEAR_HOLD": {
+      await clearHold(request.site);
+      await holdsChanged();
+      return { holds: holdSnapshot() };
+    }
+
+    case "GET_HOLDS": {
+      await budgetStatuses();
+      return { holds: holdSnapshot() };
     }
 
     case "GET_TAB_NOTICE": {

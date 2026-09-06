@@ -190,6 +190,28 @@ test("a limit is only credited with the refusals its own tier makes", async () =
   await clearEnforcement();
 });
 
+test("a refusal under the limit over everything is credited to the site that made it", async () => {
+  // The `#all` rule names no site, so a request it refuses arrives at the error
+  // handler under the site of the tab that asked. The lookup used to be by that site
+  // alone, found nothing, and booked every plan-wide refusal as `saved = 0`: the
+  // popup had no "refused rather than spent" line and the dashboard read "Data
+  // prevented 0 B" while the server was never asked for the image.
+  await clearEnforcement();
+  await setEnforcement(ALL_SITES, "lean", []);
+  assert.equal(isEnforcedByUs("any.example", "image"), true);
+  assert.equal(isEnforcedByUs("any.example", "media"), true);
+  assert.equal(isEnforcedByUs("any.example", "script"), false, "lean lets scripts through");
+  assert.equal(isEnforcedByUs("#background", "image"), true, "the one budget that reaches tabless traffic");
+
+  // A site's own limit and the total compose: the deeper of the two decides, the way
+  // the rules themselves do.
+  await setEnforcement("a.example", "strict", [1]);
+  assert.equal(isEnforcedByUs("a.example", "script"), true);
+  assert.equal(isEnforcedByUs("b.example", "script"), false);
+  await clearEnforcement();
+  assert.equal(isEnforcedByUs("any.example", "image"), false, "nothing credited once lifted");
+});
+
 /* ------------------------------------------------------------------ *
  * Composition, and what it cannot decide
  * ------------------------------------------------------------------ */

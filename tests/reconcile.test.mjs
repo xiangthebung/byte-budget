@@ -33,7 +33,9 @@ import {
   addPending,
   drainPending,
   expirePending,
+  forgetLateLearning,
   forgetTab,
+  lateLearningCount,
   matchableUrl,
   pendingCount,
   settleTiming,
@@ -60,6 +62,7 @@ sizeModel.observe = (host, type, bytes) => {
  */
 function reset() {
   drainPending();
+  forgetLateLearning();
   committed = [];
   observed = [];
 }
@@ -202,6 +205,48 @@ test("a settled request is never committed twice", (t) => {
 
   assert.deepEqual(committed, [entry]);
   assert.equal(entry.down, 41_820, "the first measurement stands");
+});
+
+test("a measurement that arrives after the estimate still teaches the model", (t) => {
+  t.after(reset);
+  reset();
+
+  // Parked, expired on the queue's own timer, and committed as an estimate — the
+  // request is on the ledger and cannot be corrected. Then the page's report lands.
+  // It used to be discarded, and a host that always streams without a length stayed
+  // at the per-type default for ever: the one sample it ever yields arrived a second
+  // too late, every time.
+  const entry = park({ url: "https://video.example/seg-1.ts", type: "media", host: "video.example" });
+  const parkedAt = entry.at;
+  expirePending(parkedAt + 8000);
+  assert.equal(entry.estimatedDown, 50_000, "committed on the estimate");
+  assert.deepEqual(observed, [], "nothing learned from a guess");
+  assert.equal(lateLearningCount(), 1);
+
+  // Cannot settle the request — it is gone — but the size is real and the key is
+  // remembered, so the model learns what this host actually serves.
+  assert.equal(settleTiming(7, "https://video.example/seg-1.ts", 1_900_000, parkedAt + 9000), false);
+  assert.deepEqual(observed, [{ host: "video.example", type: "media", bytes: 1_900_000 }]);
+  assert.equal(entry.down, 50_000, "the booked estimate is not rewritten");
+  assert.equal(entry.estimatedDown, 50_000, "and stays labelled as one");
+  assert.equal(lateLearningCount(), 0, "one late report per expired request");
+
+  // A second report for the same request teaches nothing more.
+  assert.equal(settleTiming(7, "https://video.example/seg-1.ts", 1_900_000, parkedAt + 9500), false);
+  assert.equal(observed.length, 1);
+});
+
+test("a report too long after the estimate is not a sample", (t) => {
+  t.after(reset);
+  reset();
+
+  // Ninety seconds bounds it. A key kept for ever would eventually pair a report
+  // from a fresh page load with an expiry from an old one on the same URL.
+  const entry = park({ url: "https://video.example/seg-2.ts", type: "media", host: "video.example" });
+  expirePending(entry.at + 8000);
+  assert.equal(settleTiming(7, "https://video.example/seg-2.ts", 1_900_000, entry.at + 8000 + 91_000), false);
+  assert.deepEqual(observed, []);
+  assert.equal(lateLearningCount(), 0, "the stale key is dropped on the miss");
 });
 
 test("a timing report for another tab settles nothing", (t) => {

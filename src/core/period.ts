@@ -121,7 +121,7 @@ export interface DayRange {
  */
 export function periodRange(
   period: Period,
-  settings: Pick<Settings, "weekMode" | "monthMode" | "weekStart">,
+  settings: Pick<Settings, "weekMode" | "monthMode" | "weekStart" | "cycleStartDay">,
   now: Date = new Date(),
 ): DayRange | null {
   const today = dayKey(now);
@@ -134,6 +134,10 @@ export function periodRange(
       return settings.weekMode === "calendar"
         ? { from: startOfWeek(today, settings.weekStart), to: today }
         : { from: addDays(today, -6), to: today };
+    // The billing cycle so far, through the same function the plan headline and the
+    // projection use, so "this cycle" on a period tab is the same days as the meter.
+    case "cycle":
+      return cycleRange(settings, now);
     case "month":
       return settings.monthMode === "calendar"
         ? { from: startOfMonth(today), to: today }
@@ -262,6 +266,7 @@ export type PeriodKind =
   | "day"
   | "calendarWeek"
   | "rollingWeek"
+  | "cycle"
   | "calendarMonth"
   | "rollingMonth";
 
@@ -292,7 +297,7 @@ export interface PeriodDescription {
  */
 export function periodDescription(
   period: Period,
-  settings: Pick<Settings, "weekMode" | "monthMode" | "weekStart">,
+  settings: Pick<Settings, "weekMode" | "monthMode" | "weekStart" | "cycleStartDay">,
   now: Date = new Date(),
 ): PeriodDescription {
   const range = periodRange(period, settings, now);
@@ -305,9 +310,11 @@ export function periodDescription(
         ? settings.weekMode === "calendar"
           ? "calendarWeek"
           : "rollingWeek"
-        : settings.monthMode === "calendar"
-          ? "calendarMonth"
-          : "rollingMonth";
+        : period === "cycle"
+          ? "cycle"
+          : settings.monthMode === "calendar"
+            ? "calendarMonth"
+            : "rollingMonth";
 
   return {
     kind,
@@ -339,6 +346,8 @@ export function formatPeriodDescription(description: PeriodDescription): string 
       return t("corePeriodToday", formatDayShort(description.to));
     case "calendarWeek":
       return t("corePeriodCalendarWeek", span);
+    case "cycle":
+      return t("corePeriodCycle", span);
     case "calendarMonth":
       return t("corePeriodCalendarMonth", span);
     case "rollingWeek":

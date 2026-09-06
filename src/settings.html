@@ -539,6 +539,33 @@
                 </div>
               </div>
 
+              <!--
+                Throttle channel only. `settings.ts` reveals this row when the build
+                carries the `debugger` permission; the store build never shows it,
+                because it has no API that can pace a request and a field it cannot
+                honour would be a claim it cannot keep.
+              -->
+              <div class="row" id="limit-kbps-row" hidden>
+                <div class="row-copy">
+                  <label class="row-label" for="limit-kbps" data-i18n="settingsLimitKbpsLabel"
+                    >Speed cap</label
+                  >
+                  <span class="row-sub" data-i18n="settingsLimitKbpsHint"></span>
+                </div>
+                <div class="row-control">
+                  <input
+                    class="search-input value-input"
+                    id="limit-kbps"
+                    type="text"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="800"
+                    data-i18n-placeholder="settingsLimitKbpsPlaceholder"
+                  />
+                </div>
+              </div>
+
               <div class="row">
                 <div class="row-copy">
                   <span

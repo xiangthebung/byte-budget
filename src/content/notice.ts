@@ -45,6 +45,8 @@
     headline: string;
     detail: string;
     canPause: boolean;
+    /** A hold the person set from the popup, rather than a limit. Offers Resume. */
+    hold: boolean;
   }
 
   /**
@@ -71,6 +73,7 @@
       notice.headline,
       notice.detail,
       String(notice.canPause),
+      String(notice.hold),
     ].join(" ");
   }
 
@@ -236,17 +239,22 @@
     row.append(dot, copy, close);
     card.append(row);
 
-    if (notice.canPause) {
+    // A hold has a different way out from a limit. Pausing a limit the site does not
+    // have would be an error; the answer to "I asked for this and I have changed my
+    // mind" is to end the hold, so that is the button.
+    if (notice.hold || notice.canPause) {
       const actions = document.createElement("div");
       actions.className = "actions";
 
       const pause = document.createElement("button");
       pause.type = "button";
-      pause.textContent = "Pause for an hour";
+      pause.textContent = notice.hold ? "Resume now" : "Pause for an hour";
       pause.addEventListener("click", () => {
         try {
           chrome.runtime.sendMessage(
-            { type: "SNOOZE_BUDGET", site: notice.site, minutes: 60 },
+            notice.hold
+              ? { type: "CLEAR_HOLD", site: notice.site }
+              : { type: "SNOOZE_BUDGET", site: notice.site, minutes: 60 },
             () => {
               void chrome.runtime.lastError;
               remove();

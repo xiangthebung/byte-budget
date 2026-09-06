@@ -134,6 +134,20 @@ test("each period covers what its name claims", () => {
   // A rolling week is seven days including today, not eight.
   const rolling = periodRange("week", { ...SETTINGS, weekMode: "rolling" }, now);
   assert.equal(daysBetween(rolling.from, rolling.to) + 1, 7);
+
+  // The cycle period is the plan's billing cycle so far, through the same function
+  // the headline and the projection use — so a period tab and the plan meter can
+  // never mean different days.
+  assert.deepEqual(periodRange("cycle", { ...SETTINGS, cycleStartDay: 17 }, now), {
+    from: "2026-07-17",
+    to: "2026-07-31",
+  });
+  assert.deepEqual(
+    periodRange("cycle", { ...SETTINGS, cycleStartDay: 17 }, now),
+    cycleRange({ cycleStartDay: 17 }, now),
+  );
+  assert.equal(periodDescription("cycle", { ...SETTINGS, cycleStartDay: 17 }, now).kind, "cycle");
+  assert.equal(periodDescription("cycle", { ...SETTINGS, cycleStartDay: 17 }, now).days, 15);
 });
 
 test("a period description says what it covers and never reads as undefined", () => {

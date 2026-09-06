@@ -1688,5 +1688,45 @@
   "settingsWeekSunday": {
     "message": "Sunday",
     "description": "Week-start option."
+  },
+  "settingsBadgePlan": {
+    "message": "Plan left",
+    "description": "Toolbar badge option, and the default: show the share of the plan still unspent, coloured by the alert ladder. Falls back to today's total while no plan is set."
+  },
+  "settingsBadgePlanTitle": {
+    "message": "The share of your plan still unspent. Teal, then amber at 75% used, red at 90%, and \"over\" past 100%. Shows today's total while no plan is set.",
+    "description": "Tooltip on the settingsBadgePlan option."
+  },
+  "settingsLimitKbpsLabel": {
+    "message": "Speed cap",
+    "description": "Label of the kilobits-per-second field in the add-limit form. Throttle channel only; the store build never shows it."
+  },
+  "settingsLimitKbpsHint": {
+    "message": "Kilobits per second, optional. Chrome shows a debugging banner while a cap is active.",
+    "description": "Under settingsLimitKbpsLabel. The second sentence is a warning about a visible browser banner the user cannot dismiss; it must survive translation."
+  },
+  "settingsLimitKbpsPlaceholder": {
+    "message": "800",
+    "description": "Placeholder of the speed-cap field. A number, not prose."
+  },
+  "settingsLimitKbpsUnreadable": {
+    "message": "Could not read \"$VALUE$\" as a whole number of kilobits per second.",
+    "description": "Form status when the speed-cap field holds something that is not a positive whole number.",
+    "placeholders": {
+      "value": {
+        "content": "$1",
+        "example": "fast"
+      }
+    }
+  },
+  "settingsLimitKbpsNote": {
+    "message": "Capped at $KBPS$ kbps",
+    "description": "Under a limit's allowance in the limits list, when the limit carries a speed cap set by the throttle channel.",
+    "placeholders": {
+      "kbps": {
+        "content": "$1",
+        "example": "800"
+      }
+    }
   }
 }

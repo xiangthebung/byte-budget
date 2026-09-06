@@ -7,6 +7,97 @@ project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] — unreleased
+
+Everything a first-time user on a metered plan meets, made trustworthy. The audit
+that drove this wave installed the extension on the first of a cycle, loaded one page,
+and read a confident projection for the month.
+
+### Added
+
+- **The days before the install are unknown, not zero.** The ledger keeps the day it
+  started counting (`src/track/history.ts`) — the install, or the last deletion of all
+  recorded usage — and the projection slices every earlier day of the cycle off its
+  series rather than reading them as measured nothing. `confident` now needs five
+  *recorded* finished days (and a fifth of the cycle), and the popup prints "Too early
+  to project — 3 full days recorded, 6 needed" from day one instead of hiding the card.
+  The popup says "Byte Budget has been counting since Sep 12. The 11 days of this cycle
+  before that are not included." while it is true, and the dashboard's plan panel the
+  same in its own words.
+- **"180 MB left today to stay on track."** Under the plan meter: what was left at the
+  start of today, spread over the days left including today, minus what today has
+  cost. Division rather than a forecast, so no tilde. The pace mark on the meter is now
+  named in the line beneath it ("the mark is even spending, 29% by now") rather than
+  left to a tooltip.
+- **The unsized count.** Every total carries how many requests the estimator priced,
+  beside how many bytes it priced — per site, per host, and overall. The popup's caveat
+  band reads `≥ 105 MB measured` and `47 MB estimated · 12 unsized requests · could be
+  more`; the dashboard's Data used card notes the count, and its host table gains an
+  Unsized column and marks a host every one of whose requests was priced this way as
+  *never measured*, in the estimate colour.
+- **Late learning for the size model.** A `transferSize` that arrives after its parked
+  request expired is fed to the model for ninety seconds after the expiry, so a host
+  that never declares a length can leave the per-type default. The booked estimate is
+  not rewritten and stays labelled.
+- **Right now.** A popup panel listing what used data in the last sixty seconds, per
+  host, with a rate — from the ledger's own usage observer, in worker memory only
+  (`src/track/live.ts`).
+- **Holds.** "Skip video here for an hour" and "Pause this site for an hour", from the
+  Right now panel, with no limit behind them (`src/limit/holds.ts`). A hold is a tier
+  on one site with an expiry; it ends through the minute alarm or the Resume button,
+  composes with a limit on the same site to the deeper tier, and gets its own banner
+  wording ("because you asked Byte Budget to") with Resume in place of "Pause for an
+  hour". Stored locally, never synced, because a hold names a site.
+- **The toolbar badge, on by default, showing the share of the plan left.** "62%",
+  then "over", coloured teal / amber / red / dark red at the alert ladder's rungs, with
+  a tooltip in words. It reads the same counter the popup headline does and repaints
+  on every ledger flush, throttled. Today's or the session's total and off remain
+  choices.
+- **A Cycle period tab.** The plan's billing cycle so far, on every tier, shown only
+  while a plan is set. Free for the reason the projection is: the cycle is the bill.
+- **The speed-cap field, in the channel that can honour it.** The throttle build's
+  add-limit form shows a kilobits-per-second field; the limits list prints the cap
+  back, and editing a limit's size keeps it. `npm run smoke:throttle` runs the whole
+  browser suite against that channel plus a timed fetch under a real cap. The store
+  build compiles the field out with the code, and its smoke run asserts the absence.
+- **Per-site presets under the plan card.** The three "100 MB a day" buttons appear
+  whenever the site in the tab has no limit of its own, led in by "Limit example.com
+  on its own:" — they used to vanish the moment a plan existed, which for a plan user
+  was always.
+- **Thirty new unit tests and twenty-nine new browser checks** covering all of the
+  above, plus the two fixes below.
+
+### Fixed
+
+- **A plan-wide limit's refusals were never credited.** `isEnforcedByUs` looked up the
+  site of the tab that made the request and the total limit is keyed `#all`, so every
+  refusal under a plan-wide limit was booked as `saved = 0`: the popup had no "refused
+  rather than spent" line and the dashboard read "Data prevented 0 B" while the server
+  was never asked for the image. The lookup consults the limit over everything as well.
+- **75% and 90% alerts waited for the minute alarm on a hard plan.** The governor ran
+  its pass only on a tier change, and a hard plan's tier first changes at 100%. A share
+  crossing a rung of the ladder now wakes the pass on the request that earned it.
+- **The headline and the limit card could disagree for twenty seconds.** The cycle
+  total was a separate slow read; it now rides the overview payload, and when a
+  plan-wide monthly limit is tracking the cycle both read the governor's live figure.
+- **Engineer copy.** "No plan set, so this total has no denominator" and "Page shell
+  only" are gone; the last tier is "Only the page itself" and "refuses every
+  subresource" reads "refuses everything but the page itself" wherever it appeared. The
+  limit card's pause button reads "Pause limit 1 hour", because the panel above it now
+  has a "Pause this site" button that does something different.
+- **Deleting all recorded usage now also forgets the last minute, the late-learning
+  keys, and moves the day recording began to today** — and re-applies any hold, which
+  the clear used to take down with the derived rules.
+
+### Changed
+
+- **`forecast()` answers on day one.** It used to return `null` for a cycle with no
+  finished day, and the popup showed nothing; it now returns `confident: false` with
+  `recordedDays`, `neededDays` and `unknownDays`, and takes the unknown days as a
+  parameter. The test that pinned the `null` was replaced.
+- **The default badge setting is `plan`.** A stored `off`, `today` or `session` is
+  honoured; a value from another build falls back to `plan` rather than to off.
+
 ### Added
 
 - **The documentation is now checked by the test suite.** `tests/docs.test.mjs` reads

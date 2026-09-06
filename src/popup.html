@@ -17,7 +17,7 @@
 
     The popup polls every two seconds, and the old code answered each poll by calling
     `replaceChildren` over three whole subtrees. A keyboard user had under two seconds
-    to reach "Pause 1 hour" before the button was destroyed and focus fell to <body>,
+    to reach "Pause limit 1 hour" before the button was destroyed and focus fell to <body>,
     and a screen reader's buffer was wiped mid-sentence on the same clock. Nodes that
     exist in the markup cannot be destroyed by a re-render: the render path only writes
     textContent, style, dataset and `hidden`, so focus and the virtual buffer survive.
@@ -93,6 +93,19 @@
           <span class="plan-meter-pace" id="plan-meter-pace" aria-hidden="true"></span>
         </span>
         <p class="plan-line" id="plan-line"></p>
+        <!--
+          Where today stands against an even spread of what is left. Arithmetic on the
+          plan, not a forecast: "180 MB left today to stay on track" is what the
+          remaining allowance divided over the remaining days allows, minus what today
+          has already cost.
+        -->
+        <p class="plan-track" id="plan-track" hidden></p>
+        <!--
+          Shown only while the cycle reaches back past the day recording began. Those
+          days are unknown, not zero, and every cycle figure above this line is "since
+          Byte Budget started counting" until the next reset.
+        -->
+        <p class="plan-since" id="plan-since" hidden></p>
       </div>
 
       <p class="plan-cta" id="plan-cta" hidden>
@@ -168,6 +181,27 @@
         ></button>
       </p>
 
+      <!--
+        What is eating the connection right now: the last sixty seconds, per host, from
+        the worker's own memory. The two buttons act on the site in the current tab and
+        need no limit behind them — a hold is the emergency stop, and it expires on its
+        own.
+      -->
+      <section class="live" id="live-panel" hidden aria-labelledby="live-heading">
+        <div class="live-head">
+          <h2 class="live-heading" id="live-heading" data-i18n="popupLiveHeading"></h2>
+          <span class="live-note" id="live-note"></span>
+        </div>
+        <ol class="live-list" id="live-list"></ol>
+        <p class="live-empty" id="live-empty" hidden></p>
+        <p class="live-hold" id="live-hold" hidden></p>
+        <div class="limit-actions live-actions" id="live-actions" hidden>
+          <button class="ghost-button" id="hold-trim" type="button"></button>
+          <button class="ghost-button" id="hold-strict" type="button"></button>
+          <button class="ghost-button" id="hold-resume" type="button" hidden></button>
+        </div>
+      </section>
+
       <section class="limit" id="limit-card" hidden aria-labelledby="limit-heading">
         <div class="limit-head">
           <h2 class="limit-heading" id="limit-heading" data-i18n="popupLimitHeading"></h2>
@@ -192,6 +226,9 @@
             data-i18n="popupLimitRemove"
           ></button>
         </div>
+        <!-- Read before the presets when they sit under a plan-wide limit's figures,
+             so "100 MB a day" is not mistaken for an action on the plan. -->
+        <p class="limit-presets-lead" id="limit-presets-lead" hidden></p>
         <div class="limit-actions" id="limit-presets" hidden></div>
         <button
           class="link-button"

@@ -234,6 +234,27 @@ export function decideAlert(
   return { announce: fresh[fresh.length - 1] ?? null, thresholds: [...reached] };
 }
 
+/**
+ * Whether one request moved a share across a rung of the ladder.
+ *
+ * Pure, for the governor's request path: it charges every request to its counters
+ * synchronously and only wakes the enforcement pass when the installed tier is wrong.
+ * On a hard plan the tier is wrong for the first time at 100%, so the 75% and 90%
+ * alerts used to wait for the one-minute alarm — a person could stream through the
+ * whole band between two ticks and hear about it after the fact. Crossing a rung is
+ * now a reason to run the pass too, and the pass is what sends the alert.
+ *
+ * The comparison is on which rungs are at or below each share, which is the same
+ * `>=` the dedupe uses, so a request landing exactly on 75% wakes the pass that will
+ * announce 75%.
+ */
+export function crossesAlertThreshold(before: number, after: number): boolean {
+  for (const threshold of ALERT_THRESHOLDS) {
+    if (before < threshold && after >= threshold) return true;
+  }
+  return false;
+}
+
 /** Serialises the passes; see `checkAllowanceAlerts`. */
 let queue: Promise<void> = Promise.resolve();
 

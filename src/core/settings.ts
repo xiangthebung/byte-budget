@@ -85,7 +85,7 @@ function normalize(value: Partial<Settings> | undefined): Settings {
       RETENTION_OPTIONS,
       DEFAULT_SETTINGS.retentionDays,
     ),
-    badge: pick(value?.badge, ["off", "session", "today"], DEFAULT_SETTINGS.badge),
+    badge: pick(value?.badge, ["off", "plan", "session", "today"], DEFAULT_SETTINGS.badge),
     trackHosts: pickBoolean(value?.trackHosts, DEFAULT_SETTINGS.trackHosts),
     planBytes: pickPlanBytes(value?.planBytes),
     cycleStartDay: pickCycleStartDay(value?.cycleStartDay, DEFAULT_SETTINGS.cycleStartDay),

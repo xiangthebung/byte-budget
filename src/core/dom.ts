@@ -182,8 +182,10 @@ export function bindGroup<T extends string | number>(config: GroupConfig<T>): vo
       // navigates — throw someone onto another page for pressing Right. Locked options
       // stay reachable by mouse and stay in the accessibility tree; what they are out
       // of is the arrow ring.
+      // A hidden option — the cycle tab while no plan is set — is out of the ring too:
+      // arrow keys must not land on a button nobody can see.
       const nodes = queryAll<HTMLButtonElement>(OPTION_SELECTOR, container).filter(
-        (node) => !node.disabled && node.dataset.locked !== "true",
+        (node) => !node.disabled && !node.hidden && node.dataset.locked !== "true",
       );
       const current = (event.target as HTMLElement).closest<HTMLButtonElement>(OPTION_SELECTOR);
       if (!current || nodes.length === 0 || !container.contains(current)) return;

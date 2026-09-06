@@ -1,7 +1,7 @@
 {
   "name": "byte-budget",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Chrome extension that measures per-site network usage, holds sites to a byte budget, and reports what optimizing them actually saved.",
   "type": "module",
   "scripts": {
@@ -18,7 +18,8 @@
     "store:assets": "npm run build && node scripts/smoke.mjs --store-assets",
     "icon": "node scripts/make-icon.mjs",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run build",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "smoke:throttle": "npm run build:throttle && node scripts/smoke.mjs --throttle"
   },
   "engines": {
     "node": ">=22.18"

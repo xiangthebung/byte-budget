@@ -3,7 +3,7 @@
 What is true right now. Anything with a date on it lives here; design reasoning lives
 in `ARCHITECTURE.md` and does not belong in this file.
 
-**Last verified: 29 August 2026, against `master`.**
+**Last verified: 4 September 2026, against the 0.2.0 working tree on `master`.**
 
 ---
 
@@ -18,15 +18,27 @@ once before.
 | --- | --- |
 | `npm run typecheck` | clean |
 | `npm run lint` | clean |
-| `npm test` | 288 tests, 288 pass |
-| `npm run build` | both channels compile; store build 58 modules |
+| `npm test` | 318 tests, 318 pass |
+| `npm run build` | both channels compile; store build 61 modules |
 | `npm run build:throttle` | compiles; declares `debugger`, store channel does not |
-| `npm run smoke` | all checks passed, real Chromium |
+| `npm run smoke` | all 192 checks passed, real Chromium, store channel |
+| `npm run smoke:throttle` | all 189 checks passed, real Chromium, throttle channel |
 
 `npm run verify` is typecheck + lint + test + build. `npm run smoke` is the part
 `verify` structurally cannot prove: that `chrome.webRequest` fires, that resource
 timings reach the worker, that IndexedDB rows are written and read back, and that the
 number on the dashboard matches what a local server actually served.
+`npm run smoke:throttle` runs the same suite against `dist-throttle/` and adds the
+block only that channel can pass — a fetch that measurably slows under a kbps cap
+(2.0 s for 400 kB at 1,600 kbps, 5 ms with the limit removed). It skips the root-load
+block the store channel runs, which is why its count is smaller.
+
+One gotcha for anyone driving `dist/` by hand for screenshots: a command-line-loaded
+extension is reinstalled on every Chromium launch and on `chrome.runtime.reload()`, so
+`onInstalled` fires as an *install* each time and moves the day recording began to
+today. To restart the worker with its storage intact, stop it over CDP
+(`ServiceWorker.stopAllWorkers`) and send it a message; the next one wakes a fresh
+worker that reads `recordingSince` from storage.
 
 ## What is built
 
@@ -36,11 +48,13 @@ features that no user could open — so "built" here means "a person can get to 
 
 | Area | State | Evidence |
 | --- | --- | --- |
-| Track | Done | `src/track/`, `npm run smoke` measures a known page and checks the total |
-| Limit | Done | `src/limit/`, smoke drives a budget to enforcement with nothing set by hand |
+| Track | Done | `src/track/`, `npm run smoke` measures a known page and checks the total; the unsized count and the last minute ride the same payload |
+| Limit | Done | `src/limit/`, smoke drives a budget to enforcement with nothing set by hand, credits a plan-wide refusal, and sets and ends a hold from the popup |
 | Optimize | Done | `src/optimize/`, smoke asserts a rewrite and a refused beacon against a real server |
 | Plus (paid tier) | Done | `src/plus/`, `tests/{plus,gate,provider}.test.mjs` |
-| Internationalization | Done | 774 messages across `i18n/*.json`, `_locales/` generated at build |
+| Where you stand | Done | install-aware projection, "left today", the badge; smoke asserts all three on the day a plan is set |
+| Throttle channel | Done | the speed-cap field exists only in `dist-throttle/`; `npm run smoke:throttle` times a fetch under it |
+| Internationalization | Done | 833 messages across `i18n/*.json`, `_locales/` generated at build |
 | CI | Done | `.github/workflows/ci.yml` — verify on Node 22 and 24, smoke, advisory lint |
 | Documentation checks | Done | `tests/docs.test.mjs` |
 
@@ -65,11 +79,31 @@ currently producing a wrong user-facing number.
 | 6 | `describeSeries` joins its clauses with a literal `", "`. | Each clause is a whole message, which is the part that matters. Revisit with the first non-English catalogue, not before. |
 | 7 | The optimizer does not credit a rewrite on the parked path. | Accepted: every host a pack rewrites is an image CDN and declares a `Content-Length`. Crediting later would mean an `await` on `reconcile`'s synchronous commit path. |
 | 8 | The first-run page has no narrow-viewport assertion. | Measured by hand at 390 px (380 content). It is prose in one column and nothing on it can widen a grid item. Re-measure if it grows a table or a row layout. |
+| 9 | A cross-origin response that streams without `Timing-Allow-Origin` is still priced at the per-type default on its first load, and on every load if the page never reports it. | Nothing an extension can read gives its size; late learning only helps a host whose page reports *late*. What changed is the disclosure: the popup prints the measured floor and the unsized count, and the host table marks the host as never measured. The audit's gallery of four such images still counts 180 kB against 1.17 MB served — and now says so. |
+| 10 | A hold's expiry is checked by the minute alarm, so "for an hour" ends within a minute of the hour. | Same clock a snooze expires on. A timer of its own would be a second mechanism for the same job. |
+| 11 | The portfolio's copy of `PRIVACY_POLICY.md` (`app/legal/policies/byte-budget-privacy.md` in the site repository) is behind this one. | Nothing checks the two against each other; recopy from here when this ships. |
 
 ### Closed since the last handoff
 
 Kept rather than deleted, because the wrong version plus the correction stops the same
 conclusion being reached again.
+
+- **The projection read the days before the install as measured zero.** Installed on
+  the 1st with a reset day of the 17th, one page load produced "Projected 182 kB by
+  Sep 16", confident. Fixed: `src/track/history.ts` keeps the day recording began,
+  `forecast()` takes the unknown days and slices them off, and `confident` needs five
+  recorded finished days. The popup says "Too early to project — 0 full days recorded,
+  6 needed" from day one of a 30-day cycle.
+- **A plan-wide limit's refusals were booked as saving nothing.** `isEnforcedByUs`
+  looked up the tab's site and the limit is keyed `#all`. Fixed; the browser suite
+  asserts the credit against a server that was never asked.
+- **On a hard plan the 75% and 90% alerts waited for the minute alarm.** Fixed: a
+  share crossing a rung wakes the enforcement pass on the request. Asserted in the
+  browser suite from `alertHistory`, because a notification is invisible headless.
+- **The toolbar badge shipped off and could only show bytes.** It ships on, showing
+  the share of the plan left in the alert ladder's colours.
+- **The headline and the limit card could disagree for twenty seconds.** The cycle
+  total rides the overview payload now.
 
 - **A tab that vanished while the worker slept never finished its visit.** Fixed:
   `ensureTabsReady` now calls `finishVisit` for records it reconciles away, so the load

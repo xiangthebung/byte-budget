@@ -249,6 +249,28 @@ body {
   color: var(--text-muted);
 }
 
+/*
+ * Today against an even spread of what is left. Accent while there is room, the
+ * danger colour once today's share — or the whole plan — is spent. Measured
+ * arithmetic on the plan, so it carries no tilde and no estimate colour.
+ */
+.plan-track {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-track[data-tone="over"] {
+  color: var(--danger);
+}
+
+.plan-since {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 .plan-cta,
 .plan-alerts {
   display: flex;
@@ -319,6 +341,13 @@ body {
   font-size: 13px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+/* Too few recorded days for a figure: the sentence that says so is not a number, and
+   is not set like one. */
+.projection-figure[data-tone="early"] {
+  color: var(--text-soft);
+  font-weight: 600;
 }
 
 .projection-over {
@@ -406,6 +435,154 @@ body {
 .meta-flag {
   color: var(--estimate);
   font-weight: 600;
+}
+
+/* The floor under an estimated total: the part that was actually measured. Set in the
+   text colour, not the estimate colour, because it is the one figure on the line that
+   is not a model's. */
+.meta-floor {
+  color: var(--text);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ *
+ * Right now
+ *
+ * The last sixty seconds, per host. The bars are relative to the heaviest host in
+ * the window, the way the site list's are, so the panel reads as "who, and by how
+ * much" at a glance.
+ * ------------------------------------------------------------------ */
+
+.live {
+  margin-top: 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.live-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.live-heading {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.live-note {
+  font-size: 11px;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-list {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.live-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  align-items: baseline;
+}
+
+.live-host {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.live-host-name {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The page the bytes were charged to, when it is not the host itself. */
+.live-site {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.live-figures {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 11px;
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.live-bytes {
+  color: var(--text);
+  font-weight: 650;
+  font-size: 12px;
+}
+
+.live-bar {
+  display: block;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--bar-track);
+}
+
+.live-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.live-empty,
+.live-hold {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* A hold is a decision the person made, so it reads in the text colour, not as a
+   caveat. */
+.live-hold {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.live-actions {
+  margin-top: 8px;
+}
+
+.limit-presets-lead {
+  margin-top: 9px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* The lead reads straight into the presets, so the gap between them is smaller than
+   between two unrelated rows. */
+.limit-presets-lead + .limit-actions {
+  margin-top: 5px;
 }
 
 /* ------------------------------------------------------------------ *

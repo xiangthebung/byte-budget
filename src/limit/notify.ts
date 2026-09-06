@@ -16,12 +16,39 @@ import type { BudgetStatus, TabNotice } from "../core/messages";
 import { runtimeFile } from "../core/runtime";
 import type { Settings } from "../core/types";
 import { BUDGET_PERIOD_LABELS } from "./budgets";
+import type { Hold } from "./holds";
+import type { Tier } from "./tiers";
 
 const HEADLINES: Record<string, (site: string) => string> = {
   trim: (site) => `Video and audio are being skipped on ${site}`,
   lean: (site) => `Images and video are being skipped on ${site}`,
   strict: (site) => `${site} has used up its data limit`,
 };
+
+/**
+ * The banner for a hold: the same card, a different sentence.
+ *
+ * A hold is something the person asked for a few minutes ago from the popup, so the
+ * headline says so — "because you asked" is the difference between a decision and a
+ * broken website, the same difference the budget banner exists to make. The tier is
+ * whatever is actually installed, which is the hold's own tier unless a budget on the
+ * site has gone deeper; the sentence follows the installed tier so it never
+ * understates what the reader is looking at.
+ */
+export function noticeForHold(hold: Hold, tier: Tier): TabNotice {
+  const resumes = `Resumes ${formatAgo(hold.until)}.`;
+  const headline =
+    tier === "strict"
+      ? `${hold.site} is paused, because you asked Byte Budget to`
+      : tier === "lean"
+        ? `Images and video are being skipped on ${hold.site}, because you asked Byte Budget to`
+        : `Video and audio are being skipped on ${hold.site}, because you asked Byte Budget to`;
+  const detail =
+    tier === "strict"
+      ? `Only the page itself loads until then. ${resumes}`
+      : `Everything else on the page loads normally. ${resumes}`;
+  return { site: hold.site, tier, headline, detail, canPause: false, hold: true };
+}
 
 export function noticeFor(
   status: BudgetStatus,
@@ -44,6 +71,7 @@ export function noticeFor(
     headline,
     detail: `${spent}. ${resets}`,
     canPause: !status.snoozed,
+    hold: false,
   };
 }
 

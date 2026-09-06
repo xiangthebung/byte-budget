@@ -15,7 +15,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { ALERT_THRESHOLDS, decideAlert } from "../src/limit/alerts.ts";
+import { ALERT_THRESHOLDS, crossesAlertThreshold, decideAlert } from "../src/limit/alerts.ts";
 
 const WINDOW = "2026-08-01";
 const NEXT_WINDOW = "2026-09-01";
@@ -138,6 +138,23 @@ test("the recorded thresholds are always a prefix of the ladder", () => {
         `share ${share} produced ${thresholds.join()}`,
       );
     }
+  }
+});
+
+test("one request crossing a rung is a reason to run the pass now", () => {
+  // The governor charges every request synchronously and used to wake the
+  // enforcement pass only when the installed tier was wrong — on a hard plan, first
+  // at 100%. The 75% and 90% alerts then waited for the minute alarm, and a fast
+  // connection can stream through the whole band between two ticks.
+  assert.equal(crossesAlertThreshold(0.7, 0.76), true);
+  assert.equal(crossesAlertThreshold(0.5, 1.2), true, "several rungs at once still counts");
+  assert.equal(crossesAlertThreshold(0.76, 0.8), false, "between rungs is quiet");
+  assert.equal(crossesAlertThreshold(0.75, 0.75), false, "no movement, no crossing");
+  // The same `>=` the dedupe uses, so landing exactly on a rung wakes the pass that
+  // will announce it.
+  assert.equal(crossesAlertThreshold(0.749, 0.75), true);
+  for (const threshold of ALERT_THRESHOLDS) {
+    assert.equal(crossesAlertThreshold(threshold - 1e-9, threshold), true, `at ${threshold}`);
   }
 });
 

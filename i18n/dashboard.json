@@ -49,6 +49,16 @@
       }
     }
   },
+  "dashboardAnnounceHoldEnded": {
+    "message": "The hold on $SITE$ has ended.",
+    "description": "Announced to a screen reader after the Resume button ends a hold.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "watch.example"
+      }
+    }
+  },
   "dashboardAnnounceLimitApplied": {
     "message": "$SITE$ limited to $SIZE$ $WINDOW$.",
     "description": "Announced to a screen reader after a preset button creates or replaces a limit.",
@@ -170,7 +180,7 @@
     }
   },
   "dashboardConsequenceHard": {
-    "message": "A hard stop refuses every subresource the moment the allowance runs out. The page's own HTML still loads, so the site can say why it looks broken.",
+    "message": "A hard stop refuses everything but the page itself the moment the allowance runs out. The page's own HTML still loads, so the site can say why it looks broken.",
     "description": "Explains what the \"Hard stop\" shape does. Substituted into dashboardLimitHintReplaces or dashboardLimitHintExact."
   },
   "dashboardConsequenceProgressive": {
@@ -301,6 +311,46 @@
     "message": "Could not change Data Saver for that site.",
     "description": "Announced when the per-site Data Saver request to the worker fails."
   },
+  "dashboardHoldPaused": {
+    "message": "$SITE$ is paused because you asked, from the popup · resumes $WHEN$",
+    "description": "Site drill-down line while a pausing hold set from the popup is in force on the site.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "watch.example"
+      },
+      "when": {
+        "content": "$2",
+        "example": "in 43 minutes"
+      }
+    }
+  },
+  "dashboardHoldResume": {
+    "message": "Resume now",
+    "description": "Button in the site drill-down that ends a hold set from the popup."
+  },
+  "dashboardHoldTrim": {
+    "message": "Video and audio are being skipped on $SITE$ because you asked, from the popup · resumes $WHEN$",
+    "description": "Site drill-down line while a video-skipping hold set from the popup is in force on the site.",
+    "placeholders": {
+      "site": {
+        "content": "$1",
+        "example": "watch.example"
+      },
+      "when": {
+        "content": "$2",
+        "example": "in 43 minutes"
+      }
+    }
+  },
+  "dashboardHostNeverMeasured": {
+    "message": "never measured",
+    "description": "Tag on a host every one of whose requests the estimator priced. Shown in the estimate colour."
+  },
+  "dashboardHostNeverMeasuredTitle": {
+    "message": "Every request from this host was priced by the estimator: no declared length, and the page could not read its size. Its bytes could be several times more or less than shown.",
+    "description": "Tooltip on dashboardHostNeverMeasured."
+  },
   "dashboardHostThirdParty": {
     "message": "third party",
     "description": "Tag beside a hostname in the source hosts table when the host is not part of the site itself. Lower case: it is a tag, not a sentence."
@@ -316,6 +366,14 @@
   "dashboardHostsColumnRequests": {
     "message": "Requests",
     "description": "Column header in the source hosts table: number of requests."
+  },
+  "dashboardHostsColumnUnsized": {
+    "message": "Unsized",
+    "description": "Column heading in the source hosts table: requests from this host the estimator had to price."
+  },
+  "dashboardHostsColumnUnsizedTitle": {
+    "message": "Requests that declared no length and whose size the page could not read, so the estimator priced them.",
+    "description": "Tooltip on dashboardHostsColumnUnsized."
   },
   "dashboardHostsEmpty": {
     "message": "No host detail for this period yet.",
@@ -351,7 +409,7 @@
     "placeholders": {
       "consequence": {
         "content": "$1",
-        "example": "A hard stop refuses every subresource the moment the allowance runs out. The page's own HTML still loads, so the site can say why it looks broken."
+        "example": "A hard stop refuses everything but the page itself the moment the allowance runs out. The page's own HTML still loads, so the site can say why it looks broken."
       }
     }
   },
@@ -361,7 +419,7 @@
     "placeholders": {
       "consequence": {
         "content": "$1",
-        "example": "A hard stop refuses every subresource the moment the allowance runs out. The page's own HTML still loads, so the site can say why it looks broken."
+        "example": "A hard stop refuses everything but the page itself the moment the allowance runs out. The page's own HTML still loads, so the site can say why it looks broken."
       }
     }
   },
@@ -435,7 +493,7 @@
   },
   "dashboardLimitShapeHard": {
     "message": "Hard stop",
-    "description": "Option for what a limit does once the allowance is spent: refuse every subresource at once. Kept short to fit a segmented control."
+    "description": "Option for what a limit does once the allowance is spent: refuse everything but the page itself at once. Kept short to fit a segmented control."
   },
   "dashboardLimitShapeProgressive": {
     "message": "Shed weight",
@@ -725,6 +783,34 @@
     "message": "Set your plan in Settings",
     "description": "Link from the Plan and cycle panel to the settings page."
   },
+  "dashboardPlanSinceOne": {
+    "message": "Counting since $DATE$. The $COUNT$ day of this cycle before that is not included in any figure here.",
+    "description": "Plan panel note while the cycle reaches back past the day recording began, singular.",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Sep 10"
+      },
+      "count": {
+        "content": "$2",
+        "example": "1"
+      }
+    }
+  },
+  "dashboardPlanSinceOther": {
+    "message": "Counting since $DATE$. The $COUNT$ days of this cycle before that are not included in any figure here.",
+    "description": "Plan panel note while the cycle reaches back past the day recording began, plural. Paired with dashboardPlanSinceOne.",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Sep 10"
+      },
+      "count": {
+        "content": "$2",
+        "example": "9"
+      }
+    }
+  },
   "dashboardPlanSpent": {
     "message": "The plan is spent. Everything from here is over it.",
     "description": "Hint in the Plan and cycle panel when the whole plan has been used."
@@ -848,8 +934,18 @@
     "description": "Value of the \"Projected\" card when too few days have finished for the projection to be stated. No figure is printed at all in this state."
   },
   "dashboardProjectedTooEarlyHint": {
-    "message": "Too few finished days to state a figure",
-    "description": "Hint under the \"Projected\" card when the projection is not confident enough to print."
+    "message": "$RECORDED$ full days recorded, $NEEDED$ needed",
+    "description": "Hint under the Projected card while too few finished days are on file for a figure. Says what is on file and what is needed, so it can be checked against tomorrow.",
+    "placeholders": {
+      "recorded": {
+        "content": "$1",
+        "example": "3"
+      },
+      "needed": {
+        "content": "$2",
+        "example": "6"
+      }
+    }
   },
   "dashboardProjectedUnderPlan": {
     "message": "$UNDER$ under your $PLAN$ plan",
@@ -1217,6 +1313,26 @@
       }
     }
   },
+  "dashboardSiteUnsizedOne": {
+    "message": "$COUNT$ of its requests had no measured size",
+    "description": "Tooltip on a site row's share, singular, when the row includes estimates.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "dashboardSiteUnsizedOther": {
+    "message": "$COUNT$ of its requests had no measured size",
+    "description": "Tooltip on a site row's share, plural. Paired with dashboardSiteUnsizedOne.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "4"
+      }
+    }
+  },
   "dashboardSitesEmpty": {
     "message": "No usage yet. Browse normally and sites will appear here.",
     "description": "Empty state of the site list when nothing has been recorded for the chosen period."
@@ -1352,6 +1468,30 @@
   "dashboardTypeOfData": {
     "message": "Type of data",
     "description": "Heading and chart caption for the breakdown by resource type — video, images, scripts and so on. Used for the panel on the overview and for the block inside the detail panel."
+  },
+  "dashboardUnsizedOne": {
+    "message": "$COUNT$ unsized request, priced by the estimator",
+    "description": "Note on the Data used card: how many responses had no measured size, singular.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "dashboardUnsizedOther": {
+    "message": "$COUNT$ unsized requests, priced by the estimator",
+    "description": "Note on the Data used card: how many responses had no measured size, plural. Paired with dashboardUnsizedOne.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "12"
+      }
+    }
+  },
+  "dashboardWindowCycle": {
+    "message": "the cycle before",
+    "description": "Names the comparison window on the Data used card when the period is the plan cycle: a window of the same length immediately before it."
   },
   "dashboardWindowDay": {
     "message": "day",

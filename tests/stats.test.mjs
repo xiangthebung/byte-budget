@@ -24,9 +24,16 @@ installFakeChromeStorage();
 const database = installFakeIndexedDb();
 
 const { put, STORES } = await import("../src/core/db.ts");
-const { dailySeries, exportData, overview, siteDetail } = await import("../src/track/stats.ts");
-const { addDays, dayKey, startOfDay } = await import("../src/core/period.ts");
+const { cycleUsed, dailySeries, exportData, overview, siteDetail } = await import(
+  "../src/track/stats.ts"
+);
+const { addDays, cycleElapsed, cycleRange, dayKey, daysBetween, startOfDay } = await import(
+  "../src/core/period.ts"
+);
 const { DEFAULT_SETTINGS } = await import("../src/core/types.ts");
+const { neededDaysFor } = await import("../src/core/forecast.ts");
+const { markRecordingStart, resetRecordingSinceCache } = await import("../src/track/history.ts");
+const { noteLiveUsage, resetLiveUsage } = await import("../src/track/live.ts");
 
 const TODAY = dayKey();
 const day = (offset) => addDays(TODAY, offset);
@@ -176,6 +183,122 @@ test("with no plan set the payload carries no projection", async () => {
   // nobody asked for, sitting beside measurements.
   assert.equal(payload.settings.planBytes, null);
   assert.equal(payload.projection, null);
+});
+
+test("the count of unsized requests travels with the total, per site and overall", async () => {
+  database.clear();
+  // Two rows carry the count; the third predates the field and has none. A missing
+  // count reads as zero, never as `NaN` in the sum — the same rule `addTotals` keeps
+  // for byte fields written by an older build.
+  await put(STORES.daily, usageRow(day(-3), "a.example", { down: 1000, estimatedDown: 600, unsized: 4 }));
+  await put(STORES.daily, usageRow(TODAY, "a.example", { down: 2000, estimatedDown: 100, unsized: 1 }));
+  await put(STORES.daily, usageRow(day(-1), "b.example", { down: 500 }));
+
+  const payload = await overview("week", SETTINGS);
+
+  assert.equal(payload.unsized, 5);
+  assert.equal(payload.sites.find((entry) => entry.site === "a.example").unsized, 5);
+  assert.equal(payload.sites.find((entry) => entry.site === "b.example").unsized, 0);
+  // The bytes and the count are two different facts about the same total, and both
+  // are on the payload: the share says how much is modelled, the count says how many
+  // responses the model stood in for.
+  assert.equal(payload.totals.estimatedDown, 700);
+});
+
+test("a host's unsized count reaches the drill-down, so a host that never measures can be marked", async () => {
+  database.clear();
+  await put(STORES.daily, usageRow(TODAY, "a.example", { down: 1000 }));
+  await put(STORES.hosts, {
+    key: `${TODAY}|a.example|edge.video.example`,
+    bucket: TODAY,
+    site: "a.example",
+    host: "edge.video.example",
+    down: 900,
+    up: 0,
+    requests: 3,
+    blocked: 0,
+    saved: 0,
+    unsized: 3,
+  });
+  await put(STORES.hosts, {
+    key: `${TODAY}|a.example|a.example`,
+    bucket: TODAY,
+    site: "a.example",
+    host: "a.example",
+    down: 100,
+    up: 0,
+    requests: 2,
+    blocked: 0,
+    saved: 0,
+  });
+
+  const detail = await siteDetail("a.example", "today", SETTINGS);
+  const edge = detail.hosts.find((host) => host.host === "edge.video.example");
+  const own = detail.hosts.find((host) => host.host === "a.example");
+  assert.equal(edge.unsized, 3, "every request from the edge was priced by the model");
+  assert.equal(edge.requests, 3);
+  assert.equal(own.unsized, 0, "a row written before the field existed reads as zero");
+});
+
+test("the plan cycle rides the payload, with the days before recording began kept apart", async () => {
+  database.clear();
+  resetLiveUsage();
+  const settings = { ...SETTINGS, planBytes: 10_000_000, cycleStartDay: 0 };
+  const cycle = cycleRange(settings);
+  const { elapsedDays, totalDays } = cycleElapsed(settings);
+
+  // Installed one day into the cycle when the cycle is old enough to have one; on the
+  // cycle's first day there is nothing to be unknown about.
+  const since = elapsedDays >= 2 ? addDays(cycle.from, 1) : cycle.from;
+  resetRecordingSinceCache();
+  await markRecordingStart(since);
+
+  await put(STORES.daily, usageRow(TODAY, "a.example", { down: 3000, up: 100 }));
+  if (elapsedDays >= 2) await put(STORES.daily, usageRow(addDays(TODAY, -1), "b.example", { down: 5000 }));
+
+  const payload = await overview("today", settings);
+
+  assert.ok(payload.cycle, "a plan puts the cycle on the payload");
+  assert.equal(payload.cycle.from, cycle.from);
+  assert.equal(payload.cycle.to, TODAY);
+  assert.equal(payload.cycle.elapsedDays, elapsedDays);
+  assert.equal(payload.cycle.totalDays, totalDays);
+  assert.equal(payload.cycle.todayUsed, 3100);
+  assert.equal(payload.cycle.used, elapsedDays >= 2 ? 8100 : 3100, "every site, the whole cycle");
+  assert.equal(payload.cycle.used, await cycleUsed(settings), "the badge reads the same rows");
+  assert.equal(payload.cycle.unknownDays, elapsedDays >= 2 ? 1 : 0);
+  assert.equal(payload.cycle.recordedFrom, since);
+  assert.equal(daysBetween(payload.cycle.recordedFrom, TODAY) + 1 + payload.cycle.unknownDays, elapsedDays);
+
+  // And the projection agrees about which days it may use.
+  assert.ok(payload.projection, "a plan always answers, even on day one");
+  assert.equal(payload.projection.unknownDays, payload.cycle.unknownDays);
+  assert.equal(payload.projection.neededDays, neededDaysFor(totalDays));
+  assert.equal(payload.projection.recordedDays, Math.max(0, elapsedDays - 1 - payload.cycle.unknownDays));
+
+  // No plan: no cycle, no projection, and the period still reads.
+  const bare = await overview("today", SETTINGS);
+  assert.equal(bare.cycle, null);
+  assert.equal(bare.projection, null);
+});
+
+test("the last minute and the holds ride the payload too", async () => {
+  database.clear();
+  resetLiveUsage();
+  const now = Date.now();
+  noteLiveUsage("watch.example", "edge.watch.example", 3_000_000, now - 10_000);
+  noteLiveUsage("watch.example", "watch.example", 200_000, now - 5_000);
+  noteLiveUsage("old.example", "old.example", 9_000_000, now - 61_000);
+
+  const payload = await overview("today", SETTINGS, [
+    { site: "watch.example", tier: "trim", until: now + 60_000, since: now },
+  ]);
+
+  assert.equal(payload.live.total, 3_200_000, "the sample past the window is gone");
+  assert.equal(payload.live.hosts[0].host, "edge.watch.example");
+  assert.equal(payload.live.hosts[0].site, "watch.example");
+  assert.deepEqual(payload.holds.map((hold) => [hold.site, hold.tier]), [["watch.example", "trim"]]);
+  resetLiveUsage();
 });
 
 test("a profile with nothing recorded reports zeroes rather than nothing", async () => {
